@@ -1,0 +1,7 @@
+# BORRADOR del workflow SDD + IA v0.7
+
+# Estado de sesiones largas interrumpidas (Q09). Nunca va a Git.
+.tareas/
+
+# Ajustes locales de Claude Code
+.claude/settings.local.json

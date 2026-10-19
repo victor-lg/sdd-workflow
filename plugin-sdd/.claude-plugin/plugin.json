@@ -1,0 +1,9 @@
+{
+  "name": "sdd",
+  "version": "0.1.0",
+  "description": "Skills y subagente revisor del workflow SDD + IA (borrador).",
+  "license": "MIT",
+  "author": {
+    "name": "victor-lg"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "sdd-workflow",
+  "description": "Marketplace personal del workflow SDD + IA: distribuye el plugin sdd.",
+  "owner": { "name": "victor-lg" },
+  "plugins": [
+    {
+      "name": "sdd",
+      "source": "./plugin-sdd",
+      "description": "Skills sdd-* y subagente reviewer del workflow SDD + IA."
+    }
+  ]
+}

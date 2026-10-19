@@ -1,0 +1,52 @@
+# Checks SDD del workflow SDD + IA (BORRADOR v0.10).
+#
+# El nombre del job ("checks-sdd") es el que se marca como check requerido
+# en la regla de `main` (G5). El agente no puede modificar este fichero:
+# su token no tiene el permiso `workflow` (ADR-0005, caso N5).
+#
+# Los tests del stack se añaden en otro workflow cuando el proyecto pasa a la
+# etapa técnica (lo fija el ADR de tecnología) y también se marcan como requeridos.
+
+name: sdd
+
+on:
+  pull_request:
+    branches: [main]
+    # "edited" vuelve a lanzar los checks cuando cambia la descripción del PR
+    # (nivel de riesgo o AC cubiertos).
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdd-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks-sdd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Fijada por SHA (v7.0.1, 2026-07-17). Para actualizar, cambia SHA y comentario a la vez.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Los checks se ejecutan con la versión de `main`, no con la del PR:
+      # así un PR no puede debilitar sus propios checks.
+      - name: Tomar los checks de la rama base
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sdd"
+          git show "origin/$BASE_REF:.github/sdd/checks.py" > "$RUNNER_TEMP/sdd/checks.py"
+
+      # La descripción del PR entra por variable de entorno, nunca
+      # interpolada en el script (evita inyección de órdenes).
+      - name: Specs, mezcla, trazabilidad (G3) y riesgo
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 "$RUNNER_TEMP/sdd/checks.py" --base "origin/$BASE_REF"

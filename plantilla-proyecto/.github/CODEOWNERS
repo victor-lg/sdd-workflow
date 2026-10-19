@@ -1,0 +1,16 @@
+# BORRADOR del workflow SDD + IA v0.10.
+# Propietario: victor-lg (tu cuenta, nunca la cuenta de máquina del agente).
+# Con "Require review from Code Owners" activo en la regla de `main`, nada
+# llega a `main` sin tu aprobación. La última regla que coincide es la que manda.
+
+*               @victor-lg
+
+# Rutas normativas y de configuración: se listan aparte para que sigan
+# protegidas aunque algún día se delegue la revisión del resto del código.
+/docs/specs/    @victor-lg
+/docs/adr/      @victor-lg
+/.github/       @victor-lg
+/.claude/       @victor-lg
+/AGENTS.md      @victor-lg
+/CLAUDE.md      @victor-lg
+/README.md      @victor-lg
