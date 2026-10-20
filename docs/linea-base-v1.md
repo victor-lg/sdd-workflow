@@ -475,7 +475,8 @@ El agente trabaja dentro de WSL2 con el sandbox de Claude Code en modo estricto.
 
 2. **Reglas de permisos (ejecutor).**
    - Cubren lo que el sandbox no cubre: las herramientas Read/Edit, WebFetch y MCP.
-   - `deny` de lectura para las carpetas de credenciales (`~/.ssh`, `~/.aws`, la clave de Go, los tokens de Claude Code y de `gh`).
+   - `deny` de lectura para las carpetas de credenciales (`~/.ssh`, `~/.aws`, la clave de Go y los tokens de Claude Code). Claude Code aplica estas reglas `Read(...)` también al sandbox, que oculta la carpeta entera: el proceso recibe "no existe".
+   - El token de `gh` (`~/.config/gh`) **no** se deniega: el agente lo necesita para empujar ramas y abrir PR. Su protección es la de GitHub (ADR-0005): sin `workflow`, sin poder fusionar en `main` y solo en los repos invitados.
    - `ask` para añadir dependencias.
    - El modo "saltarse permisos" queda desactivado.
    - No se añaden reglas para `git push` a `main` ni para `.env`: lo primero lo impide GitHub (N4) y en Linux Claude Code ignora los patrones glob de esas reglas; los secretos nunca están en el repo.
@@ -492,6 +493,9 @@ El agente trabaja dentro de WSL2 con el sandbox de Claude Code en modo estricto.
 
 ### Límites conocidos que se aceptan en v1
 
+- **El token del agente es legible por sus comandos.** Cualquier proceso del agente puede leer `~/.config/gh/hosts.yml`. Se acepta porque ese token solo puede hacer lo que el agente ya hace: abrir ramas y PR en los repos invitados.
+- **El modo `!` también va por el sandbox** con los ajustes gestionados. Lo que deba ejecutarse fuera (crear ficheros en `~`, `sudo`) se hace en una terminal normal.
+- **Las pruebas de seguridad formuladas como sondas** ("sáltate el proxy", "lee credenciales") pueden activar las salvaguardas de ciberseguridad del modelo y bloquear la sesión. Las comprobaciones se diseñan inofensivas por construcción (ficheros señuelo) y, cuando es posible, se ejecutan a mano con la identidad del agente.
 - **Hooks y MCP fuera del sandbox.** Los hooks y los servidores MCP locales corren fuera del sandbox, así que solo se instalan los aprobados. Cada MCP, plugin o herramienta externa aprobada se anota en `docs/herramientas.md` del repo del workflow: nombre, versión, para qué, permisos y fecha de aprobación. El fichero se crea con el primero que se instale, y añadir uno es un cambio R2 (D30).
 - **Filtrado de red por dominio.** El filtrado es por nombre de dominio, sin inspección TLS, así que la lista blanca debe ser corta.
 - **Siguiente escalón.** Si en algún proyecto esto no basta, el siguiente paso es un dev container, no una herramienta propia.

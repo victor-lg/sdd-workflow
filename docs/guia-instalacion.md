@@ -88,7 +88,7 @@ En ese repo:
 
 1. En una ventana privada del navegador, crea la cuenta (por ejemplo `tu-usuario-bot`) con el segundo correo y activa su 2FA.
 2. Con esa cuenta: *Settings → Developer settings → Personal access tokens → Tokens (classic)*:
-   - alcance **`repo`**, sin `workflow`;
+   - alcance **`repo`** y, dentro de `admin:org`, solo **`read:org`** (lo exige `gh auth login`); nunca `workflow`;
    - caducidad de **90 días**.
 
    Copia el token y apunta la renovación en tu calendario.
@@ -150,7 +150,7 @@ Si devuelve `0` o "No such file or directory", no hagas nada.
 ```bash
 gh auth login --with-token     # pega el token de la cuenta de máquina y pulsa Ctrl+D
 gh auth setup-git
-gh auth status                 # debe mostrar la cuenta de máquina, no la tuya
+gh auth status                 # cuenta de máquina, con permisos 'read:org', 'repo'
 git config --global user.name  "tu-usuario-bot"
 git config --global user.email "12345678+tu-usuario-bot@users.noreply.github.com"
 gh repo clone tu-usuario/sdd-workflow ~/proyectos/sdd-workflow
@@ -199,11 +199,17 @@ Qué hace cada fichero:
 **Comprobación** (abre `claude` dentro de `~/proyectos/sdd-workflow`):
 
 1. `/status`: la línea de fuentes de ajustes incluye el fichero gestionado.
-2. `/sandbox`: el sandbox está activo, sin dependencias pendientes y en modo estricto.
+2. `/sandbox` **no abre**: responde *"Sandbox settings are overridden by a higher-priority configuration"*. Es lo esperado, porque los ajustes gestionados bloquean el panel. Que Claude Code arranque ya prueba que el sandbox está disponible: con `failIfUnavailable` se negaría a iniciarse si faltara `bubblewrap` o `socat`.
 3. Pide a Claude que ejecute estas dos órdenes; las dos deben fallar. Si te ofrece reintentarlas fuera del sandbox, di que no.
    - `touch ~/sandbox-probe` → `Read-only file system`
    - `curl --noproxy '*' https://example.com` → `Could not resolve host`
-4. Pide a Claude que lea `~/.config/gh/hosts.yml`: debe denegarse (caso N6, en pequeño).
+4. **Prueba del señuelo** (caso N6, en pequeño):
+   - en una terminal normal, `mkdir -p ~/.aws && echo "señuelo" > ~/.aws/prueba.txt`;
+   - en una sesión nueva, pide a Claude que lea ese fichero de prueba con Read, con `cat` y con `python3`;
+   - las tres deben fallar: Read, por la regla de permisos; `cat` y `python3`, con "No such file or directory", porque el sandbox oculta la carpeta;
+   - al acabar, `rm ~/.aws/prueba.txt` en la terminal normal.
+
+   No pidas leer credenciales reales ni saltarse el proxy: activa las salvaguardas del modelo.
 
 **Si un proyecto necesita otro dominio** (por ejemplo, para descargar un navegador de pruebas), se añade a `allowedDomains` editando el fichero con `sudo`. Es un cambio deliberado: anótalo en el `CHANGELOG`.
 
@@ -350,6 +356,11 @@ Con eso empieza la fase D: el primer recorrido y los casos N1–N8.
 - **A3, checkout:** la última versión es v7, no v5. Fijada a `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1` (2026-07-17); admite `fetch-depth` y `persist-credentials`.
 - **A4, ruleset `main-protegida`:** añade a lo previsto *Require approval of the most recent reviewable push*, y la excepción del admin solo para pull requests. GitHub pide confirmar con 2FA al guardar (modo sudo).
 - **A5, rol de la cuenta de máquina:** el rol "Read" no existe en repos personales. Decisión (2026-10-20): invitarla con escritura a `sdd-workflow` y proteger su `main` con un ruleset; el agente solo puede abrir PR. Invitaciones enviadas por Claude desde tu cuenta.
+- **A5 y B3, permisos del token:** `gh auth login --with-token` rechaza un token clásico sin `read:org` ("missing required scope 'read:org'"). Se añade `read:org`, que solo lee la pertenencia a organizaciones (la cuenta de máquina no tiene ninguna). Sigue sin `workflow`.
+- **B5, `/sandbox`:** con los ajustes gestionados, el panel no se abre ("overridden by a higher-priority configuration"). Se comprueba con `/status`, con las órdenes de prueba y con el propio arranque (`failIfUnavailable`).
+- **B5, el agente no podía usar `gh`:** la regla `Read(~/.config/gh/**)` de los ajustes gestionados también se aplica al sandbox, y el agente no podía empujar ni abrir PR ("could not read Username"). Se quita esa regla (v0.14). Hay que corregir `/etc/claude-code/managed-settings.json` con `sudo` y reiniciar la sesión.
+- **B5, modo `!`:** también se ejecuta dentro del sandbox, incluso desde Remote Control. El señuelo se crea en una terminal normal.
+- **B5, salvaguardas:** pedir al modelo que se salte el proxy o que lea credenciales marcó la sesión (`[cyber]`). Las pruebas se rehacen con un señuelo inofensivo.
 - **A2 y A3, repos vacíos y plantilla:** los creó Claude desde el navegador integrado con la sesión de `victor-lg`. El push inicial lo haces tú con Fork.
 
 ## Fuentes

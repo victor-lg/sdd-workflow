@@ -4,7 +4,6 @@
     "deny": [
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
-      "Read(~/.config/gh/**)",
       "Read(~/.config/opencode-go/**)",
       "Read(~/.claude/.credentials.json)",
       "Read(~/.claude.json)"

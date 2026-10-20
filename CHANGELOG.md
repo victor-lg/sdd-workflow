@@ -2,6 +2,31 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.14 — 2026-10-20 (fase C en curso)
+
+- **Corrección de seguridad, R2:** se quita `Read(~/.config/gh/**)` de los ajustes gestionados.
+  - Claude Code aplica las reglas `Read` también al sandbox y ocultaba el token de `victor-lg-bot`: el agente no podía empujar ni abrir PR.
+  - La protección de ese token es la de GitHub (ADR-0005).
+- **B5 verificado:**
+  - escritura fuera del proyecto, bloqueada;
+  - red con lista blanca: `example.com`, 403; `github.com`, sí;
+  - lectura de credenciales, bloqueada por la regla y por el sandbox, comprobado con un fichero señuelo;
+  - salida directa sin proxy: documentada, no medida.
+- **B6 verificado:** el plugin se instala desde `victor-lg/sdd-workflow` con 6 skills, 1 agente y ~760 tokens fijos.
+- **Aprendido y anotado** en la línea base (§9, límites) y en la guía:
+  - el modo `!` también va por el sandbox;
+  - el sandbox oculta las carpetas protegidas ("no existe");
+  - las pruebas formuladas como sondas activan las salvaguardas del modelo.
+- **Primer recorrido:** descubrimiento cerrado y spec `SPEC-CALC-001` lista para revisión, en el proyecto (desde el móvil).
+- **Bloque C hecho:**
+  - PR #1 de `calculadora-discos` abierto por `victor-lg-bot` desde el sandbox;
+  - `checks-sdd` en verde en 6 s y ya obligatorio en el ruleset;
+  - fusionado por `victor-lg` tras aprobarlo.
+- **Casos negativos adelantados:**
+  - N4: `gh pr merge` rechazado por el ruleset;
+  - N5: push de `.github/workflows/x.yml` rechazado por falta de `workflow`.
+- **Límite conocido:** el sandbox protege `.git/config`, así que el agente no puede fijar el seguimiento de la rama (`set-upstream`). No afecta al push ni al PR.
+
 ## v0.13 — 2026-10-20 (fase C en curso)
 
 - **Bloque A hecho**, a medias entre Claude (navegador integrado) y Fork:
@@ -13,6 +38,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - Hecho: en los repos de una cuenta personal no hay rol "Read", todo colaborador escribe.
   - Decisión: el `main` de `sdd-workflow` se protege con un ruleset; el agente solo abre PR y tu excepción es "Always allow" para seguir usando Fork.
   - Precisa lo que v0.11 anotó sobre ADR-0005 (rol Read).
+- **Token de la cuenta de máquina:** `repo` + `read:org`, porque `gh auth login` lo exige. `read:org` solo lee la pertenencia a organizaciones. Sigue sin `workflow` (N5 intacto). Precisa ADR-0005, que decía solo `repo`.
 
 ## v0.12 — 2026-10-19 (diseño)
 
