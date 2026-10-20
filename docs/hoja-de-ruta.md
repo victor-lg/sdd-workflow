@@ -60,7 +60,7 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 - [ ] WSL2 con Ubuntu en Windows 11.
 - [ ] Claude Code dentro de WSL2; comprobar el sandbox con las dos órdenes de prueba.
 - [ ] Contratar OpenCode Go y configurar el perfil Go (`claude-go`); confirmar la URL base y revisar la retención de cada modelo. Ya se sabe que Remote Control no funciona en esa sesión.
-- [ ] Cuenta de máquina del agente en GitHub; invitarla como colaboradora en el repo del recorrido (Write) y en el del workflow (Read, para instalar el plugin); token clásico con `repo`, sin `workflow`, caducidad de 90 días.
+- [ ] Cuenta de máquina del agente en GitHub; invitarla como colaboradora en el repo del recorrido y en el del workflow (en repos personales siempre con escritura; el `main` del workflow queda protegido con un ruleset); token clásico con `repo`, sin `workflow`, caducidad de 90 días.
 - [ ] Repo del primer recorrido, con reglas de `main` y CODEOWNERS.
 - [ ] Workspace de Linear, integración con GitHub (automatizaciones de estado) y MCP de Linear en solo lectura.
 - [ ] App de Claude (Remote Control), GitHub Mobile y Linear en el iPhone.

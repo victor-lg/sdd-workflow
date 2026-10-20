@@ -2,6 +2,18 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.13 — 2026-10-20 (fase C en curso)
+
+- **Bloque A hecho**, a medias entre Claude (navegador integrado) y Fork:
+  - repos `sdd-workflow` y `sdd-template` (plantilla), privados;
+  - repo `calculadora-discos` creado desde la plantilla;
+  - `checkout` fijado a v7.0.1 por SHA;
+  - ruleset `main-protegida` en `calculadora-discos`, con excepción del admin solo para PR y aprobación obligatoria del último push.
+- **Cuenta de máquina `victor-lg-bot` invitada a los dos repos.**
+  - Hecho: en los repos de una cuenta personal no hay rol "Read", todo colaborador escribe.
+  - Decisión: el `main` de `sdd-workflow` se protege con un ruleset; el agente solo abre PR y tu excepción es "Always allow" para seguir usando Fork.
+  - Precisa lo que v0.11 anotó sobre ADR-0005 (rol Read).
+
 ## v0.12 — 2026-10-19 (diseño)
 
 - **Guía de instalación reordenada en bloques A–F.** Primero Windows con tu cuenta: ficheros, repos y cuenta de máquina. Después WSL con la cuenta del agente, que clona el workflow desde GitHub. Corrige un hueco de la v0.11: no explicaba cómo llegaban los ficheros a WSL.

@@ -80,7 +80,8 @@ En ese repo:
     - 1 aprobación;
     - *Dismiss stale pull request approvals when new commits are pushed*;
     - *Require review from Code Owners*;
-  - *Bypass list*: solo el rol de administrador (tú).
+  - *Require approval of the most recent reviewable push*: el último push lo aprueba alguien distinto de quien lo hizo;
+  - *Bypass list*: solo el rol de administrador (tú), en modo **"Allow for pull requests only"**: ni siquiera tú empujas directo a `main`.
   - El check requerido `checks-sdd` se añade en el bloque C, cuando GitHub ya lo conoce.
 
 ### A5. Cuenta de máquina del agente (ADR-0005)
@@ -91,9 +92,7 @@ En ese repo:
    - caducidad de **90 días**.
 
    Copia el token y apunta la renovación en tu calendario.
-3. Con **tu** cuenta, invítala como colaboradora:
-   - en `calculadora-discos`, con rol **Write**;
-   - en `sdd-workflow`, con rol **Read** (lo necesita para instalar el plugin).
+3. Con **tu** cuenta, invítala como colaboradora a `calculadora-discos` y a `sdd-workflow`. En los repos de una cuenta personal GitHub no tiene roles: todo colaborador tiene lectura y escritura. Por eso `sdd-workflow` lleva también el ruleset `main-protegida` (PR con 1 aprobación, descarta aprobaciones antiguas, último push aprobado por otra persona, sin borrar ni *force push*), con tu excepción en modo "Always allow" para que puedas seguir subiendo con Fork.
 4. Con la cuenta de máquina, acepta las dos invitaciones.
 5. Anota el correo `noreply` de la cuenta de máquina (*Settings → Emails*), del tipo `12345678+tu-usuario-bot@users.noreply.github.com`.
 
@@ -349,6 +348,8 @@ Con eso empieza la fase D: el primer recorrido y los casos N1–N8.
 
 - **A3, nombre:** la plantilla se llama `sdd-template` (carpeta `Documents\sdd-template`), no `plantilla-sdd`. La guía ya usa el nombre real.
 - **A3, checkout:** la última versión es v7, no v5. Fijada a `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1` (2026-07-17); admite `fetch-depth` y `persist-credentials`.
+- **A4, ruleset `main-protegida`:** añade a lo previsto *Require approval of the most recent reviewable push*, y la excepción del admin solo para pull requests. GitHub pide confirmar con 2FA al guardar (modo sudo).
+- **A5, rol de la cuenta de máquina:** el rol "Read" no existe en repos personales. Decisión (2026-10-20): invitarla con escritura a `sdd-workflow` y proteger su `main` con un ruleset; el agente solo puede abrir PR. Invitaciones enviadas por Claude desde tu cuenta.
 - **A2 y A3, repos vacíos y plantilla:** los creó Claude desde el navegador integrado con la sesión de `victor-lg`. El push inicial lo haces tú con Fork.
 
 ## Fuentes
