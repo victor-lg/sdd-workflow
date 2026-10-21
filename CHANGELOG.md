@@ -2,6 +2,12 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.17 — 2026-10-21 (fase D en curso)
+
+- **Estado del ADR:** `AGENTS.md` y la plantilla de ADR. El agente pasa el ADR a `Aceptado` en el último commit de su PR, cuando la revisión termina, como ya hace con `aprobada` en las specs (v0.16). Lo detectó el agente: ADR-0001 llegó a `main` como `Propuesto`, y `AGENTS.md` solo reconoce los `Aceptado`. En `calculadora-discos` se corrige dentro del PR de spec que enlaza el ADR.
+- **Tamaño del ADR:** la plantilla pide solo decisiones y su porqué, en una o dos páginas. El cómo va al plan o al PR. Es la lección de ADR-0001 (de 306 líneas a unas dos páginas).
+- **Pendiente:** llevar el `AGENTS.md` nuevo a `calculadora-discos` (PR R2), porque los proyectos tienen una copia de la plantilla.
+
 ## v0.16 — 2026-10-21 (fase D en curso)
 
 - **Estado de la spec:** `sdd-spec` y la plantilla de spec. El agente escribe `estado: aprobada` en el último commit del PR de spec, cuando la revisión termina sin nada que corregir. Antes nadie lo cambiaba y la spec llegaba a `main` como `en-revision`. Sigue sin autorizar nada sin el merge (N1). Plugin `sdd` 0.2.0: tras el push, en WSL `claude plugin marketplace update sdd-workflow` y `claude plugin update sdd@sdd-workflow`.

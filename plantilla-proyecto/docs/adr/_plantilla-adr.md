@@ -12,7 +12,12 @@ referencias: []           # specs, issues, PRs, ADR relacionados
 BORRADOR de plantilla del workflow SDD + IA v0.2, tomada de las notas originales.
 
 - Un ADR queda Aceptado cuando una persona fusiona su PR en `main` (P03).
-  El agente solo redacta ADR en estado Propuesto.
+  El agente lo redacta en estado Propuesto. Cuando la revisión termina sin
+  nada que corregir, el último commit del PR lo pasa a Aceptado, para que
+  llegue a `main` con su estado final. Ese valor solo cuenta si se fusiona.
+- Solo decisiones y su porqué, en una o dos páginas. El cómo (pasos,
+  rutas, configuración detallada) va al plan de la entrega o a la
+  descripción del PR: un ADR aceptado no se edita y manda sobre el agente.
 - Un ADR aceptado no se reescribe: si cambia la decisión, se crea uno nuevo
   que lo sustituye y se enlazan ambos.
 - Crear un ADR cuando convenga recordar el razonamiento dentro de seis meses.

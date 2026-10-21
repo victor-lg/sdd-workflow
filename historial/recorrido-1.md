@@ -16,8 +16,11 @@ Registro del primer recorrido vertical (línea base §11). Alimenta la retrospec
 | Borrador de spec listo | 2026-10-20 | Revisado y cerrado contigo |
 | PR #2 de spec abierto | 2026-10-21 ~11:40 | Agente desde el sandbox |
 | Spec aprobada y fusionada (G1) | 2026-10-21 ~13:35 | Desde GitHub Mobile, tras 3 rondas |
-| Issue en Ready (G2) | | |
-| ADR técnico fusionado | | |
+| ADR-0001 (PWA) fusionado | 2026-10-21 ~20:00 | PR #3, tras 3 rondas y un recorte |
+| Spec v0.3 + ADR Aceptado fusionados | 2026-10-21 ~20:25 | PR #4, 1 ronda con 2 revisores |
+| Issue VIC-5 en Ready (G2) | 2026-10-21 ~20:30 | Creada por Claude desde Chrome con la plantilla "Entrega SDD" |
+| PR #5 (VIC-5) abierto en borrador | 2026-10-21 ~21:05 | Lógica + 46 tests unitarios; faltan los E2E |
+| PR #6, spec v0.4 (entrada tolerante) | 2026-10-21 ~21:45 | Hueco de la spec que salió al implementar |
 | Implementación fusionada (G6) | | |
 
 ### 2. Coste o uso de la suscripción
@@ -27,6 +30,10 @@ Al cerrar cada sesión del agente: `/usage` (o `/cost`) y una línea aquí.
 | Fecha | Sesión | Modelo y perfil | Uso | Notas |
 | --- | --- | --- | --- | --- |
 | 2026-10-20 | Descubrimiento y spec (app móvil) | Claude, perfil Claude | No medido | Antes de empezar a medir |
+| 2026-10-21 | PR #6, spec v0.4 (sesión nueva) | Opus 5.5, perfil Claude | $2,25 equivalentes; 31 min reales, 6 min de API | 2 revisores + aclaraciones sin otra ronda |
+| 2026-10-21 | PR #5, VIC-5, primera sesión | Opus 5.5, perfil Claude | No anotado | Se cerró para el PR #6; el estado está en `.tareas/VIC-5.md` |
+| 2026-10-21 | PR #4, spec v0.3 + ADR Aceptado (sesión nueva) | Opus 5.5, perfil Claude | $1,77 equivalentes; 13 min reales, 4,5 min de API | Sesión nueva por PR: 6 veces más barata que la del ADR |
+| 2026-10-21 | PR #3, ADR-0001 (sesión completa) | Opus 5.5 (+ Haiku 5.5, 8 búsquedas web), perfil Claude | $10,63 equivalentes; 6 h reales, 30 min de API; 96 % de entrada desde caché | Coste dominado por la caché (11,9 M tokens leídos) y por las rondas con dos revisores |
 | 2026-10-21 | PR #2, última sesión (ronda 3 y cierre) | Opus 5.5 (+ Haiku 5.5), perfil Claude | $0,89 equivalentes; 22 min reales, 2 min de API; 95 % de entrada desde caché | La sesión no cubre las rondas 1 y 2 |
 
 Lectura de `/usage` (últimas 24 h, aproximada, 2026-10-21 13:35): sesión al 30 %, semana al 40 %.
@@ -34,9 +41,16 @@ Lectura de `/usage` (últimas 24 h, aproximada, 2026-10-21 13:35): sesión al 30
 - El 37 % del uso se fue en contexto fijo de más de 40k tokens.
 - El MCP de Linear, un 1 %.
 
+Lectura de `/usage` (últimas 24 h, 2026-10-21 20:00): sesión al 20 %, semana al 2 % (recién reiniciada).
+- El 92 % del uso viene de sesiones con muchos subagentes, y el plugin `sdd` supone el 40 %: `sdd-context` un 14 %, `sdd-spec` un 9 %, `reviewer` un 8 %, el subagente `sdd-review` un 5 % y `sdd-review` como skill un 3 %.
+- El 29 % del uso se hizo con más de 150k tokens de contexto.
+- El contexto fijo de más de 40k tokens supone el 28 %.
+
 Candidatos para la retrospectiva:
 - usar un modelo más barato para las revisiones de spec;
-- revisar con `/context` qué ocupa el contexto fijo.
+- revisar con `/context` qué ocupa el contexto fijo;
+- usar una sesión nueva (o `/clear`) por PR, en vez de una sesión de 6 horas;
+- acotar `sdd-context`, que en el ADR fue la skill más cara.
 
 Se decide con más datos, no ahora.
 
@@ -52,13 +66,23 @@ Se decide con más datos, no ahora.
 
 Observación: los conflictos C1 y C2 se colaron en la redacción con Claude y los encontraron los revisores. Es un buen argumento para mantener dos revisores en specs R1.
 
+### 3b. Idas y vueltas con el ADR
+
+| Ronda | Origen | Resultado |
+| --- | --- | --- |
+| PR #3, rondas 1 y 2 | 2 revisores cada una | Decisiones de Víctor: Pages en repo privado, subdominio propio, cierre por iOS = arranque de cero |
+| Lectura de Claude (aquí) | 306 líneas con detalles de implementación | Víctor decide recortarlo aunque cueste otra ronda; publicación manual |
+| PR #3, ronda 3 | 2 revisores | ~2 páginas; publicación limitada a `main` y a la cuenta `victor-lg`; D25 citado |
+
+Lección para el workflow: la plantilla de ADR debería decir "decisión y porqué, no el cómo; una o dos páginas". Claude propuso al principio aceptarlo largo para ahorrar una ronda, y Víctor tenía razón: un ADR aceptado es inmutable y manda sobre el agente.
+
 ### 4. Defectos que se escaparon al revisor
 
 Defectos que aparezcan después de un merge y que la revisión debería haber visto.
 
 | Fecha | Dónde apareció | Defecto | Gate que debió verlo |
 | --- | --- | --- | --- |
-| | | | |
+| 2026-10-21 | Implementación de VIC-5 (PR #5) | FR-03, FR-04 y FR-10 juntos daban un error a mitad de escribir ("72," al teclear "72,5"). Ningún AC lo cubría. | G1: lo vieron el agente al implementar y Claude, no los 6 revisores de la spec |
 
 ## Desviaciones del camino feliz
 
@@ -68,6 +92,10 @@ Defectos que aparezcan después de un merge y que la revisión debería haber vi
 - **Rama del PR de spec sin ID de Linear:** correcto, porque las ramas con ID son para las entregas (`sdd-plan`).
 - **Aprobación desde el móvil:** el PR #2 se aprobó desde GitHub Mobile, lo que cierra la comprobación pendiente del bloque E.
 - **Campo `estado` de la spec:** se detectó que nadie lo pasaba a `aprobada`. Se corrige en v0.16 (ver CHANGELOG).
+
+- **Dos sesiones del agente en la misma copia del repo:** la del PR de spec cambió de rama debajo de la de implementación. Hay que trabajar en serie, o con dos clones o `git worktree`. Candidato para la guía o para `AGENTS.md`.
+- **Check obligatorio nuevo con PR abiertos:** al hacer obligatorio `tests`, el PR #6 se quedó esperando ese check. Se resolvió cerrando y reabriendo el PR, sin "Update branch", que crearía un push de Víctor.
+- **Interop de WSL:** `npm` de Windows aparecía dentro de WSL a través del PATH. Se desactiva el interop en `/etc/wsl.conf` (corrección de seguridad, pendiente de pasar a la guía).
 
 ## Casos negativos
 
