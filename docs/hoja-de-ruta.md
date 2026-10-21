@@ -62,7 +62,7 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 - [ ] Contratar OpenCode Go y configurar el perfil Go (`claude-go`); confirmar la URL base y revisar la retención de cada modelo. Ya se sabe que Remote Control no funciona en esa sesión.
 - [x] Cuenta de máquina `victor-lg-bot` en GitHub ✔; invitarla como colaboradora en el repo del recorrido y en el del workflow (en repos personales siempre con escritura; el `main` del workflow queda protegido con un ruleset); token clásico con `repo` + `read:org`, sin `workflow`, caducidad de 90 días.
 - [x] Repo `calculadora-discos`, con ruleset de `main` (PR, 1 aprobación, CODEOWNERS, `checks-sdd` obligatorio) ✔. PR #1 de prueba: abierto por el agente desde el sandbox, CI en verde, fusionado por ti.
-- [ ] Workspace de Linear, integración con GitHub (automatizaciones de estado) y MCP de Linear en solo lectura.
+- [x] Workspace de Linear (team VIC, estados D21, plantilla "Entrega SDD", proyecto "Calculadora de discos"), integración con GitHub (automatizaciones de estado, ramas `vic-123-titulo`, app limitada a `calculadora-discos`) y MCP de Linear en solo lectura: lee issues y no puede moverlas ✔
 - [ ] App de Claude (Remote Control), GitHub Mobile y Linear en el iPhone.
 - [x] Repo del workflow en GitHub (privado), que es también el marketplace del plugin ✔
 

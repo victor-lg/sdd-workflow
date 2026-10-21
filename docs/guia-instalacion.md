@@ -277,6 +277,14 @@ En la web de Linear:
    - al pedir revisión → *In Review*;
    - al fusionar → *Done*.
 4. **Plantilla de issue:** pega la de `docs/plantilla-issue-linear.md`.
+5. **Formato de rama** (integración de GitHub): `identifier-title`, por ejemplo `vic-123-titulo`. Encaja con la rama que crea `sdd-plan`.
+6. **App Linear Code en GitHub:** acceso solo a los repos de los proyectos (*Only select repositories*). Cada proyecto nuevo se añade a mano.
+7. **Issues de ejemplo** que crea Linear: pásalas a *Canceled*.
+
+Valores reales (2026-10-21):
+- workspace `victor-lg`, team "Victor" con clave `VIC`, proyecto "Calculadora de discos";
+- la integración con GitHub ya estaba conectada desde el 8 de octubre, sin sincronizar issues con GitHub;
+- la app tiene acceso solo a `calculadora-discos`.
 
 En WSL, el MCP de Linear **en solo lectura**:
 
@@ -361,6 +369,10 @@ Con eso empieza la fase D: el primer recorrido y los casos N1–N8.
 - **B5, el agente no podía usar `gh`:** la regla `Read(~/.config/gh/**)` de los ajustes gestionados también se aplica al sandbox, y el agente no podía empujar ni abrir PR ("could not read Username"). Se quita esa regla (v0.14). Hay que corregir `/etc/claude-code/managed-settings.json` con `sudo` y reiniciar la sesión.
 - **B5, modo `!`:** también se ejecuta dentro del sandbox, incluso desde Remote Control. El señuelo se crea en una terminal normal.
 - **B5, salvaguardas:** pedir al modelo que se salte el proxy o que lea credenciales marcó la sesión (`[cyber]`). Las pruebas se rehacen con un señuelo inofensivo.
+- **D, navegador:** el navegador integrado no permitía iniciar sesión en Linear. La configuración la hizo Claude desde tu Chrome (Claude in Chrome). Ver los repos de la app Linear Code pide confirmar con 2FA.
+- **D, estados:** al renombrar *Todo* a *Ready*, las 4 issues de ejemplo quedaron en *Ready*. Se pasan a *Canceled*.
+- **D, permisos de la app Linear Code:** pide lectura y escritura en código, issues, PR, actions y workflows del repo que se le da. Límite aceptado: es la app oficial de Linear, solo ve los repos elegidos y el ruleset de `main` también la frena.
+- **D, comprobación del MCP:** el agente lee las issues y no puede moverlas. Las razones son dos: el endpoint solo ofrece herramientas `list_*` y `get_*`, y `AGENTS.md` lo prohíbe. Además, el agente no buscó otra vía.
 - **A2 y A3, repos vacíos y plantilla:** los creó Claude desde el navegador integrado con la sesión de `victor-lg`. El push inicial lo haces tú con Fork.
 
 ## Fuentes

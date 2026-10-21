@@ -2,6 +2,18 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.15 — 2026-10-21 (fase C en curso)
+
+- **Bloque D hecho.** Claude configuró Linear desde tu Chrome, porque el navegador integrado no podía iniciar sesión:
+  - team VIC con los estados de D21;
+  - automatizaciones de PR: borrador o abierto → In Progress, revisión pedida → In Review, fusionado → Done;
+  - plantilla "Entrega SDD" y proyecto "Calculadora de discos";
+  - ramas con el formato `vic-123-titulo`;
+  - la app Linear Code solo ve `calculadora-discos`;
+  - issues de ejemplo canceladas.
+- **MCP de Linear verificado:** el agente lee las issues y no puede moverlas. El endpoint solo tiene herramientas de lectura, `AGENTS.md` también lo prohíbe, y el agente no buscó otra vía.
+- **Límite aceptado:** la app de Linear tiene escritura en código y workflows del repo que se le da (app oficial, repos elegidos y ruleset de `main`).
+
 ## v0.14 — 2026-10-20 (fase C en curso)
 
 - **Corrección de seguridad, R2:** se quita `Read(~/.config/gh/**)` de los ajustes gestionados.
