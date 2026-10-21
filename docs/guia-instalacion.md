@@ -309,12 +309,16 @@ Dentro de una sesión, `/mcp` → `linear` → autenticar. En la pantalla de OAu
 2. En una sesión de Claude Code en el PC, `/config` y activa:
    - **Push when actions required**, para que los permisos lleguen al móvil;
    - si quieres, **Push when Claude decides**.
+3. En la sesión, `/remote-control` para verla desde la app de Claude.
 
 **Comprobación:**
 
 - con una sesión abierta en el PC, la ves en la app de Claude y puedes escribir en ella;
-- un aviso de permiso se contesta desde el móvil;
-- un PR de prueba se aprueba y se fusiona desde GitHub Mobile.
+- un aviso de permiso se contesta desde el móvil:
+  - en una carpeta de prueba (`~/pruebas/permiso`), pide `npm install left-pad`;
+  - salta el permiso de la lista `ask` y llega la notificación al iPhone;
+  - lo deniegas desde el móvil y no se instala nada;
+- un PR se aprueba y se fusiona desde GitHub Mobile. Se comprueba con el primer PR real de la fase D, el de la spec.
 
 ---
 
@@ -373,6 +377,9 @@ Con eso empieza la fase D: el primer recorrido y los casos N1–N8.
 - **D, estados:** al renombrar *Todo* a *Ready*, las 4 issues de ejemplo quedaron en *Ready*. Se pasan a *Canceled*.
 - **D, permisos de la app Linear Code:** pide lectura y escritura en código, issues, PR, actions y workflows del repo que se le da. Límite aceptado: es la app oficial de Linear, solo ve los repos elegidos y el ruleset de `main` también la frena.
 - **D, comprobación del MCP:** el agente lee las issues y no puede moverlas. Las razones son dos: el endpoint solo ofrece herramientas `list_*` y `get_*`, y `AGENTS.md` lo prohíbe. Además, el agente no buscó otra vía.
+- **Fase D, copiar desde `/mnt/c`:** los ficheros copiados desde el disco de Windows llegan como ejecutables (`100755`). El agente los deja en `100644` antes del commit.
+- **Fase D, `gh pr edit`:** falla por un aviso de GitHub sobre Projects (classic). El agente actualiza la descripción del PR con la API REST (`gh api`).
+- **Fase D, `git status`:** muestra sin seguimiento ficheros como `.bashrc` o `.claude/settings.json`. Son puntos de montaje del sandbox; no se añaden al commit.
 - **A2 y A3, repos vacíos y plantilla:** los creó Claude desde el navegador integrado con la sesión de `victor-lg`. El push inicial lo haces tú con Fork.
 
 ## Fuentes

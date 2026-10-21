@@ -2,7 +2,7 @@
 
 Repositorio del propio workflow: qué se ha decidido, qué está pendiente, las plantillas que se copiarán a cada proyecto y el material histórico. Todo en Markdown plano.
 
-- **Versión del workflow:** v0.15 (fase C en curso). Todavía no existe una versión usable.
+- **Versión del workflow:** v0.16 (fase D en curso). Todavía no existe una versión usable.
 - **Siguiente hito:** v1.0, que se declara cuando el primer recorrido completo supere el camino feliz y los casos negativos N1–N8.
 - **Última revisión:** 2026-10-19.
 

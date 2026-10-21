@@ -19,7 +19,9 @@ BORRADOR de plantilla del workflow SDD + IA v0.10.
 
 - El campo `estado` es informativo. Lo que hace vigente una spec es estar
   fusionada en `main` por una persona (P03, G1). Un `estado: aprobada` sin
-  ese merge no autoriza nada (caso negativo N1).
+  ese merge no autoriza nada (caso negativo N1). El agente lo escribe en el
+  último commit del PR de spec, cuando la revisión termina sin nada que
+  corregir, para que la spec llegue a `main` con su estado final.
 - Núcleo obligatorio: secciones 1 a 6. Las opcionales (7 a 12) solo se
   incluyen si aportan; no se dejan vacías.
 - IDs estables: FR-xx, NFR-xx, AC-xx. No se renumeran; si un requisito se

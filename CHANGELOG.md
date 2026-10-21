@@ -2,6 +2,12 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.16 — 2026-10-21 (fase D en curso)
+
+- **Estado de la spec:** `sdd-spec` y la plantilla de spec. El agente escribe `estado: aprobada` en el último commit del PR de spec, cuando la revisión termina sin nada que corregir. Antes nadie lo cambiaba y la spec llegaba a `main` como `en-revision`. Sigue sin autorizar nada sin el merge (N1). Plugin `sdd` 0.2.0: tras el push, en WSL `claude plugin marketplace update sdd-workflow` y `claude plugin update sdd@sdd-workflow`.
+- **Métricas del primer recorrido:** nuevo `historial/recorrido-1.md`, con las cuatro métricas de §11, las desviaciones del camino feliz (idea fuera del Inbox de Linear, nombre de las notas) y el estado de N1–N8.
+- **Guía:** notas de entorno de la fase D (permisos al copiar desde `/mnt/c`, `gh pr edit` y Projects classic, puntos de montaje en `git status`).
+
 ## v0.15 — 2026-10-21 (fase C en curso)
 
 - **Bloque D hecho.** Claude configuró Linear desde tu Chrome, porque el navegador integrado no podía iniciar sesión:
@@ -12,6 +18,8 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - la app Linear Code solo ve `calculadora-discos`;
   - issues de ejemplo canceladas.
 - **MCP de Linear verificado:** el agente lee las issues y no puede moverlas. El endpoint solo tiene herramientas de lectura, `AGENTS.md` también lo prohíbe, y el agente no buscó otra vía.
+- **Bloque E hecho:** Remote Control con `/remote-control`. Un permiso `ask` llegó como notificación al iPhone y se denegó desde allí. La prueba de GitHub Mobile se hará con el PR de la spec.
+- **Bloque F (perfil Go) aplazado** a después del primer recorrido: no lo bloquea.
 - **Límite aceptado:** la app de Linear tiene escritura en código y workflows del repo que se le da (app oficial, repos elegidos y ruleset de `main`).
 
 ## v0.14 — 2026-10-20 (fase C en curso)
