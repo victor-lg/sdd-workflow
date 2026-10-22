@@ -49,7 +49,8 @@ documental
 
 <!--
 - documental → solo discovery/ y docs/ (visión, specs, ADR); aún no hay tecnología elegida.
-- técnica    → existe un ADR que fija la tecnología; hay src/, tests/ y la CI del stack.
+- técnica    → existe un ADR que fija la tecnología; hay código, tests y la CI del stack.
+No lo lee la CI: es información para quien abre el repo.
 -->
 
 ## Rutas sensibles

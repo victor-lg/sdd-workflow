@@ -2,6 +2,22 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.20 — 2026-10-22 (fase D en curso)
+
+- **Revisores con Sonnet:** el subagente `reviewer` usa `model: sonnet`. En R2, el revisor de seguridad se lanza con Opus (`sdd-review`). Motivo: `/usage` atribuía un 90 % del consumo de las últimas 24 h a los subagentes de revisión, y Sonnet ya había encontrado defectos reales en el PR #5. Se revierte si la métrica de defectos escapados lo justifica.
+- **Plugin `sdd` 0.4.0.** Tras el push: `claude plugin marketplace update sdd-workflow && claude plugin update sdd@sdd-workflow`.
+- **Primer recorrido:** N1 verificado (VIC-7: el agente se negó a implementar una spec "aprobada" que no estaba en `main`).
+
+## v0.19 — 2026-10-22 (fase D en curso)
+
+Ajustes que salieron al adoptar la v0.18 en `calculadora-discos` (PR #9).
+
+- **`AGENTS.md`:** los ADR tienen autoridad si están `Aceptado` **y fusionados en `main`**. Con la v0.17, `Aceptado` se escribe antes del merge.
+- **Ramas `chore-…`** para mantenimiento (`AGENTS.md`, línea base §7).
+- **Plantilla de README:** "Etapa" no habla de `src/`, y avisa de que la CI no la lee.
+- **Corrección:** la entrada v0.18 decía que `checks.py` lee "Etapa". No es así: solo lee "Rutas sensibles".
+- **Pendiente para la v1.0:** quitar las marcas "BORRADOR" de plantillas y skills al declararla.
+
 ## v0.18 — 2026-10-22 (fase D: camino feliz completo)
 
 Criterio nuevo: **profesional y coherente, sin burocracia** (línea base §1). Ningún check nuevo en la CI.

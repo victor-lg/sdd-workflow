@@ -411,7 +411,7 @@ Convenciones estándar, sin checks propios en la CI. Las sigue el agente por `AG
 
 - **Títulos de PR: Conventional Commits, con el ID como alcance** y la descripción en español: `feat(VIC-5): calculadora de series de calentamiento`, `fix(VIC-7): …`, `test(VIC-6): …`, `docs(SPEC-CALC-001): v0.4, entrada tolerante`, `docs(ADR-0001): tecnología PWA`, `ci: workflow de publicación`.
 - **Fusión solo por squash**, con el título del PR como mensaje. Cada commit de `main` es un PR revisado y en verde, y el historial se lee como un changelog. Los pasos intermedios siguen en la página del PR.
-- **Ramas:** `vic-N-…` para entregas (formato de Linear), `spec-<id>-…` para specs, `adr-NNNN-…` para ADR y `ci-…` para workflows. GitHub borra las ramas al fusionar.
+- **Ramas:** `vic-N-…` para entregas (formato de Linear), `spec-<id>-…` para specs, `adr-NNNN-…` para ADR, `ci-…` para workflows y `chore-…` para mantenimiento. GitHub borra las ramas al fusionar.
 - **Commits dentro de una rama:** mismo formato, en imperativo y en una línea. No son críticos, porque desaparecen al fusionar.
 - **PR pequeños:** orientativamente, unas 400 líneas de código por PR, sin contar tests ni lockfiles. Una entrega grande se parte en varios PR (`sdd-plan`).
 - **Autoría transparente:** los commits del agente llevan `Co-Authored-By`.

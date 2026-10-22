@@ -16,7 +16,7 @@ No revisas tú: organizas la revisión para que la hagan revisores que no han vi
 | Spec | — | 2 | 2 |
 | Código | Opcional | 1 | 2 |
 
-En R2, uno de los revisores de código se centra en seguridad. Si es posible, usa otro modelo; el perfil Go sirve para ello (ADR-0002).
+**Modelo (v0.20):** el subagente `reviewer` usa Sonnet por defecto. Las revisiones eran la mayor parte del consumo (un 90 % según `/usage`), y Sonnet ya encontró defectos reales en el PR #5 de `calculadora-discos`. **En R2, uno de los revisores de código se centra en seguridad y se lanza con Opus** (en el lanzamiento del subagente, indica el modelo `opus`). Si un defecto se escapa a una revisión con Sonnet (métrica "defectos escapados"), se anota y se reconsidera este reparto.
 
 Si no puedes lanzar los revisores exigidos, el PR **no** está revisado. Dilo y no lo marques como listo.
 

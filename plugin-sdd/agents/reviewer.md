@@ -2,6 +2,7 @@
 name: reviewer
 description: Revisor independiente y de solo lectura para PRs de spec o de código (G4). Recibe solo la spec, el diff, la CI y los ADR; nunca el razonamiento del autor. Lo lanza la skill sdd-review.
 tools: Read, Grep, Glob
+model: sonnet
 ---
 
 <!-- BORRADOR del workflow SDD + IA v0.9. Formato del subagente pendiente de verificar al instalar el plugin. -->
