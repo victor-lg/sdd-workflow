@@ -35,13 +35,15 @@ Ante la duda, elige el nivel más alto. Nunca bajes un nivel para ahorrar reviso
 
 ## 3. Preparar el trabajo
 
-1. **Rama:** desde `main` actualizado, con el ID de la issue en el nombre (`<ID>-descripcion-corta`). Así Linear la enlaza sola.
-2. **PR borrador** (R1 y R2), abierto desde el principio con la plantilla:
-   - "Fixes <ID>" en la descripción;
+1. **Tamaño:** estima las líneas de código de la entrega, sin tests ni lockfiles. Si superan unas 400, parte la entrega en varios PR que se puedan revisar y fusionar por separado, cada uno con sus AC y verde por sí mismo. Por ejemplo: lógica y tests unitarios; interfaz; integración, persistencia o funcionamiento sin conexión con sus E2E. Propón el reparto en el primer PR.
+2. **Rama:** desde `main` actualizado, con el ID de la issue en el nombre (`vic-N-descripcion-corta`, el formato de Linear). Así Linear la enlaza sola. Si la entrega va en varios PR, añade un sufijo (`vic-N-logica`, `vic-N-interfaz`).
+3. **PR borrador** (R1 y R2), abierto desde el principio con la plantilla:
+   - título en Conventional Commits con el ID como alcance (`feat(VIC-5): …`);
+   - "Fixes <ID>" en la descripción, solo en el último PR de la entrega (en los anteriores, "Part of <ID>");
    - un solo nivel de riesgo marcado, y el perfil o modelo;
    - los AC de la entrega en formato `SPEC-XXX-NNN/AC-NN` (la CI los contrasta con la spec de `main` y con los tests);
    - en "Plan y progreso", una lista de pasos verificables, proporcional al cambio. Cada paso dice qué AC cubre o qué comprueba.
-3. **Cambios R0:** basta con rama y PR normal; el plan puede ser una línea.
+4. **Cambios R0:** basta con rama y PR normal; el plan puede ser una línea.
 
 ## Lo que no haces
 

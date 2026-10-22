@@ -1,0 +1,61 @@
+# Ejemplo del workflow SDD + IA v0.18: tests para un stack Node + Playwright.
+# Origen: calculadora-discos (ADR-0001), en uso desde 2026-10-21. Adáptalo al stack que fije el ADR del proyecto.
+#
+# Tests del stack (ADR-0001 §3.7). Lo añade una persona: el token del agente
+# no tiene el permiso `workflow` (N5).
+#
+# Mientras no exista package.json (antes de la primera entrega), el job
+# termina en verde sin ejecutar nada, para poder marcarlo ya como check
+# obligatorio sin bloquear los PR de documentación.
+
+name: tests
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Fijada por SHA (v7.0.1, 2026-07-17), igual que en sdd.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ¿Hay código que probar?
+        id: hay
+        run: |
+          if [ -f package.json ]; then echo "si=true" >> "$GITHUB_OUTPUT"
+          else echo "si=false" >> "$GITHUB_OUTPUT"; echo "Sin package.json: no hay tests todavía."; fi
+
+      # Fijada por SHA (v7.0.0, 2026-07-14). Versión de Node en .nvmrc (≥ 22).
+      - if: steps.hay.outputs.si == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - if: steps.hay.outputs.si == 'true'
+        name: Instalar dependencias (versiones exactas del lockfile, sin scripts de instalación)
+        run: npm ci --ignore-scripts
+
+      - if: steps.hay.outputs.si == 'true'
+        name: Tests unitarios
+        run: node --test "tests/unit/**/*.test.js"
+
+      - if: steps.hay.outputs.si == 'true'
+        name: Navegadores de Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      - if: steps.hay.outputs.si == 'true'
+        name: Tests E2E (Chromium y WebKit)
+        run: npx playwright test

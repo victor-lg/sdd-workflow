@@ -29,6 +29,7 @@ Cada paso termina con una comprobación. Si una falla, para y anótalo al final 
 | D | Linear + WSL | Workspace, integración y MCP en solo lectura |
 | E | iPhone | Remote Control, GitHub Mobile y Linear |
 | F | WSL | Perfil Go (puede esperar) |
+| G | Web de GitHub + WSL | Etapa técnica de cada proyecto: tests, navegadores y publicación |
 
 ---
 
@@ -74,6 +75,10 @@ En ese repo:
 - **Settings → Actions → General:**
   - *Workflow permissions*: "Read repository contents";
   - desmarca "Allow GitHub Actions to create and approve pull requests".
+- **Settings → General → Pull Requests** (v0.18):
+  - deja marcado solo **Allow squash merging**, con *Default commit message* en **Pull request title** (o "title and description");
+  - desmarca *Allow merge commits* y *Allow rebase merging*;
+  - marca **Automatically delete head branches**.
 - **Settings → Rules → Rulesets → New branch ruleset**, activo sobre la rama por defecto:
   - *Restrict deletions* y *Block force pushes*;
   - *Require a pull request before merging*:
@@ -144,6 +149,31 @@ sudo systemctl reload apparmor
 ```
 
 Si devuelve `0` o "No such file or directory", no hagas nada.
+
+**Aislar WSL de Windows (v0.18, seguridad).** Por defecto, WSL añade el PATH de Windows y deja ejecutar programas de Windows, que corren fuera del sandbox de Linux. Se desactiva:
+
+```bash
+sudo tee -a /etc/wsl.conf > /dev/null <<'EOF2'
+
+[interop]
+enabled=false
+appendWindowsPath=false
+EOF2
+```
+
+Si `/etc/wsl.conf` ya tenía una sección `[interop]`, edita esos dos valores con `sudo nano`. Después, en PowerShell, ejecuta `wsl --shutdown` y vuelve a abrir Ubuntu.
+
+**Comprobación:** `cmd.exe` da "command not found". Se pierde abrir programas de Windows desde WSL (`explorer.exe .`, `code .`).
+
+**Node (v0.18), si algún proyecto lo usa:** con nvm, para que cada repo fije su versión en `.nvmrc`:
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm install 24
+```
+
+**Comprobación:** `which node npm` muestra rutas de `~/.nvm`, nunca de `/mnt/c`.
 
 ### B3. Identidad del agente en Git
 
@@ -353,6 +383,44 @@ Si falla con la URL base del script, prueba la alternativa que indica el propio 
 
 ---
 
+## Bloque G — Etapa técnica y publicación (en cada proyecto, cuando toque)
+
+Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es para un stack Node + PWA en GitHub Pages (`calculadora-discos`). Para otro stack, se adapta.
+
+### G1. Workflow de tests
+
+1. Copia `docs/ejemplos/workflows/tests-node-playwright.yml` del repo del workflow, adaptado al stack.
+2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci-tests`). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci-tests` branch"**; si no, GitHub crea ramas nuevas (`ci-tests-1`…).
+3. Abre un PR `ci: workflow de tests`, R2. Fusiónalo con tu excepción de administrador.
+4. En el ruleset de `main`, añade `tests` a los checks obligatorios.
+   - Los PR que ya estaban abiertos se quedan esperando ese check. Ciérralos y vuelve a abrirlos para lanzarlo.
+   - No uses "Update branch": crearía un push tuyo que tú mismo no podrías aprobar.
+
+### G2. Navegadores de Playwright (fuera del sandbox)
+
+La red del sandbox no llega a la descarga de navegadores. Cuando el agente haya creado `package.json` y el lockfile, en una **terminal normal** desde la raíz del repo:
+
+```bash
+npx playwright install --with-deps chromium webkit
+```
+
+Quedan en `~/.cache/ms-playwright`, y el agente los usa desde el sandbox (verificado con Chromium 156 y WebKit 27.2). Repítelo cuando cambie la versión de Playwright.
+
+### G3. Publicación en GitHub Pages con subdominio propio
+
+En este orden: **verificar el dominio antes de ponerlo en el repo** evita que otra cuenta lo reclame.
+
+1. **Verificar el dominio** en tu cuenta: *Settings* (de la cuenta) → *Pages → Verified domains → Add a domain*. Crea el registro TXT que te indica en tu DNS y pulsa *Verify*.
+2. **DNS:** un CNAME `<subdominio>` → `<usuario>.github.io`. Sin comodines.
+3. **Pages en el repo:** *Settings → Pages → Source: GitHub Actions*. En *Custom domain*, pon el subdominio. Cuando haya certificado, marca *Enforce HTTPS*.
+4. **Workflow de publicación:** `docs/ejemplos/workflows/deploy-pages.yml`, adaptado, en un PR `ci: workflow de publicación` (R2), igual que en G1.
+5. **Entorno:** *Settings → Environments → github-pages → Deployment branches*: solo `main`.
+6. **Publicar:** *Actions → deploy → Run workflow* sobre `main`. Solo funciona con tu cuenta.
+7. **Release:** después de cada publicación, *Releases → Draft a new release* con etiqueta semver (`v0.1.0`) sobre `main`, y *Generate release notes*. Las notas salen de los títulos de PR (Conventional Commits).
+8. **Prueba manual** en el dispositivo, si la spec o el ADR la exigen. El resultado va como comentario en el PR de la entrega.
+
+---
+
 ## Al terminar
 
 1. Marca los pasos en `docs/hoja-de-ruta.md` (fase C).
@@ -380,6 +448,10 @@ Con eso empieza la fase D: el primer recorrido y los casos N1–N8.
 - **Fase D, copiar desde `/mnt/c`:** los ficheros copiados desde el disco de Windows llegan como ejecutables (`100755`). El agente los deja en `100644` antes del commit.
 - **Fase D, `gh pr edit`:** falla por un aviso de GitHub sobre Projects (classic). El agente actualiza la descripción del PR con la API REST (`gh api`).
 - **Fase D, `git status`:** muestra sin seguimiento ficheros como `.bashrc` o `.claude/settings.json`. Son puntos de montaje del sandbox; no se añaden al commit.
+- **Fase D, `npm` de Windows en WSL:** WSL añadía el PATH de Windows y `npm` resolvía al de Windows. Se desactiva el interop (B2) y Node se instala con nvm dentro de WSL.
+- **Fase D, ramas creadas al editar en la web:** al añadir un segundo fichero eligiendo "Create a new branch", GitHub creó `ci-deploy-1` y `ci-deploy-2`. Hay que elegir "Commit directly to the … branch" (G1).
+- **Fase D, check obligatorio nuevo:** los PR ya abiertos se quedan esperando `tests`. Se resuelve cerrando y reabriendo el PR (G1).
+- **Fase D, dos sesiones en la misma copia del repo:** una cambió la rama debajo de la otra. Una sesión por PR, y en paralelo, clones o `git worktree` (`AGENTS.md`).
 - **A2 y A3, repos vacíos y plantilla:** los creó Claude desde el navegador integrado con la sesión de `victor-lg`. El push inicial lo haces tú con Fork.
 
 ## Fuentes

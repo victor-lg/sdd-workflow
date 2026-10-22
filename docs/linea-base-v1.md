@@ -16,6 +16,7 @@
 Este documento convierte las 60 decisiones D00–D59 y la auditoría H01–H24 en una **línea base v1 implementable**. Contiene 10 principios, 3 niveles de riesgo, 6 gates con su mecanismo concreto y un primer recorrido vertical.
 
 - **Qué sustituye:** como capa normativa del día a día, sustituye al registro D00–D59. El registro y la auditoría pasan a ser **historial**: recogen lo que se decidió y por qué. No se borran ni se reescriben.
+- **Criterio de diseño (v0.18):** profesional y coherente, sin burocracia. Cada control responde a un riesgo real, y la forma de trabajar (convenciones, historial, releases, documentación) sigue los estándares del sector. Así, cualquier proyecto personal está listo para presentarse en un portfolio o para convertirse en un producto.
 - **Qué no hace:** no añade nuevas políticas de fondo. Casi todo lo que propone es *cómo* cumplir decisiones ya tomadas. Para ello usa mecanismos que ya existen (GitHub, Claude Code, WSL2) en lugar de construirlos.
 - **Nuevos códigos:**
   - `P01–P10`: principios.
@@ -404,6 +405,19 @@ La skill lista las fuentes que ha usado y se detiene si encuentra contradiccione
 
 **Done** significa que se cumplió G6 y que, al fusionar el PR con "Fixes <ID>", la integración Linear–GitHub pasó la issue a *Done*. Fusionar no es desplegar: si un proyecto publica, eso es un paso aparte (D25) que se añadirá cuando exista.
 
+### Convenciones de GitHub (v0.18)
+
+Convenciones estándar, sin checks propios en la CI. Las sigue el agente por `AGENTS.md`, y la retrospectiva decide si hace falta comprobarlas.
+
+- **Títulos de PR: Conventional Commits, con el ID como alcance** y la descripción en español: `feat(VIC-5): calculadora de series de calentamiento`, `fix(VIC-7): …`, `test(VIC-6): …`, `docs(SPEC-CALC-001): v0.4, entrada tolerante`, `docs(ADR-0001): tecnología PWA`, `ci: workflow de publicación`.
+- **Fusión solo por squash**, con el título del PR como mensaje. Cada commit de `main` es un PR revisado y en verde, y el historial se lee como un changelog. Los pasos intermedios siguen en la página del PR.
+- **Ramas:** `vic-N-…` para entregas (formato de Linear), `spec-<id>-…` para specs, `adr-NNNN-…` para ADR y `ci-…` para workflows. GitHub borra las ramas al fusionar.
+- **Commits dentro de una rama:** mismo formato, en imperativo y en una línea. No son críticos, porque desaparecen al fusionar.
+- **PR pequeños:** orientativamente, unas 400 líneas de código por PR, sin contar tests ni lockfiles. Una entrega grande se parte en varios PR (`sdd-plan`).
+- **Autoría transparente:** los commits del agente llevan `Co-Authored-By`.
+- **Sesiones del agente:** una por PR, nombrada con el ID del trabajo ("VIC-6 · implementación"). Nunca dos sesiones a la vez sobre la misma copia del repo: en paralelo, cada una con su clon o `git worktree`.
+- **Releases:** cada publicación lleva etiqueta semver (`v0.1.0`) y una release de GitHub con notas generadas a partir de los títulos de PR.
+
 ---
 
 ## 8. Aprobaciones y control desde iPhone
@@ -432,6 +446,22 @@ La aprobación verificable se resuelve con **dos identidades en GitHub**: la tuy
 Con esto quedan cubiertos H02, H04 y H13: la aprobación queda ligada a una identidad y a la revisión exacta, y es revocable, sin escribir código propio.
 
 **Regla de cierre (ADR-0001-M2).** En v1, GitHub es el único mecanismo de aprobación. Toda operación que necesitaría otro tipo de aprobación verificable queda deshabilitada por permisos: desplegar, operar sobre producción o escribir en servicios externos. Habilitar cualquiera de ellas exige antes un ADR que diseñe su aprobación. Lo que no se puede aprobar de forma verificable, no se puede hacer. Las órdenes dentro de la sesión que requieren permiso las contestas tú en el aviso de Claude Code (también desde Remote Control), pero no dejan registro duradero; por eso no se habilitan operaciones sensibles dentro de la sesión.
+
+### Qué afirma tu aprobación de un PR (v0.18)
+
+En código generado por IA, leer y certificar cada línea no es realista, y fingirlo convierte la aprobación en un sello vacío. Tu aprobación afirma otra cosa: **has comprobado la evidencia de que el cambio cumple lo aprobado y aceptas el riesgo que queda.**
+
+- **Specs y ADR:** lectura completa. Son cortos, y es donde decides qué se construye y cómo.
+- **Código (lista de cinco minutos, con casillas en la plantilla del PR):**
+  1. el contrato no ha cambiado por la puerta de atrás: los AC son los de la issue, y **todo cambio en un test existente** está justificado y lo has leído;
+  2. la CI y la revisión ciega (G4) están en verde, sin hallazgos que deban corregirse;
+  3. has mirado los puntos que el agente señala en la "Guía para el revisor humano";
+  4. hay evidencia de funcionamiento: salida de comandos, capturas o prueba en el dispositivo.
+- **R2:** además, lees de verdad los puntos señalados y cualquier cambio en `.github/`, dependencias o rutas sensibles.
+
+La aprobación se mantiene obligatoria también por una segunda razón: es lo que impide que la cuenta del agente fusione (N4).
+
+**Límite aceptado:** tu aprobación no certifica cada línea. El resto lo cubren los tests trazados a los AC, la CI y los revisores ciegos. En un contexto con más personas, un segundo revisor humano en R2 reduciría este riesgo.
 
 ### Qué puedes hacer desde el iPhone cuando estás fuera
 

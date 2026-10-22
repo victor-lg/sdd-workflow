@@ -2,6 +2,30 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.18 — 2026-10-22 (fase D: camino feliz completo)
+
+Criterio nuevo: **profesional y coherente, sin burocracia** (línea base §1). Ningún check nuevo en la CI.
+
+- **Convenciones de GitHub** (línea base §7, `AGENTS.md`, plantilla del PR):
+  - títulos de PR en Conventional Commits, con el ID como alcance;
+  - solo squash, con el título como mensaje;
+  - ramas `vic-N-…`, `spec-…`, `adr-…` y `ci-…`, borradas al fusionar;
+  - releases semver con notas generadas;
+  - `Co-Authored-By` del agente.
+- **PR pequeños:** unas 400 líneas de código por PR, orientativas. `sdd-plan` parte las entregas grandes y usa "Part of <ID>" en los PR intermedios.
+- **Qué afirma tu aprobación** (línea base §8): no certifica cada línea; certifica la evidencia y acepta el riesgo restante. Hay una lista de cinco minutos con casillas en la plantilla del PR, y una lectura completa de specs, ADR y todo test existente que cambie. Es un límite aceptado.
+- **"Guía para el revisor humano"** en la plantilla del PR: mapa, dónde mirar, tests que cambian, evidencia y tamaño. La rellena `sdd-implement`, `sdd-review` pide a los revisores que busquen tests debilitados, y `sdd-review` comprueba el título y la guía antes de quitar el borrador.
+- **Plugin `sdd` 0.3.0.** Tras el push: `claude plugin marketplace update sdd-workflow && claude plugin update sdd@sdd-workflow`.
+- **Plantilla de README:** portada profesional con insignia de CI, funcionalidad enlazada a specs, arquitectura enlazada a ADR, desarrollo y "Cómo se trabaja aquí". `checks.py` sigue leyendo "Etapa" y "Rutas sensibles".
+- **Una sesión por PR,** y nunca dos sesiones sobre la misma copia del repo (`AGENTS.md`).
+- **Guía:**
+  - B2: interop de WSL desactivado (seguridad) y Node con nvm;
+  - A4: ajustes de PR del repo (solo squash, borrar ramas);
+  - nuevo bloque G con los tests, los navegadores de Playwright fuera del sandbox, Pages con dominio verificado, la publicación manual y las releases;
+  - desviaciones de la fase D.
+- **Ejemplos probados** en `docs/ejemplos/workflows/`: `tests-node-playwright.yml` y `deploy-pages.yml`, los de `calculadora-discos`.
+- **Primer recorrido:** camino feliz completo, de la spec al iPhone (iOS 27.0.1), con N3 y N7 verificados. Faltan N1, N2, N6 completo y N8. Ver `historial/recorrido-1.md`.
+
 ## v0.17 — 2026-10-21 (fase D en curso)
 
 - **Estado del ADR:** `AGENTS.md` y la plantilla de ADR. El agente pasa el ADR a `Aceptado` en el último commit de su PR, cuando la revisión termina, como ya hace con `aprobada` en las specs (v0.16). Lo detectó el agente: ADR-0001 llegó a `main` como `Propuesto`, y `AGENTS.md` solo reconoce los `Aceptado`. En `calculadora-discos` se corrige dentro del PR de spec que enlaza el ADR.

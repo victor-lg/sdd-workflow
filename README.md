@@ -2,7 +2,7 @@
 
 Repositorio del propio workflow: qué se ha decidido, qué está pendiente, las plantillas que se copiarán a cada proyecto y el material histórico. Todo en Markdown plano.
 
-- **Versión del workflow:** v0.17 (fase D en curso). Todavía no existe una versión usable.
+- **Versión del workflow:** v0.18 (fase D en curso). Todavía no existe una versión usable.
 - **Siguiente hito:** v1.0, que se declara cuando el primer recorrido completo supere el camino feliz y los casos negativos N1–N8.
 - **Última revisión:** 2026-10-19.
 
@@ -32,9 +32,10 @@ sdd-workflow/
 │   ├── plantilla-issue-linear.md # plantilla de issue para configurar en Linear
 │   ├── guia-instalacion.md       # fase C paso a paso (PC, GitHub, Linear, iPhone)
 │   ├── herramientas.md           # plugins, MCP y herramientas aprobadas (y descartadas)
+│   ├── ejemplos/workflows/       # workflows probados para copiar (tests Node + Playwright, publicación en Pages)
 │   └── adr/                      # decisiones del workflow ya tomadas (ADR-0001, ...)
 ├── plantilla-proyecto/           # BORRADORES de los ficheros de cada proyecto (repo plantilla)
-│   ├── README.md                 # rutas sensibles y etapa
+│   ├── README.md                 # portada del proyecto, etapa y rutas sensibles
 │   ├── AGENTS.md
 │   ├── CLAUDE.md
 │   ├── .gitignore

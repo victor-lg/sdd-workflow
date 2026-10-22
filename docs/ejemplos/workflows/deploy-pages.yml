@@ -1,0 +1,65 @@
+# Ejemplo del workflow SDD + IA v0.18: publicación manual en GitHub Pages.
+# Origen: calculadora-discos (ADR-0001), revisado en el PR #5 y en uso desde 2026-10-22.
+# Adáptalo: carpeta publicada (`app/`), marcador de versión y cuenta (`victor-lg`).
+# Lo añade una persona: el token del agente no tiene el permiso `workflow` (N5).
+#
+# Fusionar no es publicar (D25): solo se lanza a mano, sobre `main`, y solo lo
+# ejecuta la cuenta propietaria. El entorno `github-pages` debe tener
+# "Deployment branches" limitado a `main` en la configuración del repositorio.
+
+name: deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Una sola publicación a la vez; no se cancela una que ya está en curso.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # github.actor es quien lanzó la primera ejecución y github.triggering_actor
+    # quien la lanza o la relanza: los dos tienen que ser la cuenta propietaria.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'victor-lg' &&
+      github.triggering_actor == 'victor-lg'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      # Fijada por SHA (v7.0.1), igual que en sdd.yml y tests.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Solo si la app tiene service worker: cada publicación cambia su versión.
+      # Falla si el marcador no aparece exactamente una vez.
+      - name: Versión del service worker
+        run: |
+          test "$(grep -c "'__VERSION__'" app/sw.js)" -eq 1
+          sed -i "s/'__VERSION__'/'${GITHUB_SHA}'/" app/sw.js
+          grep -q "'${GITHUB_SHA}'" app/sw.js
+          if grep -q "__VERSION__" app/sw.js; then exit 1; fi
+
+      # Fijada por SHA (v6.0.0).
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      # Fijada por SHA (v5.0.0). Solo la carpeta de la app.
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: app/
+
+      # Fijada por SHA (v5.0.1).
+      - id: despliegue
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

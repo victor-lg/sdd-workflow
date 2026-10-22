@@ -30,6 +30,8 @@ Lanza el subagente `reviewer` una vez por revisor, en invocaciones independiente
 - los resultados de la CI;
 - los ADR enlazados.
 
+Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y si la "Guía para el revisor humano" omite algún sitio delicado.
+
 **Nunca** le pases tu razonamiento, tu plan, tus conclusiones ni las respuestas de otro revisor. Si lo haces por error, esa revisión está contaminada y se repite (caso N8).
 
 ## 3. Reconciliar
@@ -46,4 +48,4 @@ Con las respuestas de todos los revisores:
 
 ## 4. Cerrar
 
-Cuando no quede nada que deba corregirse y la CI esté en verde, quita el estado de borrador del PR. La aprobación y el merge son de la persona (G6).
+Cuando no quede nada que deba corregirse y la CI esté en verde, comprueba que el título sigue Conventional Commits y que la "Guía para el revisor humano" está completa, y quita el estado de borrador del PR. La aprobación y el merge son de la persona (G6).

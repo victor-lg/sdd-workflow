@@ -68,8 +68,8 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 
 ## D. Primer recorrido
 
-- [ ] Camino feliz completo (sección 11 de la línea base).
-- [ ] Casos negativos N1–N8 bloqueados. Adelantados en la fase C: **N4** (el agente no puede fusionar: "base branch policy prohibits the merge") y **N5** (el token rechaza `.github/workflows/`: "without `workflow` scope") ✔; **N6**, parcial (credenciales ocultas con un señuelo).
+- [x] Camino feliz completo (sección 11 de la línea base) ✔ 2026-10-22: de la spec a la app publicada y probada en el iPhone.
+- [ ] Casos negativos N1–N8 bloqueados. Adelantados en la fase C: **N4** (el agente no puede fusionar: "base branch policy prohibits the merge") y **N5** (el token rechaza `.github/workflows/`: "without `workflow` scope") ✔; **N6**, parcial (credenciales ocultas con un señuelo). En la fase D: **N3** (aprobación descartada con un push nuevo) y **N7** (AC sin test) ✔. Faltan N1, N2, N6 completo y N8.
 - [ ] Las cuatro métricas anotadas, en `historial/recorrido-1.md` (en curso).
 
 ## E. Retrospectiva y declaración de v1.0

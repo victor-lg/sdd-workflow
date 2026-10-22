@@ -21,7 +21,10 @@ Registro del primer recorrido vertical (línea base §11). Alimenta la retrospec
 | Issue VIC-5 en Ready (G2) | 2026-10-21 ~20:30 | Creada por Claude desde Chrome con la plantilla "Entrega SDD" |
 | PR #5 (VIC-5) abierto en borrador | 2026-10-21 ~21:05 | Lógica + 46 tests unitarios; faltan los E2E |
 | PR #6, spec v0.4 (entrada tolerante) | 2026-10-21 ~21:45 | Hueco de la spec que salió al implementar |
-| Implementación fusionada (G6) | | |
+| Implementación fusionada (G6) | 2026-10-22 (mañana) | PR #5, tras G4 en 3 rondas y la prueba de N3; VIC-5 a Done por la automatización |
+| Workflows `deploy.yml` y `tests.yml` (`--ignore-scripts`) | 2026-10-22 | PR de Víctor desde la web |
+| Primera publicación en `discos.victorlopez.dev` | 2026-10-22 ~12:00 | `workflow_dispatch` manual desde `main` |
+| Prueba manual en el iPhone | 2026-10-22 ~12:15 | iPhone 15 Pro Max, iOS 27.0.1: AC-12, AC-22 y AC-11 correctos. **Camino feliz completo.** |
 
 ### 2. Coste o uso de la suscripción
 
@@ -30,6 +33,7 @@ Al cerrar cada sesión del agente: `/usage` (o `/cost`) y una línea aquí.
 | Fecha | Sesión | Modelo y perfil | Uso | Notas |
 | --- | --- | --- | --- | --- |
 | 2026-10-20 | Descubrimiento y spec (app móvil) | Claude, perfil Claude | No medido | Antes de empezar a medir |
+| 2026-10-21 | PR #5, VIC-5, segunda sesión (adaptación v0.4, E2E, G4 en 3 rondas, N3) | Opus 5.5 + Sonnet 5.5 (un revisor por ronda) + Haiku 5.5, perfil Claude | $14,15 equivalentes; 1 h 18 min reales, 37 min de API; 27,2 M tokens leídos de caché | Sesión al 64 % del límite de 5 h. El 44 % del uso de las últimas 24 h, con más de 150k de contexto |
 | 2026-10-21 | PR #6, spec v0.4 (sesión nueva) | Opus 5.5, perfil Claude | $2,25 equivalentes; 31 min reales, 6 min de API | 2 revisores + aclaraciones sin otra ronda |
 | 2026-10-21 | PR #5, VIC-5, primera sesión | Opus 5.5, perfil Claude | No anotado | Se cerró para el PR #6; el estado está en `.tareas/VIC-5.md` |
 | 2026-10-21 | PR #4, spec v0.3 + ADR Aceptado (sesión nueva) | Opus 5.5, perfil Claude | $1,77 equivalentes; 13 min reales, 4,5 min de API | Sesión nueva por PR: 6 veces más barata que la del ADR |
@@ -84,6 +88,8 @@ Defectos que aparezcan después de un merge y que la revisión debería haber vi
 | --- | --- | --- | --- |
 | 2026-10-21 | Implementación de VIC-5 (PR #5) | FR-03, FR-04 y FR-10 juntos daban un error a mitad de escribir ("72," al teclear "72,5"). Ningún AC lo cubría. | G1: lo vieron el agente al implementar y Claude, no los 6 revisores de la spec |
 
+Tiempo total: de la spec al iPhone, unas 24 horas reales (de 2026-10-21 11:40 a 2026-10-22 12:15), con una noche por medio. Contando el descubrimiento desde el 2026-10-20, unos dos días.
+
 ## Desviaciones del camino feliz
 
 - **Paso 1, idea en el Inbox de Linear:** no se hizo, porque Linear aún no estaba configurado. La idea venía de Q06 y el descubrimiento se hizo directamente en la app móvil. La issue de la entrega se crea después de G1.
@@ -95,10 +101,15 @@ Defectos que aparezcan después de un merge y que la revisión debería haber vi
 
 - **Dos sesiones del agente en la misma copia del repo:** la del PR de spec cambió de rama debajo de la de implementación. Hay que trabajar en serie, o con dos clones o `git worktree`. Candidato para la guía o para `AGENTS.md`.
 - **Check obligatorio nuevo con PR abiertos:** al hacer obligatorio `tests`, el PR #6 se quedó esperando ese check. Se resolvió cerrando y reabriendo el PR, sin "Update branch", que crearía un push de Víctor.
+- **VIC-5 pasó a Done al fusionar, antes de la prueba manual en el iPhone.** Para la retrospectiva: en las entregas que se publican, quizá Done debería llegar al publicar y probar, no al fusionar.
+- **Ramas creadas sin querer desde la web de GitHub (`ci-deploy-1` y `-2`):** al editar, hay que elegir "Commit directly to the … branch". Se borraron.
 - **Interop de WSL:** `npm` de Windows aparecía dentro de WSL a través del PATH. Se desactiva el interop en `/etc/wsl.conf` (corrección de seguridad, pendiente de pasar a la guía).
 
 ## Casos negativos
 
 - **N4 y N5:** verificados en la fase C (CHANGELOG v0.14).
 - **N6:** parcial, con un señuelo de credenciales. Falta la versión con un README malicioso. Se diseñará con señuelos, sin pedir al modelo que actúe como atacante.
-- **N1, N2, N3, N7 y N8:** pendientes; llegan con la implementación.
+- **N3:** verificado (2026-10-21, PR #5). Víctor aprobó sobre 9019e6a, el agente subió 195e561 (solo un comentario), la aprobación pasó a DISMISSED, el PR a REVIEW_REQUIRED y la CI se relanzó.
+- **N7:** verificado de forma natural (PR #5). `checks-sdd` dio error mientras AC-10, AC-12, AC-13 y AC-22 no tenían test.
+- **G4 del PR #5:** en la ronda 1, los revisores detectaron que el cambio de `allHeaders()` a `headers()`, hecho para que pasara la CI, debilitaba el test de AC-13. El agente lo rehízo de forma más estricta. Es la regla "no relajar controles para que pase la CI" funcionando en la revisión.
+- **N1, N2, N6 completo y N8:** pendientes.
