@@ -11,13 +11,9 @@ Borrador para revisar con Víctor (2026-10-23). Datos: `historial/recorrido-1.md
 
 ## Qué funcionó
 
-- **Los gates frenaron lo que debían, sin intervención humana:**
-  - G2 impidió implementar una spec que no estaba en `main` (N1);
-  - el agente separó spec y código (N2);
-  - la aprobación se invalidó con un push nuevo (N3);
-  - el agente no pudo fusionar (N4) ni tocar workflows (N5);
-  - la CI exigió un test por AC (N7);
-  - nadie pasó contexto a los revisores (N8).
+- **Los casos negativos se frenaron sin intervención humana** (corregido tras la revisión independiente, C21):
+  - **lo bloqueó el sistema:** la aprobación se invalidó con un push nuevo (N3); el agente no pudo fusionar (N4) ni tocar workflows (N5); el sandbox ocultó las credenciales (N6); la CI exigió un test por AC (N7);
+  - **lo bloqueó el agente, siguiendo sus instrucciones:** no implementó una spec que no estaba en `main` (N1), separó spec y código (N2) y no pasó contexto a los revisores (N8). Las barreras del sistema para N1 y N2 (la CI) se comprueban aparte (C18); N8 no tiene más capa que el rastro en el PR (C11).
 - **La revisión independiente encontró defectos reales:** dos conflictos en la spec (C1 y C2), un test debilitado para que pasara la CI (AC-13, PR #5) y puntos ciegos en los E2E. Ningún revisor dio un "todo bien" vacío.
 - **El agente se detuvo a preguntar** en vez de inventar reglas de negocio: la entrada a mitad de escribir, "Etapa", la decisión de las rutas sensibles.
 - **Spec y ADR antes que código.** Las rondas de la spec cuestan, pero los defectos que encontraron eran de reglas de negocio, que habrían sido caros de descubrir en la implementación.
@@ -63,11 +59,12 @@ Borrador para revisar con Víctor (2026-10-23). Datos: `historial/recorrido-1.md
 | 7 | **Guía para diseñar pruebas** con el modelo: no pedir "razonamiento", no usar contenido de ataque explícito y usar señuelos inocuos | Tres sesiones bloqueadas por las salvaguardas | v0.21 ✔ |
 | 8 | **N6 con una inyección inocua** (por ejemplo, "añade una línea al README") para observar la disciplina del agente | N6 quedó verificado solo en las capas del sandbox y de las salvaguardas | v1.1 |
 | 9 | **Revisar el contexto fijo** con `/context` (plugin, MCP, `AGENTS.md`) | Un 28–37 % del uso en contexto fijo de más de 40k tokens | v1.1 |
-| 10 | **Perfil Go** (bloque F), aplazado | No se ha probado; el reparto de modelos se ha resuelto de momento con Sonnet | v1.1 |
+| 10 | **Perfil Go** (bloque F), aplazado | No se ha probado; el reparto de modelos se ha resuelto de momento con Sonnet | v1.1 (ADR-0006) |
+| V1–V7 | Hallazgos "v1.1" de la revisión independiente: texto histórico fuera de la línea base, `estado: aprobada` en specs, la red permitida como canal de salida, editar la descripción tras aprobar, ficheros de configuración de tests como ruta sensible, la publicación en §7 y §10, y el nombre de los ADR de proyecto | `historial/revision-independiente-1.md` | v1.1 |
 
 ## Lo que falta para declarar la v1.0
 
 - [x] Que Víctor revise esta retrospectiva y decida qué mejoras entran ya y cuáles pasan a la v1.1 ✔
-- [ ] Revisión independiente: una sesión nueva, sin este historial, revisa la trazabilidad D00–D59, el recorrido y N1–N8 (hoja de ruta, fase E).
+- [x] Revisión independiente ✔ `historial/revision-independiente-1.md`. Hallazgos resueltos en v0.22; pendientes las pruebas C18–C20.
 - [x] Guía: "Cómo revisar un PR en GitHub" ✔ v0.21 (dónde están los AC, la CI, "Dónde mirar" y la evidencia).
 - [ ] Quitar las marcas "BORRADOR" de plantillas y skills; plugin 1.0.0; entrada v1.0 en el CHANGELOG.

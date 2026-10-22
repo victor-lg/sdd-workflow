@@ -1,6 +1,6 @@
 # Hoja de ruta del workflow
 
-**Estado:** BORRADOR · **Última revisión:** 2026-10-23 · **Versión actual del workflow:** v0.21 (fase E)
+**Estado:** BORRADOR · **Última revisión:** 2026-10-23 · **Versión actual del workflow:** v0.22 (fase E)
 
 El camino hasta v1.0 tiene cinco fases. Las tres primeras pueden solaparse; la cuarta necesita las anteriores terminadas.
 
@@ -33,7 +33,7 @@ Cada decisión cerrada genera un ADR en `docs/adr/` y una línea en `CHANGELOG.m
 
 Los borradores ya escritos en `plantilla-proyecto/` están marcados con ✔.
 
-- [x] `AGENTS.md` y `CLAUDE.md` ✔ (pendiente de ajustar rutas tras Q08)
+- [x] `AGENTS.md` y `CLAUDE.md` ✔
 - [x] Plantilla y ejemplo de spec ✔
 - [x] Plantilla de ADR ✔
 - [x] Plantilla de PR ✔
@@ -59,7 +59,7 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 
 - [x] WSL2 con Ubuntu en Windows 11 ✔
 - [x] Claude Code dentro de WSL2, con ajustes gestionados y sandbox verificado (escritura, red y señuelo); plugin `sdd` instalado ✔
-- [ ] Contratar OpenCode Go y configurar el perfil Go (`claude-go`); confirmar la URL base y revisar la retención de cada modelo. Ya se sabe que Remote Control no funciona en esa sesión.
+- [ ] ~~Perfil Go~~: aplazado a la v1.1 (ADR-0006). Al activarlo: contratar OpenCode Go, confirmar la URL base, revisar la retención de cada modelo y pasar N1–N8 en ese perfil.
 - [x] Cuenta de máquina `victor-lg-bot` en GitHub ✔; invitarla como colaboradora en el repo del recorrido y en el del workflow (en repos personales siempre con escritura; el `main` del workflow queda protegido con un ruleset); token clásico con `repo` + `read:org`, sin `workflow`, caducidad de 90 días.
 - [x] Repo `calculadora-discos`, con ruleset de `main` (PR, 1 aprobación, CODEOWNERS, `checks-sdd` obligatorio) ✔. PR #1 de prueba: abierto por el agente desde el sandbox, CI en verde, fusionado por ti.
 - [x] Workspace de Linear (team VIC, estados D21, plantilla "Entrega SDD", proyecto "Calculadora de discos"), integración con GitHub (automatizaciones de estado, ramas `vic-123-titulo`, app limitada a `calculadora-discos`) y MCP de Linear en solo lectura: lee issues y no puede moverlas ✔
@@ -76,7 +76,7 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 
 - [x] Qué funcionó, qué estorbó, qué faltó ✔ `historial/retrospectiva-1.md`.
 - [x] Ajustes pequeños aplicados ✔ v0.21 (interacciones entre reglas, rondas, diseño de pruebas, cómo revisar un PR).
-- [ ] Revisión independiente: una sesión nueva o un subagente sin este historial revisa la trazabilidad, el primer recorrido y N1–N8; sus hallazgos se resuelven.
+- [x] Revisión independiente ✔ `historial/revision-independiente-1.md` (31 hallazgos). Resueltos en v0.22 salvo las tres pruebas de C18–C20, que hace Víctor; V1–V7 a la v1.1.
 - [ ] v1.0 declarada en `CHANGELOG.md`.
 - [x] Lista de mejoras candidatas para v1.1, cada una con la evidencia que la justifica ✔ `historial/retrospectiva-1.md`.
 

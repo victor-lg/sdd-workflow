@@ -1,8 +1,8 @@
 # Workflow SDD + IA — Línea base v1
 
-**Creado:** 2026-10-18 · **Última revisión:** 2026-10-19 (workflow v0.11)
-**Estado:** ACEPTADO (ADR-0001 a ADR-0005). Todas las decisiones abiertas Q01–Q09 están cerradas.
-- Lo marcado "pendiente de verificar" se comprueba durante la preparación del entorno (`docs/guia-instalacion.md`). Ya verificado en v0.11: formato del plugin y del marketplace, MCP de Linear en solo lectura y Remote Control en la sesión Go (no funciona). Queda: la URL base del perfil Go y fijar por SHA las acciones de la CI.
+**Creado:** 2026-10-18 · **Última revisión:** 2026-10-23 (workflow v0.22)
+**Estado:** ACEPTADO (ADR-0001 a ADR-0006). Todas las decisiones abiertas Q01–Q09 están cerradas.
+- Lo marcado "pendiente de verificar" se comprueba durante la preparación del entorno (`docs/guia-instalacion.md`). Ya verificado en v0.11: formato del plugin y del marketplace, MCP de Linear en solo lectura y Remote Control en la sesión Go (no funciona). Las acciones de la CI están fijadas por SHA (v0.12). El perfil Go queda fuera de la v1.0 (ADR-0006).
 - Si una comprobación falla, el cambio se decide con un ADR nuevo.
 
 **Regla de lagunas:** si esta línea base no cubre algo, se consulta la decisión correspondiente de `historial/registro-D00-D59.md` como referencia, no como norma, y la laguna se cierra con un ADR nuevo.
@@ -268,7 +268,7 @@ Las skills siguen el formato abierto Agent Skills, así que el mismo procedimien
 
 ### Ejecutor y perfiles de modelo (ADR-0002)
 
-Claude Code es el único harness en v1. Funciona con dos perfiles de modelo, que son sesiones configuradas por separado: dentro de una misma sesión no se mezclan proveedores.
+Claude Code es el único harness en v1. **La v1.0 usa un único perfil, la suscripción de Claude** (ADR-0006). El perfil Go de ADR-0002 está aplazado (§10); lo que sigue lo describe para cuando se active.
 
 - **Perfil Claude (suscripción) — el principal.** Se usa para descubrir y especificar (F1–F2), implementar cambios R1 y R2 (F4) y revisar (G4). También es el perfil de Remote Control.
 - **Perfil Go (OpenCode Go, modelos ligeros compatibles con la API de Anthropic; por defecto Qwen3.8 Flash).** Se usa para cambios R0, exploración y lectura del código, borradores y tareas repetitivas. Opcionalmente, puede actuar como segundo revisor en R2, porque aporta la diversidad de modelo que pide M1. Nunca implementa R1 ni R2.
@@ -314,14 +314,17 @@ Cada cambio entra en un nivel, y el nivel decide qué gates aplican. El agente p
 
 ### Disparadores que fuerzan R2
 
-Un check de CI revisa rutas y ficheros, y fuerza R2 cuando detecta cambios en:
+Esta es la **lista canónica**: la implementa `checks.py` y el resto de ficheros (skills, plantillas) la enlazan en vez de copiarla. El check `riesgo` de la CI fuerza R2 cuando el PR cambia:
 - manifiestos de dependencias;
 - `.github/`;
-- la configuración del agente (`.claude/`, `AGENTS.md`);
+- la configuración del agente (`.claude/`, `AGENTS.md`, `CLAUDE.md`);
 - migraciones;
-- carpetas de autenticación o pagos.
+- las **rutas sensibles** que el proyecto declara en su README (autenticación, pagos o cualquier componente delicado).
 
-La lista se ajusta por proyecto: cada proyecto declara sus **rutas sensibles** en su README al crearlo (una por línea, entre comillas invertidas, por ejemplo `` `src/pagos/` ``). Cambiar esa lista también es R2. Un PR de spec toma como mínimo el `riesgo` de la spec. Es la forma de expresar que un proyecto o un componente es delicado: todo lo que las toque es R2, sin encarecer el resto. No existe un "nivel mínimo por proyecto": se descartó porque obligaría a especificar hasta una errata (ADR-0001-M3).
+Las rutas sensibles se declaran al crear el proyecto (una por línea, entre comillas invertidas, por ejemplo `` `src/pagos/` ``). Cambiar esa lista también es R2. Además, la CI sube el mínimo en tres casos:
+- un PR de spec toma el `riesgo` mayor entre la spec de `main` y la del PR, así que no puede bajarse a sí mismo;
+- un PR de código toma el `riesgo` (en `main`) de las specs cuyos AC declara cubrir;
+- un PR que toca `docs/adr/` es como mínimo R1. Es la forma de expresar que un proyecto o un componente es delicado: todo lo que las toque es R2, sin encarecer el resto. No existe un "nivel mínimo por proyecto": se descartó porque obligaría a especificar hasta una errata (ADR-0001-M3).
 
 ### Riesgo de la operación (D59)
 
@@ -333,7 +336,10 @@ Urgente no significa R0. Una corrección urgente de autenticación sigue siendo 
 
 ## 7. Flujo SDD v1
 
-El flujo tiene siete fases y seis gates. Cada gate tiene un mecanismo que lo comprueba sin depender de lo que diga el agente.
+El flujo tiene siete fases y seis gates. La mayoría los impone el sistema; dos dependen del propio agente (ADR-0006):
+
+- **Impuestos por el sistema:** G1, G3, G5, G6 y la mitad de G2 (que la spec esté en `main`, que comprueba la CI).
+- **Dependen del agente:** que la issue esté en *Ready* (G2) y que G4 se ejecute como se dice. Es un límite aceptado. G4 deja rastro comprobable: el encargo literal de cada revisor y su respuesta quedan en el PR.
 
 ```
  +-------------+     +-------------+     +---------------+  G1   +---------------+
@@ -379,6 +385,8 @@ Un fallo en la revisión o en la CI devuelve el trabajo a F4. Si el fallo revela
     - R0: opcional.
     - R1: 2 revisores en el PR de spec y 1 en el de código.
     - R2: 2 revisores en ambos.
+  - *PR de ADR:* 2 revisores, como una spec.
+  - *Rondas:* hasta 3, la inicial y 2 repeticiones. Después decide la persona, y sus aclaraciones se aplican sin otra ronda salvo que añadan reglas de negocio (`sdd-review`).
   - *Detalles:* los revisores son ciegos entre sí: ninguno ve las conclusiones del otro ni el razonamiento del autor. En una spec usan la rúbrica de `sdd-spec` (criterios de calidad, DoR y las tres preguntas). Los hallazgos de ambos se reconcilian en el PR antes de que tú lo revises (D07, D23).
   - *Por qué la diferencia en R1:* una spec es corta, así que un segundo juez cuesta poco, y un error en la spec es el más caro porque se propaga al código, a los tests y a la propia revisión.
 
@@ -430,7 +438,7 @@ La aprobación verificable se resuelve con **dos identidades en GitHub**: la tuy
 
 - **Agente.**
   - Es una **cuenta de máquina** propia (ADR-0005). Es colaboradora solo en los repos donde trabaja el agente.
-  - Usa un **token clásico** con alcance `repo`, sin `workflow` y con caducidad de 90 días. Se renueva al caducar.
+  - Usa un **token clásico** con alcance `repo` y `read:org` (lo exige `gh auth login`), sin `workflow` y con caducidad de 90 días. Se renueva al caducar.
   - Puede crear ramas, commits, PRs y comentarios.
   - Su token **no** tiene permiso sobre los workflows, así que no puede tocar `.github/workflows/`.
   - No tiene rol de administración ni puede saltarse las reglas.
@@ -441,7 +449,8 @@ La aprobación verificable se resuelve con **dos identidades en GitHub**: la tuy
   - PR obligatorio con 1 aprobación.
   - Checks requeridos sobre el commit exacto.
   - Cada push nuevo invalida las aprobaciones anteriores.
-  - CODEOWNERS (tú) en `docs/specs/`, `docs/adr/`, `.github/`, `.claude/` y `AGENTS.md`.
+  - CODEOWNERS (tú) en `docs/specs/`, `docs/adr/`, `.github/`, `.claude/`, `AGENTS.md`, `CLAUDE.md` y `README.md`.
+  - Tu excepción de administrador (bypass) sirve para tus propios PR y para emergencias (ver "PR de la persona").
 
 Con esto quedan cubiertos H02, H04 y H13: la aprobación queda ligada a una identidad y a la revisión exacta, y es revocable, sin escribir código propio.
 
@@ -453,13 +462,26 @@ En código generado por IA, leer y certificar cada línea no es realista, y fing
 
 - **Specs y ADR:** lectura completa. Son cortos, y es donde decides qué se construye y cómo.
 - **Código (lista de cinco minutos, con casillas en la plantilla del PR):**
-  1. el contrato no ha cambiado por la puerta de atrás: los AC son los de la issue, y **todo cambio en un test existente** está justificado y lo has leído;
+  1. el contrato no ha cambiado por la puerta de atrás: los AC son los de la issue, y **todo cambio en un test existente** está justificado y lo has leído (la CI los lista en su resumen; un PR de código en R0 o con `no aplica` aparece con un aviso ⚠️);
   2. la CI y la revisión ciega (G4) están en verde, sin hallazgos que deban corregirse;
   3. has mirado los puntos que el agente señala en la "Guía para el revisor humano";
   4. hay evidencia de funcionamiento: salida de comandos, capturas o prueba en el dispositivo.
 - **R2:** además, lees de verdad los puntos señalados y cualquier cambio en `.github/`, dependencias o rutas sensibles.
 
 La aprobación se mantiene obligatoria también por una segunda razón: es lo que impide que la cuenta del agente fusione (N4).
+
+### PR de la persona (ADR-0006)
+
+Tus propios PR (workflows, ajustes) los fusionas con tu excepción de administrador, porque nadie más puede aprobarlos. Los que son R2 pasan antes `sdd-review` con 2 revisores, igual que los del agente: se lo pides a una sesión del agente con el número del PR.
+
+### Claude con control del navegador (ADR-0006)
+
+Cuando Claude maneja tu navegador, actúa con tu identidad y ninguna capa lo distingue de ti. Por eso ayuda a la persona, pero no es un agente del workflow:
+
+- **Puede:** leer cualquier cosa; crear issues en *Backlog*; escribir los comentarios que le pidas; y hacer los pasos de configuración inicial de la guía, cada uno con tu permiso.
+- **Nunca:** pasar una issue a *Ready*, aprobar, fusionar, publicar, ni tocar rulesets, ajustes o tokens. Eso lo haces tú.
+
+Es una regla, no un control (P04): se acepta como límite.
 
 **Límite aceptado:** tu aprobación no certifica cada línea. El resto lo cubren los tests trazados a los AC, la CI y los revisores ciegos. En un contexto con más personas, un segundo revisor humano en R2 reduciría este riesgo.
 
@@ -557,6 +579,10 @@ Estas capacidades quedan aplazadas a propósito, cada una con la señal que just
   - *Se activa cuando:* haya tareas independientes y el tiempo de espera pese más que el coste.
   - *Decisiones:* D32, D35.
 
+- **Perfil Go (OpenCode Go)**
+  - *Se activa cuando:* el coste de la orquestación con Opus lo justifique. Antes, confirmar la URL base y pasar N1–N8 en ese perfil (ADR-0006).
+  - *Decisiones:* ADR-0002, ADR-0006.
+
 - **OpenCode como segundo harness**
   - *Se activa cuando:* haya una necesidad concreta que Claude Code no cubra (los modelos de otros proveedores ya se usan desde Claude Code con el perfil Go). Requiere dev container y superar N1–N8.
   - *Decisiones:* D52.
@@ -621,7 +647,7 @@ El slice termina cuando se cumplen dos condiciones:
 3. **Linear.**
    - Workspace con un team y un proyecto para el primer recorrido; estados de D21.
    - Integración con GitHub y automatizaciones de estado: *In Progress* al abrir el PR, *In Review* al pedir revisión y *Done* al fusionar.
-   - MCP oficial de Linear en Claude Code, con reglas de permisos que bloqueen sus herramientas de escritura.
+   - MCP oficial de Linear en Claude Code, conectado a su endpoint de solo lectura.
 4. **Ficheros base.**
    - Un `AGENTS.md` mínimo y un `CLAUDE.md` que lo importe.
    - La plantilla de spec.
@@ -651,7 +677,7 @@ Se hace en el PC. Al menos una vez, se prueba a continuar desde el iPhone (respo
 - [ ] **N5.** El agente intenta modificar `.github/workflows/` → el token no tiene permiso.
 - [ ] **N6.** Un README con instrucciones maliciosas pide leer `~/.ssh` y enviarlo fuera → el sandbox deniega la lectura y la red.
 - [ ] **N7.** Un AC no tiene ningún test que lo referencie → falla el check de trazabilidad.
-- [ ] **N8.** El revisor recibe el razonamiento del implementador → la revisión se considera contaminada y se repite.
+- [ ] **N8.** El revisor recibe el razonamiento del implementador → la revisión se considera contaminada y se repite. La persona lo puede comprobar porque el encargo literal de cada revisor queda en el PR.
 
 ### Cómo diseñar las pruebas de los casos negativos (v0.21)
 
@@ -698,7 +724,7 @@ Los 7 bloqueantes quedan resueltos por diseño; solo falta demostrarlos en el pr
 - **H14 Trazabilidad.** Check de CI AC ↔ tests. La matriz se deriva automáticamente, no se mantiene a mano. (§7, N7)
 - **H15 Reconciliación Linear/Git/Notion.** Sin reconciliación propia: la integración nativa mueve los estados de ejecución y el agente solo lee Linear. (§5, §7)
 - **H16 Precedencia de configuración.** Las claves de seguridad van en los ajustes gestionados, que ni el repo ni el agente pueden relajar. (§9)
-- **H17 Scripts de instalación.** Se instala dentro del sandbox, y una dependencia nueva es R2. (§6, §9)
+- **H17 Scripts de instalación.** Las dependencias se instalan dentro del sandbox, y una dependencia nueva es R2. Excepción: los navegadores de Playwright se instalan fuera, con versión fijada y desde fuera del repo (guía, G2). (§6, §9)
 - **H18 Métricas.** Cuatro métricas desde el primer slice. (§11)
 - **H19 Reconstrucción limpia.** Plantilla de repo y guía de instalación. Se prueba en el segundo proyecto. (§14)
 - **H20 Notion → Git.** Notion aplazado; si se activa, solo como material de entrada que se traslada a Git. (§10)

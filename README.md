@@ -2,9 +2,9 @@
 
 Repositorio del propio workflow: qué se ha decidido, qué está pendiente, las plantillas que se copiarán a cada proyecto y el material histórico. Todo en Markdown plano.
 
-- **Versión del workflow:** v0.21 (fase E: retrospectiva). Todavía no existe una versión usable.
+- **Versión del workflow:** v0.22 (fase E: revisión independiente). Usable en el primer proyecto; la v1.0 se declara al cerrar los hallazgos de la revisión.
 - **Siguiente hito:** v1.0, que se declara cuando el primer recorrido completo supere el camino feliz y los casos negativos N1–N8.
-- **Última revisión:** 2026-10-19.
+- **Última revisión:** 2026-10-23.
 
 ## Cómo leer este repositorio
 
@@ -12,7 +12,7 @@ Repositorio del propio workflow: qué se ha decidido, qué está pendiente, las 
 - **Quiero saber qué toca hacer ahora:** `docs/hoja-de-ruta.md`.
 - **Quiero preparar el entorno:** `docs/guia-instalacion.md`.
 - **Quiero saber qué está pendiente de decidir:** sección 14 de `docs/linea-base-v1.md` (Q01–Q09 cerradas).
-- **Quiero ver una decisión ya tomada:** `docs/adr/` (ADR-0001 capa normativa; ADR-0002 ejecutor y perfiles de modelo; ADR-0003 plataforma y seguimiento; ADR-0004 Q05–Q09; ADR-0005 identidad del agente).
+- **Quiero ver una decisión ya tomada:** `docs/adr/` (ADR-0001 capa normativa; ADR-0002 ejecutor y perfiles de modelo; ADR-0003 plataforma y seguimiento; ADR-0004 Q05–Q09; ADR-0005 identidad del agente; ADR-0006 ajustes del primer recorrido).
 - **Quiero saber dónde ha ido a parar cada nota original:** `docs/clasificacion-notas.md`.
 - **Quiero saber dónde queda cada decisión D00–D59:** `docs/trazabilidad-D00-D59.md`.
 - **Quiero ver lo que se copiará a cada proyecto:** `plantilla-proyecto/` (ficheros del proyecto) y `plugin-sdd/` (skills y subagentes).
@@ -53,7 +53,10 @@ sdd-workflow/
 └── historial/                    # SOLO LECTURA: no es norma
     ├── registro-D00-D59.md
     ├── auditoria-H01-H24.md
-    └── notas-originales.md
+    ├── notas-originales.md
+    ├── recorrido-1.md            # primer recorrido: métricas, desviaciones, N1–N8
+    ├── retrospectiva-1.md
+    └── revision-independiente-1.md
 ```
 
 ## Estados que usan los documentos
@@ -66,6 +69,7 @@ sdd-workflow/
 ## Reglas de este repositorio
 
 1. Ningún documento se considera aprobado por existir. Las decisiones se toman de una en una y se registran como ADR.
-2. Lo histórico no se edita: si algo cambia, se crea un documento o un ADR nuevo que lo sustituye.
-3. Cada idea útil tiene un único sitio. Si aparece en dos, uno de los dos enlaza al otro.
-4. Las notas, ideas o mejoras que surjan y aún no tengan sitio van a la sección "Pendiente de clasificar" de `docs/clasificacion-notas.md`.
+2. Hasta la v1.1, este repo se cambia por commits directos de la persona; la regla "un cambio en el plugin es R2" se aplica desde que el workflow se trabaje por PR (ADR-0006, retrospectiva #6).
+3. Lo histórico no se edita: si algo cambia, se crea un documento o un ADR nuevo que lo sustituye.
+4. Cada idea útil tiene un único sitio. Si aparece en dos, uno de los dos enlaza al otro.
+5. Las notas, ideas o mejoras que surjan y aún no tengan sitio van a la sección "Pendiente de clasificar" de `docs/clasificacion-notas.md`.

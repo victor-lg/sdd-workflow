@@ -10,7 +10,8 @@ Aquí se registran las decisiones sobre el propio workflow, una por fichero, cua
 ## Índice
 
 - **ADR-0001** — Capa normativa del workflow (cierra Q01). Aceptado el 2026-10-19. Su laguna L9 la modifica ADR-0004.
-- **ADR-0002** — Ejecutor y perfiles de modelo (cierra Q02). Aceptado el 2026-10-19. Su regla de datos la modifica ADR-0004.
-- **ADR-0003** — Plataforma, seguimiento de entregas y uso del móvil (cierra Q03). Aceptado el 2026-10-19. Su regla de datos la modifica ADR-0004.
+- **ADR-0002** — Ejecutor y perfiles de modelo (cierra Q02). Aceptado el 2026-10-19. Su regla de datos la modifica ADR-0004; el perfil Go sale de la v1.0 por ADR-0006.
+- **ADR-0003** — Plataforma, seguimiento de entregas y uso del móvil (cierra Q03). Aceptado el 2026-10-19. Su regla de datos la modifica ADR-0004; el bloqueo de escrituras del MCP de Linear, ADR-0006.
 - **ADR-0004** — Distribución del núcleo, primer recorrido, datos, rutas y progreso de tareas (cierra Q05–Q09). Aceptado el 2026-10-19.
-- **ADR-0005** — Identidad del agente en GitHub (cierra Q04). Aceptado el 2026-10-19.
+- **ADR-0005** — Identidad del agente en GitHub (cierra Q04). Aceptado el 2026-10-19. El alcance del token, el rol en el repo del workflow y el bypass los modifica ADR-0006.
+- **ADR-0006** — Ajustes del primer recorrido: perfil Go fuera de la v1.0, Claude con navegador, aprobación, revisores, rondas, gates que dependen del agente y PR de la persona. Aceptado el 2026-10-23.

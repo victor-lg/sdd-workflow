@@ -57,7 +57,8 @@ No lo lee la CI: es información para quien abre el repo.
 
 <!--
 Todo cambio que toque estas rutas es R2, además de las que ya marca el
-workflow (dependencias, .github/, .claude/, AGENTS.md, migraciones). Es la
+workflow (dependencias, .github/, .claude/, AGENTS.md, CLAUDE.md,
+migraciones; lista canónica en la línea base, §6). Es la
 forma de decir que un componente es delicado. Cambiar esta lista es R2.
 
 Formato que lee la CI: una ruta por línea, entre comillas invertidas, por

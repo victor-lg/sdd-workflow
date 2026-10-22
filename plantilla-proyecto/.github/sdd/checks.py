@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks SDD de la CI (workflow SDD + IA, BORRADOR v0.10).
+"""Checks SDD de la CI (workflow SDD + IA, v0.22).
 
 Se ejecuta en cada PR contra `main`. La CI siempre usa la copia de este
 fichero que hay en `main`, nunca la del PR, para que un PR no pueda
@@ -11,7 +11,9 @@ Comprueba:
   trazabilidad  G3: cada AC que el PR declara cubrir existe en una spec de main
                 y algún test lo cita como SPEC-XXX-NNN/AC-NN. Publica la matriz.
   riesgo        que el nivel marcado en el PR no sea menor que el que exigen
-                las rutas tocadas. La CI solo puede subir el nivel, nunca bajarlo.
+                las rutas tocadas, las specs que implementa y los ADR. La CI
+                solo puede subir el nivel, nunca bajarlo.
+  tests         lista los tests existentes que el PR modifica o borra (no bloquea).
 
 Uso local:  PR_BODY="$(cat cuerpo.md)" python3 .github/sdd/checks.py --base origin/main
 """
@@ -88,6 +90,15 @@ def git(*args: str) -> str | None:
 def es_codigo(ruta: str) -> bool:
     return not (ruta.startswith(PREFIJOS_NO_CODIGO) or ruta.endswith(".md")
                 or ruta in NO_CODIGO_SUELTOS)
+
+
+def es_adr(ruta: str) -> bool:
+    p = Path(ruta)
+    return (p.parent.as_posix() == "docs/adr" and p.suffix == ".md"
+            and not p.name.startswith("_"))
+
+
+RE_NO_APLICA = re.compile(r"AC cubiertos:\s*no aplica\s*\((?=[^)]*\w)[^)]+\)", re.I)
 
 
 def es_spec(ruta: str) -> bool:
@@ -250,10 +261,10 @@ def check_trazabilidad(inf: Informe, cuerpo_pr: str, cambiados: list[str],
 
     if codigo:
         if not refs:
-            if re.search(r"AC cubiertos:\s*no aplica\b", cubre, re.I):
-                inf.aviso("trazabilidad", "el PR toca código y declara que no cubre ningún AC (`no aplica`). Lo valida la revisión.")
+            if RE_NO_APLICA.search(cubre):
+                inf.aviso("trazabilidad", "⚠️ el PR toca código y declara que no cubre ningún AC (`no aplica`). Comprueba que no cambia comportamiento: si lo cambia, necesita spec y AC.")
             else:
-                inf.error("trazabilidad", "el PR toca código pero no declara los AC que cubre. Escribe `AC cubiertos: SPEC-XXX-NNN/AC-NN, …` o `AC cubiertos: no aplica (motivo)`.")
+                inf.error("trazabilidad", "el PR toca código pero no declara los AC que cubre. Escribe `AC cubiertos: SPEC-XXX-NNN/AC-NN, …` o `AC cubiertos: no aplica (motivo)`, con el motivo entre paréntesis.")
         for spec, ac in refs:
             base = specs_base.get(spec)
             if not base:
@@ -301,9 +312,16 @@ def es_manifiesto(ruta: str) -> bool:
     return nombre in MANIFIESTOS or bool(RE_MANIFIESTO_EXTRA.match(nombre))
 
 
+def riesgo_de(texto: str | None) -> str | None:
+    r = parse_spec(texto) if texto else None
+    nivel = str(r[0].get("riesgo")) if r else None
+    return nivel if nivel in RIESGOS_SPEC else None
+
+
 def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
                  readme_base: str | None, readme_head: str | None,
-                 specs_head_ficheros: dict[str, str]) -> None:
+                 specs_head_ficheros: dict[str, str],
+                 specs_base_ficheros: dict[str, str]) -> None:
     marcados = RE_RIESGO_MARCADO.findall(seccion(cuerpo_pr, "Nivel de riesgo"))
     if len(marcados) != 1:
         inf.error("riesgo", f"marca exactamente un nivel de riesgo en el PR (hay {len(marcados)}).")
@@ -331,17 +349,46 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         subir("R2", "cambia la lista de rutas sensibles")
     for f in cambiados:
         if es_spec(f):
-            texto = specs_head_ficheros.get(f)
-            r = parse_spec(texto) if texto else None
-            nivel = str(r[0].get("riesgo")) if r else "R1"
-            subir(nivel if nivel in RIESGOS_SPEC else "R1", f"spec `{f}`")
+            # El mayor entre main y el PR: un PR de spec no puede bajar su propio riesgo.
+            niveles = [n for n in (riesgo_de(specs_head_ficheros.get(f)),
+                                   riesgo_de(specs_base_ficheros.get(f))) if n]
+            subir(max(niveles, key=ORDEN.get) if niveles else "R1", f"spec `{f}`")
+        elif es_adr(f):
+            subir("R1", f"ADR `{f}`")
+    # Un PR de código hereda el riesgo (en main) de las specs que implementa.
+    riesgo_base = {}
+    for texto in specs_base_ficheros.values():
+        r = parse_spec(texto)
+        if r and isinstance(r[0].get("id"), str):
+            riesgo_base[r[0]["id"]] = riesgo_de(texto)
+    citadas = {s for s, _ in RE_AC_REF.findall(seccion(cuerpo_pr, "Qué comportamiento cubre"))}
+    for spec in sorted(citadas):
+        if riesgo_base.get(spec):
+            subir(riesgo_base[spec], f"implementa `{spec}`")
 
     lineas = [f"- Nivel marcado en el PR: **{declarado or '—'}**",
               f"- Nivel mínimo según lo tocado: **{minimo}**"]
     lineas += [f"  - {m}" for m in motivos]
     inf.secciones.append("### Nivel de riesgo\n\n" + "\n".join(lineas))
+    if declarado == "R0" and any(es_codigo(f) for f in cambiados):
+        inf.aviso("riesgo", "⚠️ PR R0 que toca código: la revisión IA es opcional. Comprueba que no cambia comportamiento.")
     if declarado and ORDEN[declarado] < ORDEN[minimo]:
         inf.error("riesgo", f"el PR está marcado {declarado} pero lo que toca exige {minimo}. Sube el nivel en el PR (la CI solo puede subirlo).")
+
+
+# --- Tests existentes que cambian -----------------------------------------
+
+def check_tests(inf: Informe, base: str) -> None:
+    diff = git("diff", "--name-status", "--no-renames", "--diff-filter=MD", f"{base}...HEAD") or ""
+    filas = []
+    for linea in diff.splitlines():
+        estado, _, ruta = linea.partition("\t")
+        if ruta and es_test(ruta):
+            filas.append(f"- `{ruta}` ({'borrado' if estado == 'D' else 'modificado'})")
+    if filas:
+        inf.secciones.append("### Tests existentes que cambian\n\n"
+                             "Léelos en *Files changed* y comprueba que la guía del revisor explica cada uno.\n\n"
+                             + "\n".join(filas))
 
 
 # --- Programa -------------------------------------------------------------
@@ -375,7 +422,9 @@ def main() -> int:
     check_mezcla(inf, cambiados)
     check_trazabilidad(inf, cuerpo_pr, cambiados, cargar_specs(specs_base_ficheros),
                        specs_head, citas_en_tests(raiz))
-    check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head, specs_head_ficheros)
+    check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
+                 specs_head_ficheros, specs_base_ficheros)
+    check_tests(inf, args.base)
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]

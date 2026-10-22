@@ -391,17 +391,22 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
 
 1. Copia `docs/ejemplos/workflows/tests-node-playwright.yml` del repo del workflow, adaptado al stack.
 2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci-tests`). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci-tests` branch"**; si no, GitHub crea ramas nuevas (`ci-tests-1`…).
-3. Abre un PR `ci: workflow de tests`, R2. Fusiónalo con tu excepción de administrador.
+3. Abre un PR `ci: workflow de tests`, R2. Antes de fusionarlo, pide a una sesión del agente que lo revise con `sdd-review` (2 revisores; ADR-0006). Después, fusiónalo con tu excepción de administrador.
 4. En el ruleset de `main`, añade `tests` a los checks obligatorios.
    - Los PR que ya estaban abiertos se quedan esperando ese check. Ciérralos y vuelve a abrirlos para lanzarlo.
    - No uses "Update branch": crearía un push tuyo que tú mismo no podrías aprobar.
 
 ### G2. Navegadores de Playwright (fuera del sandbox)
 
-La red del sandbox no llega a la descarga de navegadores. Cuando el agente haya creado `package.json` y el lockfile, en una **terminal normal** desde la raíz del repo:
+La red del sandbox no llega a la descarga de navegadores, así que se instalan en una **terminal normal**. Nunca desde la raíz del repo: ahí `npx` ejecutaría el `node_modules` que crea el agente, fuera del sandbox y en parte como root.
+
+1. Mira la versión de `@playwright/test` en el `package-lock.json` del repo.
+2. Desde tu carpeta personal, con esa versión fijada (en el ejemplo, `1.58.2`; pon la tuya):
 
 ```bash
-npx playwright install --with-deps chromium webkit
+cd ~
+npx -y playwright@1.58.2 install chromium webkit
+sudo env "PATH=$PATH" npx -y playwright@1.58.2 install-deps chromium webkit
 ```
 
 Quedan en `~/.cache/ms-playwright`, y el agente los usa desde el sandbox (verificado con Chromium 156 y WebKit 27.2). Repítelo cuando cambie la versión de Playwright.
@@ -455,7 +460,7 @@ Con eso empieza la fase D: el primer recorrido y los casos N1–N8.
 - **B5, el agente no podía usar `gh`:** la regla `Read(~/.config/gh/**)` de los ajustes gestionados también se aplica al sandbox, y el agente no podía empujar ni abrir PR ("could not read Username"). Se quita esa regla (v0.14). Hay que corregir `/etc/claude-code/managed-settings.json` con `sudo` y reiniciar la sesión.
 - **B5, modo `!`:** también se ejecuta dentro del sandbox, incluso desde Remote Control. El señuelo se crea en una terminal normal.
 - **B5, salvaguardas:** pedir al modelo que se salte el proxy o que lea credenciales marcó la sesión (`[cyber]`). Las pruebas se rehacen con un señuelo inofensivo.
-- **D, navegador:** el navegador integrado no permitía iniciar sesión en Linear. La configuración la hizo Claude desde tu Chrome (Claude in Chrome). Ver los repos de la app Linear Code pide confirmar con 2FA.
+- **D, navegador:** el navegador integrado no permitía iniciar sesión en Linear. La configuración la hizo Claude desde tu Chrome (Claude in Chrome). Desde ADR-0006, Claude en el navegador solo hace configuración inicial con tu permiso, crea issues en *Backlog* y escribe comentarios; nunca mueve a *Ready*, aprueba ni fusiona. Ver los repos de la app Linear Code pide confirmar con 2FA.
 - **D, estados:** al renombrar *Todo* a *Ready*, las 4 issues de ejemplo quedaron en *Ready*. Se pasan a *Canceled*.
 - **D, permisos de la app Linear Code:** pide lectura y escritura en código, issues, PR, actions y workflows del repo que se le da. Límite aceptado: es la app oficial de Linear, solo ve los repos elegidos y el ruleset de `main` también la frena.
 - **D, comprobación del MCP:** el agente lee las issues y no puede moverlas. Las razones son dos: el endpoint solo ofrece herramientas `list_*` y `get_*`, y `AGENTS.md` lo prohíbe. Además, el agente no buscó otra vía.

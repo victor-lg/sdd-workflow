@@ -24,12 +24,13 @@ Un cambio R0 (errata, documentación, restaurar dependencias) no necesita spec: 
 
 ## 2. Fijar el nivel de riesgo
 
-Propón R0, R1 o R2 con una línea de motivo. La CI recalcula el mínimo según las rutas tocadas y falla si marcas menos. Es **R2 obligatoriamente** si toca:
+Propón R0, R1 o R2 con una línea de motivo. La CI recalcula el mínimo y falla si marcas menos. La lista de disparadores es la de la línea base, §6 ("Disparadores que fuerzan R2"). En resumen:
 
-- manifiestos de dependencias;
-- `.github/`, `.claude/` o `AGENTS.md`;
-- migraciones;
-- las rutas sensibles que declara el `README.md` del proyecto.
+- R2 si toca dependencias, `.github/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, migraciones o las rutas sensibles del `README.md`;
+- un PR de código hereda el `riesgo` de la spec que implementa;
+- un ADR es como mínimo R1.
+
+Un PR de código sin AC (`no aplica (motivo)`) solo es legítimo si no cambia comportamiento.
 
 Ante la duda, elige el nivel más alto. Nunca bajes un nivel para ahorrar revisores.
 

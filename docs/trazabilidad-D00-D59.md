@@ -1,6 +1,6 @@
 # Trazabilidad D00–D59 → línea base
 
-**Estado:** BORRADOR · **Última revisión:** 2026-10-19 (lagunas L1–L9 cerradas)
+**Estado:** BORRADOR · **Última revisión:** 2026-10-23 (lagunas L1–L9 cerradas; corregida tras la revisión independiente)
 **Para qué sirve:** comprobar, decisión por decisión, que adoptar la línea base (Q01, opción A) no pierde nada del registro `historial/registro-D00-D59.md`.
 
 ## Cómo leerlo
@@ -26,7 +26,7 @@ El objetivo de esta trazabilidad es que nada se pierda *sin querer*, no conserva
 ## 01. Visión, descubrimiento y especificación
 
 - **D00 Finalidad y ámbito** — CONSERVADA. *Dónde:* README, §1, §15. v1 es solo la vía personal; la adaptación al entorno profesional (GitLab, CI/CD propia) y la versión reducida quedan aplazadas en §10 (ADR-0004).
-- **D01 Descubrimiento guiado por IA** — CONSERVADA. *Dónde:* F1 y la futura skill `sdd-discover`.
+- **D01 Descubrimiento guiado por IA** — CONSERVADA. *Dónde:* F1 y la skill `sdd-discover`.
 - **D02 Descubrimiento progresivo** — CONSERVADA. *Dónde:* F1 y `discovery/`.
 - **D03 Especificación por capacidades** — CONSERVADA. *Dónde:* P01 y F2.
 - **D04 Visión global y specs de capacidad** — CONSERVADA. ✔ LAGUNA L1 (cerrada): la estructura del repo no tiene sitio para la visión global ligera del producto. *Resolución aceptada:* añadir `docs/vision.md` a la plantilla.
@@ -37,7 +37,7 @@ El objetivo de esta trazabilidad es que nada se pierda *sin querer*, no conserva
 
 - **D07 Revisión independiente de specs** — MODIFICADA (aceptada, M1). Se mantienen dos jueces ciegos en todas las specs R1 y R2; en el código, dos en R2 y uno en R1. ✔ LAGUNA L2 (cerrada): los gates no dicen que G4 se aplique también a los PRs de spec, solo a los de código. *Resolución aceptada:* G4 se aplica a todo PR de spec R1/R2, con la rúbrica de `sdd-spec`.
 - **D08 Aprobación humana verificable de specs** — MODIFICADA (aceptada, M2). *Dónde:* P03 y §8. El mecanismo es el merge humano en rama protegida, no un registro propio.
-- **D09 Cambios normales, triviales y urgentes** — MODIFICADA (aceptada, M3). *Dónde:* R0–R2 (§6). La urgencia deja de ser una vía aparte y solo cambia la prioridad; la justificación de una excepción va en una línea del PR. La corrección urgente (hotfix) se diseña con la primera publicación (§10).
+- **D09 Cambios normales, triviales y urgentes** — MODIFICADA (aceptada, M3). *Dónde:* R0–R2 (§6). La urgencia deja de ser una vía aparte y solo cambia la prioridad; el motivo del nivel elegido va en una línea del PR (sección "Nivel de riesgo"). La corrección urgente (hotfix) se diseña con la primera publicación (§10).
 - **D10 ADRs selectivos** — CONSERVADA. *Dónde:* plantilla de ADR y `AGENTS.md`.
 - **D11 Selección progresiva de tecnologías** — CONDENSADA. *Dónde:* `sdd-spec` (no inventar tecnologías) y ADR.
 - **D12 Inicialización en dos etapas** — CONDENSADA. ✔ LAGUNA L3 (cerrada): no está escrito que un proyecto pueda empezar solo con documentación, sin stack ni CI de código. *Resolución aceptada:* la plantilla tiene una etapa documental (`discovery/` y `docs/`, que incluye las specs) y una técnica (`src/`, `tests/`, CI) que se añade al elegir tecnología.
@@ -51,7 +51,7 @@ El objetivo de esta trazabilidad es que nada se pierda *sin querer*, no conserva
 
 - **D18 Linear y planificación de entregas** — CONSERVADA (ADR-0003). Linear es la fuente del estado de las entregas y de sus dependencias; las specs viven en Git. El principio "planes persistentes solo para tareas complejas" sigue en Q09.
 - **D19 Estructura inicial de Linear** — CONSERVADA (ADR-0003). Un team, un proyecto por producto, issue por entrega; ciclos opcionales.
-- **D20 Autonomía controlada sobre Linear** — CONDENSADA (ADR-0003). En v1 el agente solo lee Linear: las escrituras se bloquean con reglas de permisos, y los estados de ejecución los mueve la integración nativa. Las escrituras del agente quedan aplazadas (§10).
+- **D20 Autonomía controlada sobre Linear** — CONDENSADA (ADR-0003). En v1 el agente solo lee Linear: el MCP se conecta al endpoint de solo lectura (ADR-0006), y los estados de ejecución los mueve la integración nativa. Las escrituras del agente quedan aplazadas (§10).
 - **D21 Estados de entrega en Linear** — CONSERVADA (ADR-0003). Inbox → Discovery → Ready → In Progress → In Review → Done, más Canceled. Los tres primeros los mueve la persona; los de ejecución, la integración con GitHub. Ready es G2 y Done llega con G6.
 - **D22 Ramas, PR y worktrees** — CONSERVADA. *Dónde:* §7 y §8. Los worktrees quedan aplazados junto con el paralelismo.
 - **D23 Revisión independiente de código** — MODIFICADA (aceptada, M1). Dos revisores ciegos en R2; uno con contexto limpio en R1. El segundo revisor en R1 se reactiva si la métrica de defectos escapados lo justifica.
@@ -64,7 +64,7 @@ El objetivo de esta trazabilidad es que nada se pierda *sin querer*, no conserva
 - **D27 Protección frente a prompt injection** — CONSERVADA. *Dónde:* `AGENTS.md`, sandbox y caso N6.
 - **D28 Gestión de secretos** — CONDENSADA. *Dónde:* §9, capa 4. Revocación = revocar el token del agente. Las credenciales temporales quedan para cuando haya acceso a servicios externos.
 - **D29 Perfiles de aislamiento** — CONDENSADA. Un solo perfil en v1 (sandbox estricto en WSL2); el dev container es el siguiente escalón.
-- **D30 Catálogo gobernado de herramientas y MCP** — CONDENSADA. *Dónde:* §9 ("solo MCP auditados"; `ask` si escriben). ✔ LAGUNA L5 (cerrada): no hay un sitio donde anotar qué MCP o herramientas están aprobados. *Resolución aceptada:* una lista breve en `docs/herramientas.md` del workflow, que se crea con el primer MCP.
+- **D30 Catálogo gobernado de herramientas y MCP** — CONDENSADA. *Dónde:* §9 (solo los MCP y herramientas registrados en `docs/herramientas.md`; el de Linear, de solo lectura). ✔ LAGUNA L5 (cerrada): no hay un sitio donde anotar qué MCP o herramientas están aprobados. *Resolución aceptada:* una lista breve en `docs/herramientas.md` del workflow, que se crea con el primer MCP.
 
 ## 05. Agentes, coordinación y ejecución
 
@@ -84,14 +84,14 @@ El objetivo de esta trazabilidad es que nada se pierda *sin querer*, no conserva
 - **D41 Verificación a partir de specs** — CONSERVADA. *Dónde:* G3 y `AGENTS.md`.
 - **D42 Pirámide de pruebas adaptable** — CONDENSADA. *Dónde:* futura guía de testing de `sdd-implement` (pendiente en la hoja de ruta).
 - **D43 Entornos y datos de prueba fiables** — CONDENSADA. ✔ LAGUNA L7 (cerrada): no hay regla para tests intermitentes (flaky). *Resolución aceptada:* una línea en `AGENTS.md`: un test intermitente se reporta como tal y no se da por bueno repitiéndolo hasta que pase.
-- **D44 Calidad no funcional** — CONSERVADA. *Dónde:* plantilla de spec (NFR) y evidencia de NFR exigida en R2.
+- **D44 Calidad no funcional** — CONSERVADA. *Dónde:* plantilla de spec (NFR) y, en R2, evidencia de NFR y plan de vuelta atrás en la sección "Validación" del PR (`sdd-implement`).
 - **D45 Evaluaciones del workflow y agentes** — CONDENSADA. *Dónde:* casos N1–N8 y métricas (§11). Las evals versionadas quedan aplazadas.
 - **D46 Evolución controlada del workflow** — CONSERVADA. *Dónde:* §15, ADR y `CHANGELOG.md`.
 
 ## 07. Arquitectura reusable e interfaces
 
 - **D47 Núcleo modular y reutilizable** — CONSERVADA (ADR-0004, Q05). *Dónde:* `plantilla-proyecto/`, que aporta los ficheros del proyecto, y `plugin-sdd/`, que aporta las skills y los subagentes.
-- **D48 Configuración declarativa por capas** — CONDENSADA. *Dónde:* §9: lo crítico va en ajustes de usuario, que el repo no puede relajar.
+- **D48 Configuración declarativa por capas** — CONDENSADA. *Dónde:* §9: lo crítico va en los ajustes gestionados, que ni el repo ni el agente pueden relajar (v0.11).
 - **D49 Inicializador progresivo y repetible** — CONDENSADA. En v1, plantilla más guía de instalación. El inicializador asistido (una skill `sdd-init`) queda aplazado.
 - **D50 Interfaz orientada a comandos** — CONSERVADA. *Dónde:* skills `sdd-*`, invocables como comandos. Invocar un comando no aprueba nada (P03).
 - **D51 Catálogo pequeño de comandos y skills** — CONSERVADA. Seis skills en v1.
@@ -101,10 +101,10 @@ El objetivo de esta trazabilidad es que nada se pierda *sin querer*, no conserva
 
 - **D53 Construcción incremental por recorridos completos** — CONSERVADA. *Dónde:* §11 y §15.
 - **D54 Inventario vivo y auditoría de cobertura** — CONDENSADA. *Dónde:* este documento y `clasificacion-notas.md`. ✔ LAGUNA L8 (cerrada): falta la auditoría independiente en hitos. *Resolución aceptada:* antes de declarar v1.0, una revisión con contexto limpio (otra sesión o subagente) de esta trazabilidad y del resultado del primer recorrido.
-- **D55 Continuidad ante fallos externos** — CONDENSADA. *Dónde:* P10. Con un solo sistema externo (GitHub), la reconciliación se reduce a mirar su estado real antes de reintentar.
+- **D55 Continuidad ante fallos externos** — CONDENSADA. *Dónde:* P10. Con GitHub como única autoridad y Linear solo leído por el agente, la reconciliación se reduce a mirar su estado real antes de reintentar.
 - **D56 Clasificación y circulación de datos** — CONDENSADA. *Dónde:* P07 y §5 (modelos de Go permitidos salvo los "Contributor"). ✔ LAGUNA L9 (cerrada y después retirada): el campo `datos:` por proyecto se retiró en ADR-0004. Hay una sola vía, con Remote Control y la web siempre permitidos. DESCARTADA en v1 la clasificación por proyecto; vuelve con la adaptación al entorno profesional (§10).
 - **D57 Protección y recuperación de información** — APLAZADA (§10). GitHub actúa como copia mientras tanto.
-- **D58 Dependencias y código de terceros** — CONDENSADA. *Dónde:* una dependencia nueva es R2 y se instala dentro del sandbox. SBOM y firmas quedan aplazados.
+- **D58 Dependencias y código de terceros** — CONDENSADA. *Dónde:* una dependencia nueva es R2 y se instala dentro del sandbox; los navegadores de Playwright, fuera, con versión fijada y desde fuera del repo (guía, G2). SBOM y firmas quedan aplazados.
 - **D59 Evaluación híbrida del riesgo** — MODIFICADA (aceptada, M3). *Dónde:* R0–R2 para el cambio y `allow`/`ask`/`deny` para cada operación (§6, §9). El agente propone el nivel y la CI solo puede subirlo. DESCARTADA en parte: el riesgo inherente del proyecto como dimensión propia. Se expresa con las rutas sensibles que declara cada proyecto, porque un nivel mínimo obligaría a especificar hasta una errata.
 
 ## Lo que esta comprobación no cubre

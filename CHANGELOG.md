@@ -2,6 +2,38 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.22 — 2026-10-23 (revisión independiente)
+
+Una sesión nueva, sin el historial, revisó el workflow antes de la v1.0: 31 hallazgos (`historial/revision-independiente-1.md`). Se resuelven todos salvo las pruebas que hace Víctor (C18–C20) y los siete de la v1.1 (V1–V7).
+
+- **ADR-0006, "Ajustes del primer recorrido":** reúne las decisiones de la v0.12 a la v0.21 que solo estaban en el CHANGELOG (C3) y resuelve los dos bloqueos.
+  - **B1, Claude con el navegador:** ayuda a la persona, pero no es un agente del workflow. Nunca mueve a *Ready*, aprueba, fusiona, publica ni toca ajustes. Registrado en `herramientas.md` como límite aceptado.
+  - **B2, perfil Go:** sale de la v1.0 y pasa a §10 con su disparador.
+  - Modifica ADR-0002, ADR-0003 y ADR-0005; el índice lo anota.
+- **`checks.py`:**
+  - un ADR es como mínimo R1 (C7);
+  - un PR de código hereda el riesgo de la spec que implementa, y un PR de spec no puede bajar el suyo (C13);
+  - `no aplica` exige el motivo entre paréntesis, y un PR de código en R0 o sin AC sale con un aviso ⚠️ (C12);
+  - el resumen lista los tests existentes que el PR modifica o borra (C14).
+  - Probado en un repo local con seis escenarios.
+- **Gates (C10, C11):** la línea base distingue los gates que impone el sistema de los que dependen del agente (*Ready* y G4). G4 deja rastro: el encargo literal de cada revisor y su respuesta, plegados en el PR.
+- **Revisión (C6–C8):**
+  - lista única de lo que recibe el revisor, en `sdd-review`;
+  - la guía del revisor humano la comprueba el orquestador, no el revisor;
+  - los PR de ADR llevan 2 revisores;
+  - hasta 3 rondas (la inicial y 2 repeticiones).
+- **Coherencia (C1, C2, C4, C5, C9, C21):**
+  - lista canónica de disparadores de R2 en §6, con `CLAUDE.md`;
+  - "Sí, sin actualizar la spec" sale de la plantilla del PR;
+  - R2 pide evidencia de NFR y plan de vuelta atrás;
+  - nueve entradas desfasadas corregidas en la trazabilidad y la línea base;
+  - la retrospectiva separa lo que bloqueó el sistema de lo que bloqueó el agente.
+- **PR de la persona (C15):** los R2 pasan `sdd-review` antes del bypass.
+- **Repo del workflow (C17):** hasta la v1.1, por commits directos, declarado en el README.
+- **Playwright (C16):** los navegadores se instalan desde fuera del repo, con versión fijada, para no ejecutar fuera del sandbox el `node_modules` del agente.
+- **Pendiente para la v1.0:** las pruebas C18–C20, y quitar las marcas BORRADOR y las versiones desfasadas (C22).
+- **Plugin `sdd` 0.6.0.**
+
 ## v0.21 — 2026-10-23 (retrospectiva del primer recorrido)
 
 Retrospectiva en `historial/retrospectiva-1.md`. Entran en la v1.0 las tres mejoras baratas y con evidencia; el resto pasa a la v1.1.

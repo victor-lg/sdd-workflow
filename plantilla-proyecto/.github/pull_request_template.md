@@ -1,4 +1,4 @@
-<!-- Workflow SDD + IA v0.18. Basado en "un PR debería permitir responder…" de las notas originales. -->
+<!-- Workflow SDD + IA v0.22. Basado en "un PR debería permitir responder…" de las notas originales. -->
 <!--
 Título del PR (Conventional Commits, con el ID como alcance):
   feat(VIC-5): …   fix(VIC-7): …   test(VIC-6): …   refactor(VIC-8): …
@@ -24,7 +24,7 @@ Issue de Linear: <ID> (escribe "Fixes <ID>" para que pase a Done al fusionar)
 - ¿Cambia comportamiento funcional?
   - [ ] No
   - [ ] Sí, y la spec se actualizó en el PR #
-  - [ ] Sí, sin actualizar la spec. Motivo:
+  - [ ] Sí, y el PR de spec # está pendiente: este PR sigue en borrador hasta que se fusione
 
 ## Decisiones de arquitectura
 
@@ -51,14 +51,16 @@ Motivo:
 
 - **Ejecutado:**
 - **No ejecutado y por qué:**
+- **Solo en R2:** evidencia de los NFR afectados y plan de vuelta atrás (cómo deshacerlo si falla tras fusionar o publicar).
 
 ## Revisión IA (G4)
 
-Revisores exigidos: 2 en spec R1 y en todo R2; 1 en el código R1.
+Revisores exigidos: 2 en spec y ADR (R1 y R2) y en el código R2; 1 en el código R1. Hasta 3 rondas.
 
-- **Revisor 1:** resumen o enlace.
-- **Revisor 2 (si aplica):** resumen o enlace.
+- **Revisor 1:** resumen. Encargo literal y respuesta, plegados en `<details>`.
+- **Revisor 2 (si aplica):** ídem.
 - **Reconciliación:** hallazgos confirmados, descartados (y por qué) y corregidos.
+- **Cambios tras la última ronda** (si los hay): lista exacta.
 
 ## Guía para el revisor humano
 
