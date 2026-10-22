@@ -2,6 +2,17 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.21 — 2026-10-23 (retrospectiva del primer recorrido)
+
+Retrospectiva en `historial/retrospectiva-1.md`. Entran en la v1.0 las tres mejoras baratas y con evidencia; el resto pasa a la v1.1.
+
+- **Interacciones entre reglas** (`sdd-spec` y `reviewer`): la auditoría y la revisión de specs recorren los estados intermedios y las reglas que actúan a la vez. Es la causa del único defecto escapado (validación más recálculo en vivo).
+- **Rondas de revisión** (`sdd-review`): después de la ronda 2, las aclaraciones de la persona se aplican sin otra ronda, salvo reglas nuevas, con la lista exacta de cambios en el PR. Se había decidido a mano en los PR #2, #3 y #6.
+- **Cómo diseñar las pruebas de casos negativos** (línea base §11): acciones y no razonamiento, señuelos inocuos, prompts sin pistas, y no esquivar las salvaguardas. Lo motivan tres sesiones bloqueadas.
+- **Guía: "Cómo revisar un PR en GitHub"**, dónde está cada cosa que compruebas al aprobar.
+- **Primer recorrido:** N1–N8 cerrados. Pendiente para la v1.0: revisión independiente y quitar las marcas "BORRADOR".
+- **Plugin `sdd` 0.5.0.**
+
 ## v0.20 — 2026-10-22 (fase D en curso)
 
 - **Revisores con Sonnet:** el subagente `reviewer` usa `model: sonnet`. En R2, el revisor de seguridad se lanza con Opus (`sdd-review`). Motivo: `/usage` atribuía un 90 % del consumo de las últimas 24 h a los subagentes de revisión, y Sonnet ya había encontrado defectos reales en el PR #5. Se revierte si la métrica de defectos escapados lo justifica.

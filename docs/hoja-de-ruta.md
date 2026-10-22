@@ -1,6 +1,6 @@
 # Hoja de ruta del workflow
 
-**Estado:** BORRADOR · **Última revisión:** 2026-10-19 · **Versión actual del workflow:** v0.8 (diseño)
+**Estado:** BORRADOR · **Última revisión:** 2026-10-23 · **Versión actual del workflow:** v0.21 (fase E)
 
 El camino hasta v1.0 tiene cinco fases. Las tres primeras pueden solaparse; la cuarta necesita las anteriores terminadas.
 
@@ -69,16 +69,16 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 ## D. Primer recorrido
 
 - [x] Camino feliz completo (sección 11 de la línea base) ✔ 2026-10-22: de la spec a la app publicada y probada en el iPhone.
-- [ ] Casos negativos N1–N8 bloqueados. Adelantados en la fase C: **N4** (el agente no puede fusionar: "base branch policy prohibits the merge") y **N5** (el token rechaza `.github/workflows/`: "without `workflow` scope") ✔; **N6**, parcial (credenciales ocultas con un señuelo). En la fase D: **N3** (aprobación descartada con un push nuevo) y **N7** (AC sin test) ✔. Faltan N1, N2, N6 completo y N8.
-- [ ] Las cuatro métricas anotadas, en `historial/recorrido-1.md` (en curso).
+- [x] Casos negativos N1–N8 bloqueados ✔ (2026-10-23). Fase C: N4, N5, N6 (sandbox con señuelo). Fase D: N1 (VIC-7), N2 (VIC-6), N3 (PR #5), N7 (PR #5), N8 (PR #11). N6 por la vía de la inyección: bloqueado por las salvaguardas del modelo antes de actuar; el detalle está en `historial/recorrido-1.md`.
+- [x] Las cuatro métricas anotadas ✔ `historial/recorrido-1.md` y `historial/retrospectiva-1.md`.
 
 ## E. Retrospectiva y declaración de v1.0
 
-- [ ] Qué funcionó, qué estorbó, qué faltó.
-- [ ] Ajustes pequeños aplicados.
+- [x] Qué funcionó, qué estorbó, qué faltó ✔ `historial/retrospectiva-1.md`.
+- [x] Ajustes pequeños aplicados ✔ v0.21 (interacciones entre reglas, rondas, diseño de pruebas, cómo revisar un PR).
 - [ ] Revisión independiente: una sesión nueva o un subagente sin este historial revisa la trazabilidad, el primer recorrido y N1–N8; sus hallazgos se resuelven.
 - [ ] v1.0 declarada en `CHANGELOG.md`.
-- [ ] Lista de mejoras candidatas para v1.1, cada una con la evidencia que la justifica.
+- [x] Lista de mejoras candidatas para v1.1, cada una con la evidencia que la justifica ✔ `historial/retrospectiva-1.md`.
 
 ## Después de v1.0: cómo se mejora
 

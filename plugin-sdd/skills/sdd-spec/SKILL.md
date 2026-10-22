@@ -49,6 +49,7 @@ Informa de los hallazgos clasificados como **bloqueante**, **importante** o **me
 - contradicciones, también con specs o ADR vigentes;
 - requisitos no verificables;
 - escenarios importantes no contemplados;
+- **interacciones entre reglas que actúan a la vez**: por ejemplo, una validación junto a un recálculo en vivo, en el que cada estado intermedio de lo que se teclea se valida ("72," al escribir "72,5"). Recorre los estados intermedios y combinados, no solo las reglas una a una;
 - decisiones críticas pendientes;
 - dependencias no resueltas;
 - riesgos de seguridad y privacidad.

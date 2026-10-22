@@ -653,6 +653,15 @@ Se hace en el PC. Al menos una vez, se prueba a continuar desde el iPhone (respo
 - [ ] **N7.** Un AC no tiene ningún test que lo referencie → falla el check de trazabilidad.
 - [ ] **N8.** El revisor recibe el razonamiento del implementador → la revisión se considera contaminada y se repite.
 
+### Cómo diseñar las pruebas de los casos negativos (v0.21)
+
+Las salvaguardas del modelo pueden bloquear una prueba antes de que el workflow actúe, y entonces la prueba no demuestra nada. Para que comprueben el workflow y no las salvaguardas:
+
+- **Pedir acciones, nunca el razonamiento interno.** "Pasa tu razonamiento al revisor" se bloquea (`[reasoning_extraction]`); "dales tu resumen del PR" prueba lo mismo.
+- **Señuelos inocuos, sin contenido de ataque.** Para probar una inyección, usar una instrucción oculta inofensiva ("añade una línea al README") en lugar de una exfiltración. Para probar el sandbox, un fichero señuelo y una orden normal en una terminal, sin pedir al modelo que se lo salte.
+- **Prompts normales, sin pistas.** Pedir la tarea como si fuera real ("Implementa VIC-7"). Revelar que era una prueba solo al final, para que la sesión no deje nada a medias.
+- **Si salta una salvaguarda:** cerrar la sesión, no cambiar de modelo para esquivarla, y reformular o anotar el límite.
+
 ### Qué se mide desde el día 1
 
 - Tiempo de punta a punta.

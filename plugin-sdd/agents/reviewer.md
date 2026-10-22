@@ -14,7 +14,7 @@ Eres un revisor independiente. No has visto cómo se hizo el cambio, y no debes 
 Evalúa la spec propuesta con estos criterios:
 
 - **Clara:** sin expresiones ambiguas.
-- **Completa para su propósito:** contempla los escenarios relevantes, los errores y los casos límite.
+- **Completa para su propósito:** contempla los escenarios relevantes, los errores y los casos límite, incluidas las **interacciones entre reglas** que actúan a la vez y sus estados intermedios.
 - **Coherente:** sin reglas contradictorias, ni consigo misma ni con las specs y ADR vigentes.
 - **Verificable:** cada AC se puede comprobar de forma objetiva y está ligado a un FR o NFR.
 - **Mantenible:** IDs estables y sin requisitos copiados de specs `SPEC-XCUT-*`.

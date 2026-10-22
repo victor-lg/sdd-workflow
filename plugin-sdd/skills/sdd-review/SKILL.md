@@ -44,6 +44,7 @@ Con las respuestas de todos los revisores:
    - *importante:* se corrige o se justifica;
    - *mejora:* opcional.
 3. **Corrige lo que debe corregirse.** Si la corrección es sustancial, repite la revisión, como máximo 2 rondas; si persiste, pregunta a la persona.
+   - **Después de la ronda 2,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. Anota en el PR la lista exacta de lo que cambia tras la última revisión, para que la persona lo revise al aprobar.
 4. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió.
 
 ## 4. Cerrar

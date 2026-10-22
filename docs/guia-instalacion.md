@@ -421,6 +421,20 @@ En este orden: **verificar el dominio antes de ponerlo en el repo** evita que ot
 
 ---
 
+## Cómo revisar un PR en GitHub (v0.21)
+
+Todo está en la página del PR, repartido en sus pestañas. En GitHub Mobile es igual, con otra disposición. Qué afirma tu aprobación está en la línea base, §8.
+
+1. **AC.** En **Conversation**, la descripción → "Qué comportamiento cubre". Los AC deben ser los de la issue de Linear ("AC de esta entrega").
+2. **Tests que cambian.** En la descripción → "Guía para el revisor humano" → "Tests existentes que cambian". Compruébalo en **Files changed**: las líneas rojas que quiten una comprobación (`expect`, `assert`) sin otra verde equivalente son señal de alarma. El panel lateral de ficheros muestra si se toca algo fuera de `tests/`.
+3. **CI.** En el recuadro de merge, al final de Conversation, o en la pestaña **Checks**: `checks-sdd` y `tests` en verde.
+4. **Revisión de la IA.** En la descripción → "Revisión IA (G4)". No debe quedar ningún hallazgo "debe corregirse" sin corregir. Si hubo cambios tras la última revisión, están listados.
+5. **Dónde mirar.** En la guía del revisor: cada punto cita un fichero y una función. Ábrelo en Files changed y busca el nombre con Ctrl+F. En R1, un vistazo; en R2, lectura de verdad.
+6. **Evidencia.** En la sección "Validación": tests ejecutados, repeticiones, mutaciones detectadas, capturas o prueba en el dispositivo.
+7. **Aprobar.** Marca las cuatro casillas de "Aprobación humana (G6)" → **Files changed → Review changes → Approve → Submit** → **Squash and merge**.
+
+---
+
 ## Al terminar
 
 1. Marca los pasos en `docs/hoja-de-ruta.md` (fase C).
