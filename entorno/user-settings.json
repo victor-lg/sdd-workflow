@@ -1,4 +1,9 @@
 {
   "remoteControlAtStartup": true,
-  "autoUpdatesChannel": "stable"
+  "autoUpdatesChannel": "stable",
+  "statusLine": {
+    "type": "command",
+    "command": "python3 ~/.claude/sdd-metricas.py",
+    "padding": 0
+  }
 }

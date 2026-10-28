@@ -213,6 +213,8 @@ sudo cp ~/proyectos/sdd-workflow/entorno/managed-settings.json /etc/claude-code/
 sudo chmod 644 /etc/claude-code/managed-settings.json
 mkdir -p ~/.claude
 cp ~/proyectos/sdd-workflow/entorno/user-settings.json ~/.claude/settings.json
+cp ~/proyectos/sdd-workflow/entorno/sdd-metricas.py ~/.claude/
+chmod 644 ~/.claude/sdd-metricas.py
 ```
 
 Qué hace cada fichero:
@@ -224,7 +226,13 @@ Qué hace cada fichero:
   - reglas `deny` para que la herramienta Read tampoco las lea;
   - `ask` al añadir dependencias;
   - el modo "saltarse permisos" desactivado.
-- **`user-settings.json`:** Remote Control en todas las sesiones y el canal de actualizaciones `stable`.
+- **`user-settings.json`:** Remote Control en todas las sesiones, el canal de actualizaciones `stable` y la línea de estado de métricas.
+- **`sdd-metricas.py` (v0.23):** la línea de estado muestra el modelo, el coste estimado, los minutos y la rama. Además guarda un resumen de cada sesión en `C:\Users\victor\Documents\sdd-metricas\sesiones\` (desde WSL, `/mnt/c/...`; otra carpeta con `SDD_METRICAS_DIR`). El resumen recoge:
+  - modelos usados y coste estimado a precio de API (no es lo que descuenta la suscripción);
+  - duración total y de API, líneas cambiadas, tokens y pico de uso del contexto;
+  - repo, rama e issue de Linear deducida de la rama.
+
+  No guarda la conversación. Corre fuera del sandbox porque lo lanza Claude Code, no el agente, y el agente no puede modificarlo, porque su sandbox no escribe en `~/.claude`. `entorno/resumen-metricas.py <carpeta>` saca las tablas por sesión y por issue para el registro del recorrido.
 
 **Comprobación** (abre `claude` dentro de `~/proyectos/sdd-workflow`):
 
@@ -233,7 +241,8 @@ Qué hace cada fichero:
 3. Pide a Claude que ejecute estas dos órdenes; las dos deben fallar. Si te ofrece reintentarlas fuera del sandbox, di que no.
    - `touch ~/sandbox-probe` → `Read-only file system`
    - `curl --noproxy '*' https://example.com` → `Could not resolve host`
-4. **Prueba del señuelo** (caso N6, en pequeño):
+4. **Métricas:** abajo aparece la línea de estado, por ejemplo `Opus 5.5 · $0.00 · 0 min · main`. Tras el primer mensaje, `ls /mnt/c/Users/victor/Documents/sdd-metricas/sesiones/` muestra un `.json` con el identificador de la sesión.
+5. **Prueba del señuelo** (caso N6, en pequeño):
    - en una terminal normal, `mkdir -p ~/.aws && echo "señuelo" > ~/.aws/prueba.txt`;
    - en una sesión nueva, pide a Claude que lea ese fichero de prueba con Read, con `cat` y con `python3`;
    - las tres deben fallar: Read, por la regla de permisos; `cat` y `python3`, con "No such file or directory", porque el sandbox oculta la carpeta;

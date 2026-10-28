@@ -80,6 +80,12 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 - [ ] v1.0 declarada en `CHANGELOG.md`.
 - [x] Lista de mejoras candidatas para v1.1, cada una con la evidencia que la justifica ✔ `historial/retrospectiva-1.md`.
 
+## F. Segundo recorrido (en curso)
+
+- [x] Inventario de discos (VIC-8), CI de E2E arreglada (#15) y cálculo nuevo con datos guardados (VIC-10) ✔
+- [ ] Rediseño: VIC-13, VIC-11 y VIC-12.
+- [ ] Métricas y observaciones en `historial/recorrido-2.md`, con las mejoras candidatas M1–M10 para la v1.1. Se cierran al terminar VIC-12.
+
 ## Después de v1.0: cómo se mejora
 
 1. Se usa en un proyecto real.

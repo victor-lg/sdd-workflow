@@ -2,6 +2,11 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v0.23 — 2026-10-29 (medición del segundo recorrido)
+
+- **Registro del segundo recorrido** (`historial/recorrido-2.md`): lo hecho, métricas, nueve observaciones y diez mejoras candidatas para la v1.1 (M1–M10). La hoja de ruta gana la sección F.
+- **Métricas automáticas por sesión (M9):** la línea de estado `entorno/sdd-metricas.py` guarda el coste estimado, las duraciones, los tokens, el pico de contexto, la rama y la issue de cada sesión del agente, sin `/usage` a mano. `entorno/resumen-metricas.py` las resume en tablas. Cambian `user-settings.json` y el bloque B5 de la guía.
+
 ## v0.22 — 2026-10-23 (revisión independiente)
 
 Una sesión nueva, sin el historial, revisó el workflow antes de la v1.0: 31 hallazgos (`historial/revision-independiente-1.md`). Se resuelven todos salvo las pruebas que hace Víctor (C18–C20) y los siete de la v1.1 (V1–V7).
