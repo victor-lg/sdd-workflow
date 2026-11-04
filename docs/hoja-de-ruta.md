@@ -84,7 +84,12 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 
 - [x] Inventario de discos (VIC-8), CI de E2E arreglada (#15) y cálculo nuevo con datos guardados (VIC-10) ✔
 - [x] Rediseño: VIC-13, VIC-11, VIC-14 y VIC-12 ✔ (2026-11-04, probado en el iPhone). Falta SPEC-CALC-003 v0.5 con las aclaraciones de VIC-12.
-- [ ] Métricas y observaciones en `historial/recorrido-2.md`, con las mejoras candidatas M1–M17 para la v1.1. Se cierran al terminar VIC-12.
+- [x] Métricas y observaciones en `historial/recorrido-2.md`, con las mejoras candidatas M1–M17 para la v1.1 ✔
+- [x] Retrospectiva ✔ `historial/retrospectiva-2.md` (2026-11-04): 17 mejoras a la v1.1, que se aplica después de declarar la v1.0.
+
+## G. v1.1 (en preparación)
+
+Plan por bloques, con el porqué y el "hecho cuando" de cada uno: `docs/plan-v1.1.md`. Empieza al declarar la v1.0 (bloque 0).
 
 ## Después de v1.0: cómo se mejora
 
@@ -95,3 +100,8 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 5. Retrospectiva corta al final de cada proyecto.
 
 Las capacidades aparcadas (Linear, Notion, multiagente, RAG, multimodal, feedback de producción, observabilidad, backups y versión profesional) forman el backlog natural de v1.x.
+
+Candidatas anotadas para cuando haga falta (2026-11-04):
+
+- **Observabilidad: PostHog.** Errores de JavaScript en el dispositivo, analítica y grabación de sesiones, con alojamiento en la UE. Hoy choca con la regla de no hacer peticiones a terceros (SPEC-CALC-001 NFR-01 y NFR-02) y, con un solo usuario, aporta poco. Se reconsidera si la app tiene más usuarios o un servidor.
+- **Base de datos (por ejemplo, Supabase).** Solo si una funcionalidad necesita sincronizar entre dispositivos o compartir datos. Antes valen el almacenamiento del dispositivo y una copia de seguridad exportable. Exige ADR, rutas sensibles y gestión de secretos fuera del agente.
