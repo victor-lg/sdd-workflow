@@ -83,8 +83,8 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 ## F. Segundo recorrido (en curso)
 
 - [x] Inventario de discos (VIC-8), CI de E2E arreglada (#15) y cálculo nuevo con datos guardados (VIC-10) ✔
-- [ ] Rediseño: VIC-13, VIC-11 y VIC-12.
-- [ ] Métricas y observaciones en `historial/recorrido-2.md`, con las mejoras candidatas M1–M10 para la v1.1. Se cierran al terminar VIC-12.
+- [x] Rediseño: VIC-13, VIC-11, VIC-14 y VIC-12 ✔ (2026-11-04, probado en el iPhone). Falta SPEC-CALC-003 v0.5 con las aclaraciones de VIC-12.
+- [ ] Métricas y observaciones en `historial/recorrido-2.md`, con las mejoras candidatas M1–M17 para la v1.1. Se cierran al terminar VIC-12.
 
 ## Después de v1.0: cómo se mejora
 
