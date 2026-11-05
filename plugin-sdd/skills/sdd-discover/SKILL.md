@@ -3,7 +3,7 @@ name: sdd-discover
 description: Conduce la entrevista de descubrimiento (F1) a partir de una idea o una issue del Inbox de Linear, registra lo aprendido en discovery/ y decide cuándo hay material suficiente para una spec. Úsala cuando haya una idea nueva o un cambio relevante cuyo comportamiento aún no está definido.
 ---
 
-<!-- BORRADOR del workflow SDD + IA v0.9 (D01, D02, D14; reglas multimodales de las notas originales). -->
+<!-- Workflow SDD + IA v1.0 (D01, D02, D14; reglas multimodales de las notas originales). -->
 
 # sdd-discover
 

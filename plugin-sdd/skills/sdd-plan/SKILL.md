@@ -3,7 +3,7 @@ name: sdd-plan
 description: Comprueba la Definition of Ready (G2) de una entrega, fija su nivel de riesgo, crea la rama y abre el PR borrador con el plan. Úsala justo antes de empezar a implementar una issue de Linear.
 ---
 
-<!-- BORRADOR del workflow SDD + IA v0.9 (G2, R0–R2, ADR-0003, ADR-0004 Q09). -->
+<!-- Workflow SDD + IA v1.0 (G2, R0–R2, ADR-0003, ADR-0004 Q09). -->
 
 # sdd-plan
 

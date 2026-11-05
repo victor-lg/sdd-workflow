@@ -3,7 +3,7 @@ name: sdd-context
 description: Reúne el contexto vigente de una tarea (issue de Linear, spec y AC en main, ADR aplicables, código y tests relacionados) antes de especificar, planificar o implementar, y señala contradicciones o huecos. Úsala al empezar F2 (especificar) y F4 (implementar), y siempre que dudes de qué fuente manda.
 ---
 
-<!-- BORRADOR del workflow SDD + IA v0.9, construido a partir de las reglas de "RAG" y "memoria" de las notas originales. -->
+<!-- Workflow SDD + IA v1.0, construido a partir de las reglas de "RAG" y "memoria" de las notas originales. -->
 
 # sdd-context
 

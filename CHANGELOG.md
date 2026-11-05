@@ -2,6 +2,22 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v1.0 — 2026-11-05 (primera versión usable)
+
+El workflow queda declarado tras dos recorridos completos con la calculadora de discos (VIC-5 a VIC-15), los ocho casos negativos y las pruebas de la revisión independiente.
+
+- **Pruebas C18–C20** (`historial/recorrido-1.md`): las barreras del sistema funcionan sin depender del modelo.
+  - C18: `checks-sdd` rechaza una spec que no está en `main` y la mezcla de spec y código (PR #38).
+  - C19: el ruleset rechaza el push directo del agente a `main` (`GH013`).
+  - C20: sin proxy no hay red y `~/.ssh` aparece vacío dentro del sandbox.
+- **Marcas "BORRADOR" retiradas** de plantillas, skills y documentos aceptados; versiones y referencias desfasadas corregidas (C22): README, guía de instalación, hoja de ruta y herramientas. Quedan los comentarios de cabecera de los cuatro ficheros de `plantilla-proyecto/.github/`, que solo se pueden cambiar desde Git: van en el primer PR del bloque 1.
+- **Documentos nuevos desde la v0.23:**
+  - segundo recorrido y su retrospectiva (`historial/recorrido-2.md`, `historial/retrospectiva-2.md`);
+  - análisis de herramientas externas (`historial/analisis-herramientas-1.md`);
+  - plan de la v1.1 (`docs/plan-v1.1.md`), glosario (`docs/glosario.md`) y convenciones propuestas (`docs/convenciones.md`, M42).
+- **Linear:** team "Desarrollo" (clave `VIC`), etiquetas Tipo, Riesgo y Origen, plantillas Bug, Spec y Mejora del workflow, y proyecto "Workflow SDD v1.1" con un hito por bloque.
+- **Plugin `sdd` 1.0.0.** Tras el push: `claude plugin marketplace update sdd-workflow && claude plugin update sdd@sdd-workflow`.
+
 ## v0.23 — 2026-10-29 (medición del segundo recorrido)
 
 - **Registro del segundo recorrido** (`historial/recorrido-2.md`): lo hecho, métricas, nueve observaciones y diez mejoras candidatas para la v1.1 (M1–M10). La hoja de ruta gana la sección F.

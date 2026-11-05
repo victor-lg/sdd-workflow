@@ -1,6 +1,6 @@
 # Guía de instalación (fase C)
 
-**Versión:** workflow v0.12 · **Verificada contra:** documentación de Claude Code del 2026-10-19 (Claude Code 2.1.303)
+**Versión:** workflow v1.0 · **Verificada contra:** documentación de Claude Code del 2026-10-19 (Claude Code 2.1.303)
 
 Se hace una vez, en el PC con Windows 11, en unas 2–3 horas. Lo mejor es repartirla en dos sesiones: bloques A–C en una y D–F en otra. Al terminar tendrás:
 
@@ -37,7 +37,7 @@ Cada paso termina con una comprobación. Si una falla, para y anótalo al final 
 
 ### A1. Preparar los ficheros
 
-1. Descomprime `sdd-workflow-v0.12.zip` en una carpeta de Windows, por ejemplo `Documentos\sdd-workflow`.
+1. Copia los ficheros del workflow (v1.0) en una carpeta de Windows, por ejemplo `Documentos\sdd-workflow`.
 2. Sustituye `TU-USUARIO` por tu usuario de GitHub en estos tres ficheros:
    - `.claude-plugin/marketplace.json`
    - `plugin-sdd/.claude-plugin/plugin.json`
@@ -50,7 +50,7 @@ Fork no crea repos en GitHub, así que el repo vacío se crea primero en la web:
 1. En github.com, crea el repo **privado** `sdd-workflow` **vacío**, sin README, `.gitignore` ni licencia. Así no hay historias distintas que fusionar.
 2. En Fork, inicializa la carpeta como repo:
    - *File → Init New Repository* → la carpeta `sdd-workflow`;
-   - selecciona todos los ficheros, *Stage* y haz commit ("v0.12 inicial");
+   - selecciona todos los ficheros, *Stage* y haz commit ("v1.0 inicial");
    - comprueba que la rama se llama `main`; si no, renómbrala.
 3. Añade el remoto: *Repository → Remotes → Add* (o el `+` del panel *Remotes*), con nombre `origin` y la URL HTTPS del repo (`https://github.com/tu-usuario/sdd-workflow.git`).
 4. *Push* de `main` a `origin`. La primera vez, Fork o el gestor de credenciales de Git te piden iniciar sesión con **tu** cuenta en el navegador.

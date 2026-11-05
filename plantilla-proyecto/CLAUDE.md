@@ -1,6 +1,6 @@
 @AGENTS.md
 
-<!-- BORRADOR del workflow SDD + IA v0.7. Solo lo específico de Claude Code; lo portable va en AGENTS.md. -->
+<!-- Workflow SDD + IA v1.0. Solo lo específico de Claude Code; lo portable va en AGENTS.md. -->
 
 ## Específico de Claude Code
 

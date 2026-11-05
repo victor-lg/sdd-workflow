@@ -1,6 +1,6 @@
 # Clasificación de las notas originales
 
-**Estado:** BORRADOR · **Última revisión:** 2026-10-19
+**Estado:** ACEPTADO (v1.0) · **Última revisión:** 2026-10-19
 **Fuente:** `historial/notas-originales.md` (las líneas citadas son de ese fichero).
 
 Las notas originales son buenas y están alineadas con la línea base. Copiarlas tal cual a `AGENTS.md` sería un error: suman unas 180 reglas. Ese fichero se carga en cada sesión, así que ocuparían contexto, diluirían lo importante y mezclarían orientación con controles que debe imponer la configuración. Por eso cada bloque va a uno de cinco destinos.

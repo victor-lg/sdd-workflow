@@ -1,6 +1,6 @@
 # Hoja de ruta del workflow
 
-**Estado:** BORRADOR · **Última revisión:** 2026-10-23 · **Versión actual del workflow:** v0.22 (fase E)
+**Estado:** ACEPTADO · **Última revisión:** 2026-11-05 · **Versión actual del workflow:** v1.0
 
 El camino hasta v1.0 tiene cinco fases. Las tres primeras pueden solaparse; la cuarta necesita las anteriores terminadas.
 
@@ -39,7 +39,7 @@ Los borradores ya escritos en `plantilla-proyecto/` están marcados con ✔.
 - [x] Plantilla de PR ✔
 - [x] Skill `sdd-spec` ✔
 - [x] Plantillas de `README.md` (rutas sensibles y etapa), `docs/vision.md` y `.gitignore` ✔
-- [x] Esqueleto del plugin `plugin-sdd/` con `sdd-spec` ✔ (el formato del manifiesto, pendiente de verificar)
+- [x] Esqueleto del plugin `plugin-sdd/` con `sdd-spec` ✔ (formato del manifiesto verificado en v0.11)
 - [x] Marketplace del plugin: el propio repo del workflow (`.claude-plugin/marketplace.json`), validado e instalado con Claude Code 2.1.303 ✔ (subirlo a GitHub es la fase C)
 - [x] Skill `sdd-context` (a partir de las reglas de RAG de las notas)
 - [x] Skill `sdd-discover` (entrevista guiada; D01, D02)
@@ -76,11 +76,11 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 
 - [x] Qué funcionó, qué estorbó, qué faltó ✔ `historial/retrospectiva-1.md`.
 - [x] Ajustes pequeños aplicados ✔ v0.21 (interacciones entre reglas, rondas, diseño de pruebas, cómo revisar un PR).
-- [x] Revisión independiente ✔ `historial/revision-independiente-1.md` (31 hallazgos). Resueltos en v0.22 salvo las tres pruebas de C18–C20, que hace Víctor; V1–V7 a la v1.1.
-- [ ] v1.0 declarada en `CHANGELOG.md`.
+- [x] Revisión independiente ✔ `historial/revision-independiente-1.md` (31 hallazgos). Resueltos en v0.22; C18–C20 comprobados el 2026-11-05 (`historial/recorrido-1.md`); V1–V7 a la v1.1.
+- [x] v1.0 declarada en `CHANGELOG.md` ✔ (2026-11-05).
 - [x] Lista de mejoras candidatas para v1.1, cada una con la evidencia que la justifica ✔ `historial/retrospectiva-1.md`.
 
-## F. Segundo recorrido (en curso)
+## F. Segundo recorrido
 
 - [x] Inventario de discos (VIC-8), CI de E2E arreglada (#15) y cálculo nuevo con datos guardados (VIC-10) ✔
 - [x] Rediseño: VIC-13, VIC-11, VIC-14 y VIC-12 ✔ (2026-11-04, probado en el iPhone). Falta SPEC-CALC-003 v0.5 con las aclaraciones de VIC-12.
@@ -89,7 +89,7 @@ Se dejan para v1.x: `sdd-adr`, `sdd-bugfix`, guía de testing avanzado y `sdd-mu
 
 ## G. v1.1 (en preparación)
 
-Plan por bloques, con el porqué y el "hecho cuando" de cada uno: `docs/plan-v1.1.md`. Empieza al declarar la v1.0 (bloque 0).
+Plan por bloques, con el porqué y el "hecho cuando" de cada uno: `docs/plan-v1.1.md`. El bloque 0 (cerrar la v1.0) está hecho; sigue el bloque 1.
 
 ## Después de v1.0: cómo se mejora
 

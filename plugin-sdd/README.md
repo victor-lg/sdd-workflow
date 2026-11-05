@@ -1,4 +1,4 @@
-# Plugin `sdd` (BORRADOR, workflow SDD + IA v0.11)
+# Plugin `sdd` (workflow SDD + IA v1.0)
 
 Mitad "plugin" de la distribución del núcleo (ADR-0004, Q05). La otra mitad es el repo plantilla (`plantilla-proyecto/`).
 

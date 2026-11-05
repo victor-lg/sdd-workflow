@@ -9,7 +9,7 @@ referencias: []           # specs, issues, PRs, ADR relacionados
 ---
 
 <!--
-BORRADOR de plantilla del workflow SDD + IA v0.2, tomada de las notas originales.
+Plantilla del workflow SDD + IA v1.0, tomada de las notas originales.
 
 - Un ADR queda Aceptado cuando una persona fusiona su PR en `main` (P03).
   El agente lo redacta en estado Propuesto. Cuando la revisión termina sin

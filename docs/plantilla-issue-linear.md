@@ -1,4 +1,4 @@
-# Plantilla de issue para Linear (BORRADOR v0.10)
+# Plantilla de issue para Linear (v1.0)
 
 Las issues viven en Linear, no en GitHub (ADR-0003), así que esta plantilla no va en el repo del proyecto. Se configura una vez en Linear, en los ajustes del team → *Templates* → nueva plantilla de issue, y se pega el bloque de abajo como descripción.
 

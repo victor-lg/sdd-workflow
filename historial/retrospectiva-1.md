@@ -65,6 +65,6 @@ Borrador para revisar con Víctor (2026-10-23). Datos: `historial/recorrido-1.md
 ## Lo que falta para declarar la v1.0
 
 - [x] Que Víctor revise esta retrospectiva y decida qué mejoras entran ya y cuáles pasan a la v1.1 ✔
-- [x] Revisión independiente ✔ `historial/revision-independiente-1.md`. Hallazgos resueltos en v0.22; pendientes las pruebas C18–C20.
+- [x] Revisión independiente ✔ `historial/revision-independiente-1.md`. Hallazgos resueltos en v0.22; C18–C20 comprobados el 2026-11-05.
 - [x] Guía: "Cómo revisar un PR en GitHub" ✔ v0.21 (dónde están los AC, la CI, "Dónde mirar" y la evidencia).
-- [ ] Quitar las marcas "BORRADOR" de plantillas y skills; plugin 1.0.0; entrada v1.0 en el CHANGELOG.
+- [x] Quitar las marcas "BORRADOR" de plantillas y skills; plugin 1.0.0; entrada v1.0 en el CHANGELOG ✔ (2026-11-05).

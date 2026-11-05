@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- BORRADOR del workflow SDD + IA v0.22 (G4, ADR-0001-M1, ADR-0006). -->
+<!-- Workflow SDD + IA v1.0 (G4, ADR-0001-M1, ADR-0006). -->
 
 # sdd-review
 

@@ -22,7 +22,7 @@
   - C20: el sandbox corta la red sin proxy y oculta `~/.ssh`.
 - Quitar las marcas "BORRADOR" y las referencias desfasadas (C22), subir el plugin a 1.0.0 y escribir la entrada v1.0 en el CHANGELOG.
 
-**Hecho cuando:** v1.0 declarada en el CHANGELOG, con la evidencia de C18–C20 en `historial/recorrido-1.md`.
+**Hecho cuando:** v1.0 declarada en el CHANGELOG, con la evidencia de C18–C20 en `historial/recorrido-1.md`. ✔ Hecho el 2026-11-05.
 
 ## Bloque 1 — Base para cambiar el workflow sin romperlo
 

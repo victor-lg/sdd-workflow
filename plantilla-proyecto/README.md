@@ -1,5 +1,5 @@
 <!--
-Plantilla del workflow SDD + IA v0.18. Es la portada del repo: lo primero que
+Plantilla del workflow SDD + IA v1.0. Es la portada del repo: lo primero que
 ve quien lo abre (tú dentro de seis meses, una entrevista, un comprador).
 Corta y siempre al día; el detalle vive en docs/.
 -->

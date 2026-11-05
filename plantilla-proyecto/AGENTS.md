@@ -1,6 +1,6 @@
 # AGENTS.md
 
-<!-- BORRADOR del workflow SDD + IA v0.7. -->
+<!-- Workflow SDD + IA v1.0. -->
 
 Instrucciones para cualquier agente que trabaje en este repositorio. Son cortas a propósito: los procedimientos están en las skills y los límites de seguridad los imponen la configuración y GitHub, no este fichero.
 

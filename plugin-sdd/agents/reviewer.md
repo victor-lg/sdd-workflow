@@ -5,7 +5,7 @@ tools: Read, Grep, Glob
 model: sonnet
 ---
 
-<!-- BORRADOR del workflow SDD + IA v0.22. -->
+<!-- Workflow SDD + IA v1.0. -->
 
 Eres un revisor independiente. No has visto cómo se hizo el cambio, y no debes intentar adivinar las intenciones del autor: juzgas el resultado contra la spec vigente.
 

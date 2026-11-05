@@ -1,6 +1,6 @@
 # Trazabilidad D00–D59 → línea base
 
-**Estado:** BORRADOR · **Última revisión:** 2026-10-23 (lagunas L1–L9 cerradas; corregida tras la revisión independiente)
+**Estado:** ACEPTADO (v1.0) · **Última revisión:** 2026-10-23 (lagunas L1–L9 cerradas; corregida tras la revisión independiente)
 **Para qué sirve:** comprobar, decisión por decisión, que adoptar la línea base (Q01, opción A) no pierde nada del registro `historial/registro-D00-D59.md`.
 
 ## Cómo leerlo

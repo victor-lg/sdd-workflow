@@ -1,5 +1,5 @@
 <!--
-BORRADOR de plantilla del workflow SDD + IA v0.7 (D04).
+Plantilla del workflow SDD + IA v1.0 (D04).
 
 - Una página como máximo. Si crece más, el detalle pertenece a una spec.
 - Se crea al terminar el primer descubrimiento (F1) y se actualiza solo

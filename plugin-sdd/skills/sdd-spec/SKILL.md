@@ -3,7 +3,7 @@ name: sdd-spec
 description: Convierte una idea o necesidad en una especificación SDD verificable (FR/NFR/AC) con la plantilla del proyecto, audita su calidad y la entrega en un PR para aprobación humana. Úsala para crear o modificar cualquier spec en docs/specs/.
 ---
 
-<!-- BORRADOR del workflow SDD + IA v0.7, construido a partir del "PROMPT SPEC" de las notas originales. -->
+<!-- Workflow SDD + IA v1.0, construido a partir del "PROMPT SPEC" de las notas originales. -->
 
 # sdd-spec
 

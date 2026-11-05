@@ -2,14 +2,15 @@
 
 Repositorio del propio workflow: qué se ha decidido, qué está pendiente, las plantillas que se copiarán a cada proyecto y el material histórico. Todo en Markdown plano.
 
-- **Versión del workflow:** v0.22 (fase E: revisión independiente). Usable en el primer proyecto; la v1.0 se declara al cerrar los hallazgos de la revisión.
-- **Siguiente hito:** v1.0, que se declara cuando el primer recorrido completo supere el camino feliz y los casos negativos N1–N8.
-- **Última revisión:** 2026-10-23.
+- **Versión del workflow:** v1.0 (declarada el 2026-11-05): dos recorridos completos, casos negativos N1–N8 y pruebas C18–C20.
+- **Siguiente hito:** v1.1, por bloques (`docs/plan-v1.1.md`).
+- **Última revisión:** 2026-11-05.
 
 ## Cómo leer este repositorio
 
 - **Quiero saber qué es norma (o lo será):** `docs/linea-base-v1.md`.
-- **Quiero saber qué toca hacer ahora:** `docs/hoja-de-ruta.md`.
+- **Quiero saber qué toca hacer ahora:** `docs/hoja-de-ruta.md` y `docs/plan-v1.1.md`.
+- **Quiero saber qué significa un código o cómo se nombra algo:** `docs/glosario.md` y `docs/convenciones.md`.
 - **Quiero preparar el entorno:** `docs/guia-instalacion.md`.
 - **Quiero saber qué está pendiente de decidir:** sección 14 de `docs/linea-base-v1.md` (Q01–Q09 cerradas).
 - **Quiero ver una decisión ya tomada:** `docs/adr/` (ADR-0001 capa normativa; ADR-0002 ejecutor y perfiles de modelo; ADR-0003 plataforma y seguimiento; ADR-0004 Q05–Q09; ADR-0005 identidad del agente; ADR-0006 ajustes del primer recorrido).
@@ -27,6 +28,9 @@ sdd-workflow/
 ├── docs/
 │   ├── linea-base-v1.md          # ACEPTADA: principios, riesgo, gates, flujo, decisiones
 │   ├── hoja-de-ruta.md           # ciclo de versiones y siguientes pasos
+│   ├── plan-v1.1.md              # mejoras de la v1.1 por bloques
+│   ├── glosario.md               # qué significa cada código (G1–G6, R0–R2, N1–N8, M…)
+│   ├── convenciones.md           # nombres de ramas, commits, PR, issues y versiones (M42)
 │   ├── clasificacion-notas.md    # destino de cada bloque de las notas originales
 │   ├── trazabilidad-D00-D59.md   # dónde queda cada decisión del registro anterior
 │   ├── plantilla-issue-linear.md # plantilla de issue para configurar en Linear
@@ -34,7 +38,7 @@ sdd-workflow/
 │   ├── herramientas.md           # plugins, MCP y herramientas aprobadas (y descartadas)
 │   ├── ejemplos/workflows/       # workflows probados para copiar (tests Node + Playwright, publicación en Pages)
 │   └── adr/                      # decisiones del workflow ya tomadas (ADR-0001, ...)
-├── plantilla-proyecto/           # BORRADORES de los ficheros de cada proyecto (repo plantilla)
+├── plantilla-proyecto/           # ficheros de cada proyecto (repo plantilla)
 │   ├── README.md                 # portada del proyecto, etapa y rutas sensibles
 │   ├── AGENTS.md
 │   ├── CLAUDE.md
@@ -46,7 +50,7 @@ sdd-workflow/
 │   └── .github/                  # workflows/sdd.yml, sdd/checks.py, CODEOWNERS, plantilla de PR
 ├── entorno/                      # ajustes gestionados y de usuario de Claude Code, perfil Go (claude-go.sh)
 ├── .claude-plugin/marketplace.json  # este repo es el marketplace del plugin
-├── plugin-sdd/                   # BORRADOR del plugin de Claude Code (skills y subagentes)
+├── plugin-sdd/                   # plugin de Claude Code (skills y subagentes)
 │   ├── .claude-plugin/plugin.json
 │   ├── skills/                   # sdd-context, sdd-discover, sdd-spec, sdd-plan, sdd-implement, sdd-review
 │   └── agents/reviewer.md
@@ -56,7 +60,10 @@ sdd-workflow/
     ├── notas-originales.md
     ├── recorrido-1.md            # primer recorrido: métricas, desviaciones, N1–N8
     ├── retrospectiva-1.md
-    └── revision-independiente-1.md
+    ├── revision-independiente-1.md
+    ├── recorrido-2.md            # segundo recorrido: rediseño de la calculadora
+    ├── retrospectiva-2.md        # mejoras M1–M42 de la v1.1
+    └── analisis-herramientas-1.md  # herramientas externas evaluadas para la v1.1
 ```
 
 ## Estados que usan los documentos

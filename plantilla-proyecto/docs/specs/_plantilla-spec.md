@@ -10,7 +10,7 @@ transversales: []         # specs SPEC-XCUT-* que aplican, citadas por ID
 ---
 
 <!--
-BORRADOR de plantilla del workflow SDD + IA v0.10.
+Plantilla del workflow SDD + IA v1.0.
 
 - Requisitos compartidos: si un requisito afecta a varias capacidades, va en
   una spec propia con área XCUT (SPEC-XCUT-001) y aquí solo se cita por ID
