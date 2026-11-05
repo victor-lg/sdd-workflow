@@ -7,8 +7,10 @@ Fecha: 2026-11-04. Fuente: los repos clonados en `C:\Users\victor\Documents\herr
 Para cada herramienta:
 - qué problema nuestro resuelve, con evidencia de los recorridos;
 - qué instala y qué ejecuta;
-- licencia y mantenimiento;
-- riesgo de inyección y de cadena de suministro;
+- mantenimiento, y si el núcleo es abierto o hay piezas de pago o cerradas;
+- licencia, solo cuando copiamos su código o texto a nuestros repos (para usar una herramienta en uso personal no es decisiva);
+- riesgo de inyección y de cadena de suministro, según **dónde se sitúa**: fuera del bucle del agente (un panel que usas tú) o dentro (lee o reescribe lo que ve el modelo, o actúa con sus permisos);
+- **coste-beneficio** (añadido el 2026-11-05): el beneficio se mide contra problemas observados (coste en dólares, picos de contexto, tiempo de Víctor); el coste es instalación, mantenimiento, riesgo residual tras configurarla y dependencia. Un riesgo que se apaga con configuración es un coste, no un veto. Solo vetan tres cosas: una trifecta que no se puede romper, reescribir nuestras instrucciones o configuración sin revisión, o ver credenciales en tránsito sin necesitarlas;
 - portabilidad (Claude Code, OpenCode u otros);
 - recomendación: **adoptar** (tal cual), **adaptar** (copiar y ajustar a nuestro workflow), **inspirarse** (tomar ideas), **piloto** (probar con métrica) o **descartar**.
 
@@ -16,7 +18,7 @@ Para cada herramienta:
 
 1. **Una skill de terceros es un conjunto de instrucciones.** No se instala desde fuera ni se actualiza sola. Se copia una versión fijada dentro del plugin `sdd`, se revisa el texto y se cita la fuente. Todas las que interesan tienen licencia MIT, que permite copiar si se conserva el aviso de licencia.
 2. **No se abre Claude Code dentro de un repo de terceros.** Los ajustes y hooks del proyecto se cargan al abrirlo. Hubo dos vulnerabilidades en 2026: CVE-2025-59536 (ejecución antes del diálogo de confianza) y CVE-2026-21852 (desvío de `ANTHROPIC_BASE_URL` y fuga de la clave). La carpeta `herramientas` se lee desde fuera.
-3. **Sin hooks de terceros.** Se toma el texto de la skill y, si hace falta un hook, lo escribimos nosotros (M25).
+3. **Sin hooks de terceros que decidan.** Se toma el texto de la skill y, si hace falta un hook que bloquee, cambie un comando o añada contexto, lo escribimos nosotros (M25). Excepción (2026-11-05): los hooks que solo **informan** del estado a un panel (Herdr, Sheprd) se aceptan tras leerlos, porque no deciden nada ni cambian lo que ve el modelo.
 4. **La "trifecta letal"** (Simon Willison, citada en la guía de seguridad de ECC) sirve para evaluar cada pieza nueva. Si una misma ejecución tiene **datos privados + contenido no fiable + salida al exterior**, una inyección puede sacar datos. Hay que romper al menos una de las tres.
 
 ---
@@ -198,6 +200,174 @@ Para cada herramienta:
 
 ---
 
+## Tercera tanda (2026-11-05)
+
+Repos leídos en `herramientas` (sin ejecutar nada) y webs de los productos sin repo. Se agrupan por el problema que resuelven.
+
+### 13. Reducir lo que lee el modelo: rtk, Headroom y LeanCTX
+
+**rtk** (`rtk-ai/rtk`)
+- **Qué es:** un binario de Rust que intercepta los comandos de shell del agente (con un hook *PreToolUse* en Claude Code) y comprime su salida antes de que la lea el modelo. Algunos ejemplos:
+  - en tests, solo los fallos;
+  - en `git diff`, menos contexto;
+  - en `ls` y `tree`, el árbol con recuentos.
+  
+  Promete hasta un 90 % menos en salidas de shell y explica con honestidad que el ahorro en la factura es menor. Solo actúa en Bash, no en las herramientas `Read` o `Grep`.
+- **Licencia:** dos ediciones con el mismo binario. `rtk` es Apache-2.0 más BUSL-1.1 (gratis en uso propio). `rtk-oss` es solo Apache-2.0, con los filtros pero sin el motor. El proxy es BUSL.
+- **Riesgos:**
+  - **Esconde información por diseño.** Un `git diff` con menos contexto o una salida de tests recortada pueden ocultar justo lo que hacía falta; nunca debe usarse en los revisores.
+  - **Reescribe los comandos del agente,** así que se suma a los hooks que controlamos (M25).
+- **Encaje:** la poda del contexto (bloque 2). Los picos del 48–57 % en VIC-12 y el coste con modelos de pago por token (Go).
+- **Recomendación: piloto** de la edición completa `rtk` (la BUSL permite el uso propio y nuestro workflow es privado; revisado el 2026-11-05, antes se proponía `rtk-oss` solo por la licencia), en una entrega de implementación, midiendo el pico de contexto y si el agente tuvo que repetir comandos sin filtro. Sin su proxy, por el mismo motivo que Headroom. Nunca para revisar.
+
+**Headroom** (`headroomlabs-ai/headroom`)
+- **Qué es:** comprime todo lo que lee el agente (salidas de herramientas, registros, ficheros e historial). Funciona como librería, como proxy local (`headroom wrap claude` hace pasar el tráfico de Claude Code por él) o como servidor MCP. Añade memoria compartida entre agentes y `headroom learn`, que **escribe correcciones en `CLAUDE.md` o `AGENTS.md`** a partir de sesiones fallidas.
+- **Licencia:** Apache-2.0, con una versión de pago para equipos.
+- **Riesgos:**
+  - **El proxy ve todo el tráfico y las credenciales.** Es el mismo patrón que la vulnerabilidad de `ANTHROPIC_BASE_URL` de 2026, aunque aquí sea local.
+  - **Reescribe tus instrucciones.** `learn` cambia los ficheros de instrucciones sin revisión, lo contrario de la M25 y una vía de contaminación del contexto.
+  - **Telemetría activada por defecto** (se apaga con `HEADROOM_TELEMETRY=off`).
+- **Recomendación: descartar.** rtk cubre lo útil con menos superficie de riesgo.
+
+**LeanCTX** (`yvgude/lean-ctx`)
+- **Qué es:** una "pasarela de contexto": selección, compresión, permisos y registro de lo que ve el agente, con CLI, MCP, hooks y proxy.
+- **Licencia:** *open core*. La parte pública es Apache-2.0, pero hay componentes privados y comerciales y un acuerdo de contribución (CLA); la licencia se rige por un fichero de matriz por rutas.
+- **Recomendación: descartar.** Se solapa con rtk y con nuestros propios controles, y también trae proxy. La licencia no es el motivo (revisado el 2026-11-05): si el piloto de rtk no convence, se puede volver a mirar.
+
+### 14. Contexto del código para revisar: code-review-graph
+
+- **Qué es:** construye en local (SQLite, con Tree-sitter) un grafo de funciones, llamadas, importaciones y tests, y se lo da al agente por MCP. Así, en una revisión lee solo lo que puede verse afectado: el "radio de impacto". Está en `tirth8205/code-review-graph`, con licencia MIT, sin telemetría y con *embeddings* en la nube solo si se activan.
+- **Riesgos:** `install` escribe entradas MCP, hooks, skills y reglas en la configuración de todos los agentes que detecta, lo que es muy invasivo.
+- **Encaje:** los revisores ya leen "el código tocado, no solo el diff". En proyectos pequeños como la calculadora, `grep` basta (Kem: la mayoría no necesita un grafo).
+- **Recomendación: en observación** para un proyecto grande o con mucho código heredado. Si llega, usar solo su CLI en la CI para calcular el radio de impacto y pasarlo al revisor, sin el `install`.
+
+### 15. Flujos completos de otros: Gentle-AI, Engram y la plantilla SDD
+
+**Gentle-AI** (`Gentleman-Programming/gentle-ai`, MIT)
+- **Qué es:** configura 17 agentes con su propio flujo:
+  - **ODD:** las tareas se dimensionan por comprensión, riesgo y si se pueden retomar, no por número de ficheros.
+  - **RDD:** la revisión se ata a una versión congelada del cambio y caduca si cambia.
+  - Tests primero por defecto, una lista de rutas prohibidas (`~/.ssh`, `.env`) y su memoria Engram.
+- **Riesgos:**
+  - Sustituye la configuración de los agentes por la suya: es un flujo que compite con el nuestro.
+  - Telemetría anónima activada por defecto.
+  - El sistema de revisión es complejo (tokens, contratos y claves locales).
+- **Lo que interesa:**
+  - **"Delegar por un motivo":** solo se lanza un subagente para explorar, para trabajos de escritura independientes, para relevar una sesión larga o como verificador independiente en lo arriesgado. Lo respaldan con mediciones propias, de una sola ejecución.
+  - **La revisión atada a una versión concreta:** si el cambio se modifica, la revisión deja de valer.
+- **Recomendación: inspirarse.**
+  - "Delegar por un motivo" va a la regla de subagentes de `sdd-implement` (M20).
+  - La revisión atada al commit refuerza la M8: el PR guarda el SHA que vio cada revisor y la CI compara.
+  - No instalarlo.
+
+**Engram** (`Gentleman-Programming/engram`, MIT)
+- **Qué es:** memoria persistente para agentes. Un binario de Go con SQLite y búsqueda de texto, por MCP, CLI y TUI. Es local por defecto, con sincronización por Git o nube opcional.
+- **Recomendación: descartar por ahora.** Nuestra memoria son ficheros revisables: `.tareas/`, ADR, specs e historial. Una memoria que el agente escribe solo es un canal de instrucciones sin revisión (Kem: el contexto se envenena; Jake: los ficheros son la memoria).
+
+**engram.so** (Softmax Data, MIT, con nube)
+- **Qué es:** otro producto con el mismo nombre. Memoria tipada con MCP alojado.
+- **Recomendación: descartar.** Mismo motivo, y además los datos salen a un servicio externo.
+
+**Plantilla SDD de Juan Carlos Lagos** (`juanklagos/spec-driven-development-template`, MIT)
+- **Qué es:** una plantilla y un curso de SDD, en inglés y español, sobre GitHub Spec Kit. Unos scripts comprueban la regla de "no hay código sin spec aprobada, plan coherente y consentimiento registrado". Incluye un registro de decisiones en `bitacora/`, criterios con notación **EARS** y un comando `/sdd:help` que dice en qué fase estás y cuál es el siguiente paso.
+- **Comparación:** nuestros controles son más fuertes (ruleset, CI y trazabilidad AC ↔ tests). Su consentimiento registrado por script equivale a nuestra fusión de la spec (G1).
+- **Recomendación: inspirarse en dos cosas.**
+  - **EARS** ("Cuando <suceso>, el sistema deberá…") como forma recomendada de escribir FR y AC en la plantilla de spec (con la M31).
+  - **Un comando de estado,** `sdd-status` (M41): lee Linear y GitHub y dice en qué fase está cada issue (F0–F6), qué está esperando y cuál es el siguiente paso. Es determinista y responde en parte a la petición de "ver qué está haciendo el agente".
+
+### 16. Gobierno de Claude Code: baseline (friedbot studio)
+
+- **Qué es:** una capa de gobierno para Claude Code, con licencia Apache-2.0 y en alfa pública (v0.26):
+  - **27 hooks** que bloquean llamadas a herramientas antes de ejecutarse;
+  - **permisos con caducidad** (por ejemplo, `/grant-commit` habilita los commits solo durante 15 minutos), y lo mismo para el push;
+  - fases obligatorias, con excepción anotada si se salta una;
+  - una "constitución" en `CLAUDE.md`, un guardián de `.env`;
+  - desactivar un hook exige una enmienda escrita.
+- **Encaje:** es casi exactamente nuestra M25 (controles en vez de instrucciones) hecha por otros, y los permisos con caducidad son una buena idea para la escalera de autonomía (M24).
+- **Riesgos:** está en alfa, tiene su propia constitución y flujo, y se instala con `npx`, que toca muchos ficheros.
+- **Recomendación: inspirarse, a fondo.** Es la mejor referencia para diseñar nuestros hooks del bloque 2. No instalarlo.
+
+**Lectura del código (2026-11-05, commit `e22e571`).** 27 hooks en Node (unas 2.700 líneas, sin contar `lib/`), registrados en `.claude/settings.json`. Lo que nos sirve para M25:
+
+| Idea de baseline | Cómo funciona | Para nosotros |
+| --- | --- | --- |
+| **Consentimiento que el agente no puede falsificar** | Al escribir tú `/grant-commit`, un hook `UserPromptSubmit` (corre antes de que el modelo vea el mensaje, fuera de sus herramientas) deja una marca con hora. Otro hook bloquea que el agente escriba esa marca, también por Bash. Duración: commit 900 s, push 300 s, marca 120 s | Base de los permisos con caducidad de la escalera (M24): p. ej. `/permitir-merge VIC-n` válido para un PR y unos minutos |
+| **Cubrir también la vía Bash** | Lo vieron en su propia auditoría: los guardas de Write/Edit no ven `echo > fichero`, así que repiten el bloqueo en el guarda de Bash | Regla de diseño: cada guarda de ficheros tiene su pareja en Bash |
+| **Dos niveles para comandos destructivos** | Patrones en un JSON: "bloquear siempre" y "preguntar cada vez" (`git reset --hard`, `push --force`, `npm publish`…) | Patrones en configuración, no en código; casi todo lo nuestro ya lo cubren el sandbox y `permissions.deny` |
+| **`deny` de `git add -A` y `git add .`** | Obliga a añadir ficheros por nombre | Habría evitado los ficheros del sandbox sin seguimiento que vimos en el recorrido 2 (va a M16) |
+| **Guarda de fugas por `.gitignore`** | En cada `git commit` mira lo preparado contra una lista de rutas que nunca deben subirse; sin red; falla cerrado si no puede mirar | Pareja local de gitleaks (M33) |
+| **No se puede escribir PASS si el último test falló** | `verify_pass_guard` compara con el último resultado guardado por el hook que ejecuta los tests | Encaja con la conciliación: el revisor no cierra un hallazgo sin prueba (bloque 4) |
+| **Guarda de `.env`** | Bloquea escribir `.env*` salvo plantillas (`.env.example`…) | Adoptar la idea tal cual |
+
+Lo que no tomamos: los guardas de su propio flujo (épicas, *swarm*, dirección, PlantUML, diagramas en specs), su memoria automática en `SessionStart`/`Stop`/`PreCompact` (mismo motivo que Engram) y el orden TDD obligatorio (lo cubren mejor los tests en la CI y las mutaciones).
+
+**Límite que hay que tener presente:** los guardas por patrones sobre comandos de shell se pueden esquivar (`bash -c`, variables, scripts). Son una segunda capa que evita errores del agente; la seguridad real sigue siendo el sandbox, los ajustes gestionados y la CI.
+
+### 17. Paneles para ver y lanzar agentes: Cezar, Mission Control, Herdr, Alera y DevBoard
+
+Herdr y Alera se leyeron en su código el 2026-11-05; antes solo se había visto su web.
+
+Responden a la pregunta de "ver gráficamente qué hace cada agente". Todos parten de varios agentes en paralelo, cada uno en su *worktree*. Nuestra regla es un agente con subagentes de revisión, así que lo útil de estas herramientas es **ver** y **lanzar desde el móvil**, no la paralelización.
+
+| Herramienta | Qué es | Licencia | Nota de seguridad | Recomendación |
+| --- | --- | --- | --- | --- |
+| **Cezar** (`open-mercato/cezar`) | Panel web (desde el móvil hace falta un túnel tipo Tailscale, porque solo escucha en local) que lanza Claude Code, OpenCode y otros con tu sesión; un *worktree* por tarea, coste por proyecto, tareas programadas, conexión con Linear y GitHub; datos en ficheros | MIT | Escucha solo en `127.0.0.1` y la telemetría es opcional. Lanza Claude Code con `--permission-mode dontAsk` (deniega lo no permitido, compatible con nuestro sandbox), pero a otro agente (Antigravity) lo lanza saltándose los permisos. En un VPS sería un control remoto de tus repos | **Alternativa** a Herdr si se quiere un panel web con Linear y coste por proyecto |
+| **Mission Control** (`builderz-labs/mission-control`) | Plano de control autoalojado (Next.js y SQLite) con tareas, agentes, costes, aprobaciones y auditoría, centrado en OpenClaw | MIT | En alfa; cuentas y claves de API propias | **Descartar:** demasiado para un usuario |
+| **Herdr** (`herdrdev/herdr`) | Multiplexor de terminal (tipo tmux) en un binario de Rust: marca cada panel como trabajando, bloqueado o en espera; las sesiones siguen vivas al cerrar o perder el SSH; varias máquinas en una ventana | Apache-2.0 | Leído el código: sin telemetría; comprueba actualizaciones cada 30 min y descarga de herdr.dev un catálogo para detectar agentes (ambas cosas configurables); instala hooks de estado en `~/.claude/settings.json` solo si se activa la integración; su API de socket deja a un agente lanzar paneles y escribir a otros (no lo usaríamos; el sandbox probablemente lo impide, a comprobar) | **Piloto** tras el bloque 5, en WSL. Desde el móvil, por SSH con Moshi; sirve también con OpenCode |
+| **Alera** (`leynier/alera`) | App de escritorio (Flutter y Rust) para agentes en paralelo, cada uno en su *worktree*; terminales persistentes; app móvil | MIT | Leído el código: hooks de estado opcionales en `~/.claude/settings.json`; informes de fallos a Sentry desactivados por defecto; cuentas en su nube (Google o GitHub); **MCP remoto** opcional que en nivel `full` puede ejecutar cualquier comando (la trifecta completa); **"Watch, Fix and Merge"** hace merge solo, saltándose nuestra escalera; la app de iOS aún no está publicada | **Descartar:** mucha superficie para un usuario y choca con nuestras puertas |
+| **DevBoard AI** (devboardai.com) | Kanban de pago (24 $) para agentes | Propietario | — | **Descartar:** solo macOS y tú usas Windows con WSL |
+
+### 18. Acceso desde el móvil: Moshi
+
+- **Qué es:** un terminal para iOS y Android con SSH, Mosh o ET a tu máquina (incluida WSL), pensado para agentes de código. Ofrece notificaciones, voz y claves SSH protegidas con Face ID. No pasa por un relé intermedio. Su complemento `moshi-hook` añade una vista de chat, aprobaciones desde el reloj y un visor de diffs.
+- **Riesgos:**
+  - Exige abrir SSH a tu máquina; lo razonable es hacerlo por una red privada tipo Tailscale, no a internet.
+  - No dice si es de código abierto.
+- **Encaje:** **Remote Control solo funciona con modelos de Anthropic.** Si en el bloque 7 usamos OpenCode con un modelo de Go, Moshi es la forma de seguir manejándolo desde el móvil.
+- **Recomendación: piloto junto con Herdr** tras el bloque 5 (revisado el 2026-11-05), e imprescindible en el bloque 7 si se adopta OpenCode.
+
+### 19. Gestión de proyectos: Huly
+
+- **Qué es:** sustituto abierto de Linear, Slack y Notion a la vez, con sincronización bidireccional con GitHub Issues. Sus funciones de IA están "por llegar".
+- **Recomendación: descartar.** Linear funciona y es una decisión tomada (ADR-0003). Cambiar costaría migrar la integración con GitHub y las automatizaciones sin una mejora observada que lo pida.
+
+### 20. Interfaz gráfica sobre Herdr: Sheprd (`sheprd-labs/sheprd`)
+
+Leído el código el 2026-11-05 (commit `88a7ecf`).
+
+- **Qué es:** una app de escritorio nativa (Rust y GPUI, sin Electron) para Windows, Linux y macOS, que es un **cliente gráfico de Herdr**: los terminales y los agentes viven en el demonio de Herdr y Sheprd los dibuja. Desde Windows se conecta a las distribuciones de WSL. Lo útil para nosotros:
+  - una barra lateral con cada agente y su estado (en espera, trabajando, te necesita);
+  - **revisar los cambios del agente** como un diff con notas por línea que se le envían de vuelta;
+  - **pestañas de navegador con anotaciones**: señalas un elemento de la página local y la nota llega al agente (útil para la UI de la calculadora);
+  - seguimiento de PR, uso del plan de cada servicio, CPU y memoria;
+  - control remoto desde el móvil (app de iOS, PWA), por la red local o Tailscale, con emparejamiento aprobado en los dos lados y certificado propio.
+- **Licencia y mantenimiento:** Apache-2.0, muy activo (commit del mismo día); versiones por fecha y solo `main` recibe correcciones.
+- **Riesgos y cómo se apagan:**
+  - **El panel de uso lee el token de Claude Code** (`.credentials.json`) y llama a `api.anthropic.com`. Es el mismo destino que usa Claude Code; se puede dejar apagado.
+  - El control remoto abre un puerto: opcional, apagado por defecto, y solo por Tailscale.
+  - Los *sandboxes* en la nube (Fly, OpenSandbox) son opcionales; no los usaríamos.
+  - El instalador recomendado es `irm … | iex`; mejor el instalador de las *releases* comprobando su SHA-256, y sin el canal beta.
+  - Proyecto grande y que cambia cada día: fijar una versión y actualizar a mano.
+- **Encaje:** es la interfaz gráfica que pediste para "ver qué hace el agente", y se sitúa **fuera del bucle del agente**: lo usas tú. La revisión de diffs con notas y las anotaciones del navegador cubren justo la parte en la que tú aportas (pruebas del producto y decisiones).
+- **Recomendación: piloto junto con Herdr** tras el bloque 5. Herdr primero en la terminal; Sheprd encima para la vista gráfica. Moshi sigue para los terminales desde el móvil, porque el control remoto de Sheprd por ahora solo maneja chats.
+
+### Revisión coste-beneficio de los descartes (2026-11-05)
+
+Revisados con el criterio de coste-beneficio añadido a los criterios. La mayoría de los descartes no eran por seguridad, sino porque no resolvían un problema observado o ya lo cubría otra pieza.
+
+| Herramienta | Beneficio para nosotros | Coste y riesgo | ¿Se mitiga configurándola? | Decisión revisada |
+| --- | --- | --- | --- | --- |
+| **Headroom** | Alto en teoría: comprime también lo que entra por `Read`, no solo por Bash. VIC-12 costó unos 84 $ con picos del 48–57 % de contexto | Su modo para Claude Code es un proxy que ve el tráfico y las credenciales; `learn` reescribe instrucciones; telemetría activada | En parte: telemetría apagada y sin `learn`. El proxy no; queda el modo MCP o librería | **Cambia a segunda opción:** si rtk no baja los picos lo suficiente, piloto en modo MCP, sin proxy y medido |
+| **Alera** | Interfaz gráfica, "Watch and Fix" | Nube, MCP remoto, merge automático | Sí: todo es opcional y viene apagado | **Cambia a "por detrás de Sheprd":** no está vetada; Sheprd da lo mismo con menos piezas |
+| LeanCTX | El mismo que rtk o Headroom | Proxy y piezas cerradas | En parte | Sigue fuera: no aporta sobre los otros dos |
+| Engram (los dos) | Memoria entre sesiones; no hemos observado un fallo que una memoria automática resolviera | Una memoria que escribe el agente sin revisión es una vía de inyección persistente | No sin perder lo que la hace útil | Se mantiene |
+| Gentle-AI, ECC | Ideas ya tomadas (M20, M8, AgentShield, guía de seguridad) | Instalarlas sustituye nuestra configuración o carga cientos de skills | No | Se mantiene: el beneficio ya lo tenemos |
+| Mission Control | Panel, aprobaciones y auditoría | Pensado para equipos y para OpenClaw | — | Se mantiene: poco beneficio para un usuario |
+| DevBoard AI | Kanban de agentes | Solo macOS | — | Se mantiene: no funciona en tu equipo |
+| Huly | Ninguno observado | Migrar Linear y su integración | — | Se mantiene |
+
+---
+
 ## Resumen
 
 | Herramienta | Recomendación | Mejora |
@@ -217,3 +387,17 @@ Para cada herramienta:
 | knip | Adoptar en JS/TS | M23 |
 | jscpd | Adoptar con baseline (solo duplicación nueva) | M23 |
 | lefthook | Adoptar como gestor de hooks de Git | M33 y M25 |
+| rtk (edición completa, sin proxy) | Piloto en implementación, nunca en revisión | Poda del contexto |
+| Headroom | Segunda opción si rtk no basta (modo MCP, sin proxy) | Poda del contexto |
+| LeanCTX | Descartar | — |
+| code-review-graph | En observación (proyecto grande) | G4 |
+| Gentle-AI | Inspirarse: delegar por un motivo y revisión atada al commit | M20 y M8 |
+| Engram (los dos) | Descartar: la memoria son ficheros revisables | — |
+| Plantilla SDD de Lagos | Inspirarse: EARS y comando de estado | M31 y M41 |
+| baseline | Inspirarse a fondo para los hooks | M25 y M24 |
+| Herdr | Piloto como panel en la terminal, con Moshi para el móvil | Bloque 5 |
+| Cezar | Alternativa si se quiere un panel web con Linear | Bloque 5 |
+| Sheprd | Piloto como interfaz gráfica sobre Herdr | Bloque 5 |
+| Alera | Por detrás de Sheprd (no vetada) | — |
+| Mission Control, DevBoard AI, Huly | Descartar | — |
+| Moshi | Piloto junto con Herdr; imprescindible si se adopta OpenCode | Bloques 5 y 7 |

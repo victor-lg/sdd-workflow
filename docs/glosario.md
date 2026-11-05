@@ -23,7 +23,7 @@ Idea → Descubrir → Spec (PR) → Issue en Ready → Implementar (PR) → Rev
 
 | Código | Qué es | Ejemplo |
 | --- | --- | --- |
-| `VIC-N` | Issue de Linear (team "Victor") | VIC-12, "Dibujo 3D y movimiento" |
+| `VIC-N` | Issue de Linear (team "Desarrollo", clave `VIC`) | VIC-12, "Dibujo 3D y movimiento" |
 | `#N` | Pull request (PR) de GitHub | #33 |
 | `SPEC-AREA-NNN` | Especificación: qué debe hacer la app | SPEC-CALC-003, presentación |
 | `FR-NN` | Requisito funcional dentro de una spec: una regla de comportamiento | FR-08, borrar una serie |
@@ -32,6 +32,7 @@ Idea → Descubrir → Spec (PR) → Issue en Ready → Implementar (PR) → Rev
 | `SPEC-XCUT-*` | Spec transversal, compartida por varias | — |
 | `ADR-NNNN` | Registro de una decisión de arquitectura y su porqué | ADR-0003, three.js |
 | `vX.Y` | Versión de una spec, del workflow o de la app | SPEC-CALC-003 v0.5, workflow v0.23 |
+| `M-NN` | Mejora del workflow | M42, convenciones (`docs/convenciones.md`) |
 
 Hay dos series de ADR: los del **proyecto** (`calculadora-discos/docs/adr/`, por ejemplo ADR-0003 three.js) y los del **workflow** (`sdd-workflow/docs/adr/`, por ejemplo ADR-0006 lo que puede hacer Claude con el navegador). Comparten numeración, pero no son los mismos.
 

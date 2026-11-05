@@ -33,6 +33,7 @@
 | **M36** | El repo `sdd-workflow` se trabaja como un proyecto más: el agente en WSL abre PR, la CI valida y tú fusionas. Se acaba copiar desde este chat a la carpeta de Windows |
 | **M35** | Evaluaciones del propio workflow (`claude plugin eval`). Los casos N1–N8 y el comportamiento clave de cada skill (`sdd-plan` se para si la issue no está en *Ready*, `sdd-review` no pasa contexto de más…) se ejecutan en la CI del workflow |
 | **Autoría** | `"attribution": {"commits": false, "pullRequests": false}` en los ajustes de usuario. Se quitan de `AGENTS.md` y de la plantilla de PR el `Co-Authored-By`, el pie "Generated with" y el apartado "Perfil y modelo". El autor de los commits del agente pasa a ser tu cuenta (variables `GIT_AUTHOR_*`), comprobando en el primer PR qué autor deja el squash |
+| **M42** | Convenciones de nombres y mensajes en `docs/convenciones.md` (ramas `tipo/vic-N-…`, Conventional Commits con `Refs: VIC-N` en el pie, títulos de issue y PR, versiones). `AGENTS.md`, plantillas y skills remiten a ese documento. Linear ya está preparado (team "Desarrollo", etiquetas Tipo, Riesgo y Origen, plantillas, proyecto del workflow) |
 | **Medición** | `sdd-metricas` amplía lo que guarda: rondas de G4, hallazgos (confirmados y descartados), puntuación de mutación cuando exista, defectos escapados (M10) e intervenciones humanas. `resumen-metricas.py` los resume por issue |
 
 **Hecho cuando:** un primer PR del workflow, abierto por el agente, pasa la CI con las evaluaciones, y sus commits no mencionan a Claude.
@@ -43,7 +44,7 @@
 
 | Mejora | Qué se hace |
 | --- | --- |
-| **M25** | Inventario de cada regla de `AGENTS.md`, `CLAUDE.md` y las skills: instrucción o control, si se ha incumplido y si es mecánica. Las mecánicas o incumplidas pasan a **hooks de Claude Code** o a la **CI** |
+| **M25** | Inventario de cada regla de `AGENTS.md`, `CLAUDE.md` y las skills: instrucción o control, si se ha incumplido y si es mecánica. Las mecánicas o incumplidas pasan a **hooks de Claude Code** o a la **CI**. Referencia para diseñarlos: los 27 hooks de baseline (friedbot studio), leídos en `historial/analisis-herramientas-1.md` §16. Primeros candidatos: consentimiento con caducidad que el agente no puede falsificar (base de M24), guarda de `.env`, `deny` de `git add -A`/`git add .`, guarda de fugas por `.gitignore` y no escribir PASS sin un test en verde. Cada guarda de ficheros lleva su pareja en Bash |
 | **M16** | Primer hook: bloquear `git push -u`, `git branch --set-upstream-to` y `git config` |
 | **M12** | Hook: escrituras de capturas fuera del repo (`/tmp`) |
 | **M5** | Script que comprueba que `checks-sdd` no quedó cancelado antes de dar el PR por listo |
@@ -79,7 +80,7 @@
 | Mejora | Qué se hace |
 | --- | --- |
 | **Reconciliación** | Cada revisor cierra sus propios hallazgos en la ronda siguiente. Para descartar un *debe corregirse* o un *importante* hace falta una prueba concreta (test, línea o cita), y si no la hay, se pregunta. Los hallazgos tienen formato fijo y la CI comprueba que todos tienen resolución. Se aplica el filtro "¿puede un usuario real llegar aquí?" y se exige una prueba por hallazgo (reglas del adversarial de Kem) |
-| **M8** | La lista de "cambios tras la última ronda" la calcula la CI (diff desde el commit que vio el último revisor), no el agente |
+| **M8** | La lista de "cambios tras la última ronda" la calcula la CI (diff desde el commit que vio el último revisor), no el agente. Cada revisión queda atada al SHA que vio (idea de la revisión con recibo de Gentle-AI) |
 | **M13** | Encargo del revisor de spec: cruzar cada FR con los AC que lo citan |
 | **M15** | Si dos revisores leen la spec de forma distinta, el agente pregunta; la respuesta se anota como aclaración y se pasa a la spec al cerrar la issue |
 | **M1** | Camino corto para aclaraciones: un PR de spec, un revisor, una ronda |
@@ -112,7 +113,7 @@
   - **Fuente de verdad:** el repo, no el Project.
   - **La app:** queda para el diseño visual y la exploración.
 - **M18:** lo que puede hacer Claude con el navegador, si se sigue usando, queda recogido en el mismo ADR.
-- **M4 y M20:** "Refs" por defecto con prueba manual; una sesión por PR también en entregas partidas, con el estado en `.tareas/`.
+- **M4 y M20:** "Refs" por defecto con prueba manual; una sesión por PR también en entregas partidas, con el estado en `.tareas/`. Los subagentes se lanzan solo por un motivo explícito: explorar, verificar de forma independiente o relevar una sesión larga ("delegar por un motivo", de Gentle-AI).
 - **M28:** la plantilla de la issue de Linear lleva el contrato: alcance, fuera de alcance, cuándo está hecho, ficheros permitidos y qué hacer si se bloquea.
 
 **Hecho cuando:** el ADR-0007 está aceptado, el ruleset y CODEOWNERS de la calculadora están ajustados (eso lo haces tú) y una entrega completa pasa sin copiar nada desde este chat.
@@ -123,7 +124,8 @@
 
 | Mejora | Qué se hace |
 | --- | --- |
-| **M31** | `sdd-discover` adapta `grilling` y `domain-modeling` de Pocock: rondas sobre un árbol de decisiones, respuesta recomendada en cada pregunta, hechos buscados por el agente, glosario del dominio y fin cuando no queda nada sin decidir |
+| **M31** | `sdd-discover` adapta `grilling` y `domain-modeling` de Pocock: rondas sobre un árbol de decisiones, respuesta recomendada en cada pregunta, hechos buscados por el agente, glosario del dominio y fin cuando no queda nada sin decidir. La plantilla de spec recomienda escribir FR y AC con notación EARS ("Cuando…, la app deberá…") |
+| **M41** | `sdd-status`: un comando que lee Linear y GitHub y dice en qué fase está cada issue (F0–F6), qué espera y cuál es el siguiente paso. Idea de la plantilla SDD de Juan Carlos Lagos |
 | **M40** | Plantilla con `architecture.md` corto, `vision.md` como PRD ligero (salida de la entrevista) y modelo de amenazas solo en R2, con los requisitos de seguridad como NFR y AC |
 | **M32** | Paquete de diseño (`design-system.md` con referencias visuales): fundamentos, componentes con todos sus estados y comportamiento |
 | **M21 y M14** | `sdd-verify`, adaptada de pstack (`create`/`maintain-verification-skill`) con el paso de Kem: genera para cada proyecto el guion que arranca la app, la maneja como un usuario, guarda pruebas y compara con la referencia visual; se prueba rompiendo una función |
@@ -150,6 +152,10 @@ Se deciden con datos del próximo proyecto, no antes:
 - **OpenSpec** como formato de spec, con nuestros controles encima.
 - **Ponytail** (solo el texto de la skill) en una entrega, comparando con y sin.
 - **Jev** cuando haya acceso, como juez de la reconciliación o para elegir modelo.
+- **rtk** (edición completa, sin su proxy) en una entrega de implementación, midiendo el pico de contexto; nunca en la revisión.
+- **Herdr y Sheprd** para ver qué hace el agente, después del bloque 5: Herdr en la terminal de WSL y Sheprd como interfaz gráfica en Windows (revisión de diffs con notas, anotaciones en el navegador). Desde el móvil, por SSH con Moshi. Cezar queda como alternativa web.
+- **Headroom** en modo MCP, sin proxy, solo si el piloto de rtk no baja lo suficiente los picos de contexto.
+- **Moshi** como terminal del móvil (por Tailscale, nunca SSH abierto a internet), junto con Herdr; imprescindible si se adopta OpenCode en el bloque 7, porque Remote Control solo funciona con modelos de Anthropic.
 
 ## Siguen en observación
 
