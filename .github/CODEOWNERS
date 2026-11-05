@@ -1,0 +1,7 @@
+# Repo del workflow: rutas sensibles con revisión obligatoria de Víctor (M36, VIC-16).
+# Cambiarlas altera lo que hacen los agentes en todos los proyectos.
+/.github/                    @victor-lg
+/plugin-sdd/                 @victor-lg
+/entorno/                    @victor-lg
+/plantilla-proyecto/.github/ @victor-lg
+/docs/adr/                   @victor-lg
