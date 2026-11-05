@@ -1,0 +1,54 @@
+# CI del repo del workflow (M36, VIC-16). Comprobaciones baratas y sin
+# opinión; las evaluaciones del plugin (M35) se añaden después.
+name: validar
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: JSON válidos
+        run: |
+          for f in $(git ls-files '*.json'); do
+            python3 -m json.tool "$f" > /dev/null || { echo "::error file=$f::JSON no válido"; exit 1; }
+          done
+
+      - name: Python compila
+        run: python3 -m py_compile $(git ls-files '*.py')
+
+      - name: YAML válidos
+        run: |
+          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml==6.0.2
+          for f in $(git ls-files '*.yml' '*.yaml'); do
+            python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$f" || { echo "::error file=$f::YAML no válido"; exit 1; }
+          done
+
+      - name: Un cambio en el plugin sube su versión y va al CHANGELOG
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          cambios=$(git diff --name-only "$BASE"...HEAD)
+          if echo "$cambios" | grep -q '^plugin-sdd/'; then
+            echo "$cambios" | grep -qx 'plugin-sdd/.claude-plugin/plugin.json' || { echo "::error::El PR cambia plugin-sdd/ sin subir la versión en plugin.json"; exit 1; }
+            echo "$cambios" | grep -qx 'CHANGELOG.md' || { echo "::error::El PR cambia plugin-sdd/ sin entrada en CHANGELOG.md"; exit 1; }
+          fi
+
+      - name: Sin menciones a Claude en los commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git log --format='%B' "$BASE"..HEAD | grep -Eiq 'Co-Authored-By:.*(claude|anthropic)|Generated with \[?Claude'; then
+            echo "::error::Hay commits con Co-Authored-By o 'Generated with' de Claude (decisión de autoría, bloque 1)"
+            exit 1
+          fi
