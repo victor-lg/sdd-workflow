@@ -54,7 +54,7 @@ Modelo GitHub Flow: `main` siempre desplegable, una rama corta por cambio, squas
 - Si la entrega va en varios PR: `feat/vic-12-logica`, `feat/vic-12-interfaz`.
 - **Siempre con el ID** (M11), también las de spec, ADR, CI y mantenimiento. Si no hay issue, se crea antes.
 
-Ejemplos: `feat/vic-16-materiales`, `fix/vic-17-redondeo-peso`, `spec/vic-18-calc-004-historial`, `adr/vic-19-0008-modelos`, `ci/vic-20-shards`.
+Ejemplos: `feat/vic-16-materiales`, `fix/vic-17-redondeo-peso`, `spec/vic-18-calc-004-historial`, `adr/vic-19-0009-modelos`, `ci/vic-20-shards`.
 
 ## 4. Commits (Conventional Commits 1.0)
 
@@ -119,7 +119,7 @@ Spec: SPEC-CALC-003/AC-04
 
 ## 7. Documentos
 
-- **Nombres de fichero:** en minúsculas y *kebab-case*. Las specs, `SPEC-CALC-003-presentacion.md`; los ADR, `0007-autonomia-del-agente.md`.
+- **Nombres de fichero:** en minúsculas y *kebab-case*. Las specs, `SPEC-CALC-003-presentacion.md`; los ADR, `0007-autoria-y-convenciones.md`.
 - **Fechas:** `AAAA-MM-DD`.
 - **Estados:** las specs y los ADR usan los de su plantilla (`Propuesto`, `Aceptado`, `Sustituido por …`). Los documentos del workflow usan `BORRADOR` o `PROPUESTO` en el título hasta que se aceptan.
 
