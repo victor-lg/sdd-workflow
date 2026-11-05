@@ -1,7 +1,7 @@
 ---
 id: ADR-0007
 titulo: Autoría de los commits y convenciones de nombres
-estado: Propuesto
+estado: Aceptado
 fecha: 2026-11-05
 sustituye: null
 sustituido_por: null
