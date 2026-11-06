@@ -3,7 +3,7 @@ name: sdd-implement
 description: Implementa una entrega ya planificada (F4) a partir de los AC de su spec, con tests que citan los IDs, el cambio más pequeño que resuelve la tarea completa y el progreso registrado en el PR borrador. Úsala después de sdd-plan, con la rama y el PR ya creados.
 ---
 
-<!-- Workflow SDD + IA v1.0. Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail). -->
+<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail). -->
 
 # sdd-implement
 
@@ -56,6 +56,7 @@ Toma la primera opción que funcione del todo:
 ## Al terminar
 
 1. Ejecuta las pruebas relevantes y anota en el PR qué se ejecutó y qué no, y por qué. **En R2,** añade la evidencia de los NFR afectados y un plan de vuelta atrás.
+   - **Si hiciste mutaciones,** escribe en tu respuesta, no solo en el PR, esta línea sola, sin viñeta ni formato y con números: `Métricas mutación: detectados X de Y` (`X`, mutantes que los tests detectan; `Y`, mutantes probados). La lee `sdd-metricas` en el transcript; si repites las mutaciones, escríbela de nuevo: cuenta la última.
 2. Completa la plantilla del PR: AC cubiertos en formato `SPEC-XXX-NNN/AC-NN`, cambio de comportamiento, ADR y nivel de riesgo.
 3. Rellena la **"Guía para el revisor humano"**: es lo que la persona lee para aprobar sin auditar cada línea.
    - Mapa del cambio en 3–5 líneas.

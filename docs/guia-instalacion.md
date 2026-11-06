@@ -227,12 +227,15 @@ Qué hace cada fichero:
   - `ask` al añadir dependencias;
   - el modo "saltarse permisos" desactivado.
 - **`user-settings.json`:** Remote Control en todas las sesiones, el canal de actualizaciones `stable`, la línea de estado de métricas y `attribution` con `commit` y `pr` vacíos y `sessionUrl` a `false`, para que ni commits ni PR mencionen a Claude (ADR-0007).
-- **`sdd-metricas.py` (v0.23):** la línea de estado muestra el modelo, el coste estimado, los minutos y la rama. Además guarda un resumen de cada sesión en `C:\Users\victor\Documents\sdd-metricas\sesiones\` (desde WSL, `/mnt/c/...`; otra carpeta con `SDD_METRICAS_DIR`). El resumen recoge:
+- **`sdd-metricas.py` (v1.1):** la línea de estado muestra el modelo, el coste estimado, los minutos y la rama. Además guarda un resumen de cada sesión en `C:\Users\victor\Documents\sdd-metricas\sesiones\` (desde WSL, `/mnt/c/...`; otra carpeta con `SDD_METRICAS_DIR`). El resumen recoge:
   - modelos usados y coste estimado a precio de API (no es lo que descuenta la suscripción);
   - duración total y de API, líneas cambiadas, tokens y pico de uso del contexto;
-  - repo, rama e issue de Linear deducida de la rama.
+  - repo, rama e issue de Linear deducida de la rama;
+  - del transcript de la sesión, solo recuentos: intervenciones humanas (cada mensaje que escribes, el primero incluido), rondas y hallazgos de G4 y la última mutación. Estos dos salen de las líneas `Métricas G4: …` y `Métricas mutación: …` que escriben `sdd-review` y `sdd-implement`.
 
-  No guarda la conversación. Corre fuera del sandbox porque lo lanza Claude Code, no el agente, y el agente no puede modificarlo, porque su sandbox no escribe en `~/.claude`. `entorno/resumen-metricas.py <carpeta>` saca las tablas por sesión y por issue para el registro del recorrido.
+  No guarda la conversación: el transcript se lee por partes y del fichero solo queda su nombre y hasta qué byte se leyó. Corre fuera del sandbox porque lo lanza Claude Code, no el agente, y el agente no puede modificarlo, porque su sandbox no escribe en `~/.claude`. Si actualizas el repo del workflow, vuelve a copiarlo con las dos órdenes `cp` y `chmod` de arriba.
+
+  `entorno/resumen-metricas.py <carpeta> [desde AAAA-MM-DD] [--defectos <csv>]` saca las tablas por sesión y por issue para el registro del recorrido. Los defectos escapados (M10) vienen de Linear, no de las sesiones: las issues con la etiqueta `defecto-escapado`. Pásalas en un CSV con las columnas `issue` y `origen` (la issue cuya entrega dejó pasar el defecto), exportado de Linear o anotado en `historial/defectos-escapados.csv`.
 
 **Comprobación** (abre `claude` dentro de `~/proyectos/sdd-workflow`):
 
@@ -241,7 +244,7 @@ Qué hace cada fichero:
 3. Pide a Claude que ejecute estas dos órdenes; las dos deben fallar. Si te ofrece reintentarlas fuera del sandbox, di que no.
    - `touch ~/sandbox-probe` → `Read-only file system`
    - `curl --noproxy '*' https://example.com` → `Could not resolve host`
-4. **Métricas:** abajo aparece la línea de estado, por ejemplo `Opus 5.5 · $0.00 · 0 min · main`. Tras el primer mensaje, `ls /mnt/c/Users/victor/Documents/sdd-metricas/sesiones/` muestra un `.json` con el identificador de la sesión.
+4. **Métricas:** abajo aparece la línea de estado, por ejemplo `Opus 5.5 · $0.00 · 0 min · main`. Tras el primer mensaje, `ls /mnt/c/Users/victor/Documents/sdd-metricas/sesiones/` muestra un `.json` con el identificador de la sesión, y en él `"intervenciones": 1`.
 5. **Prueba del señuelo** (caso N6, en pequeño):
    - en una terminal normal, `mkdir -p ~/.aws && echo "señuelo" > ~/.aws/prueba.txt`;
    - en una sesión nueva, pide a Claude que lea ese fichero de prueba con Read, con `cat` y con `python3`;

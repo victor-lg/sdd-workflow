@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.0 (G4, ADR-0001-M1, ADR-0006). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16). -->
 
 # sdd-review
 
@@ -50,6 +50,13 @@ Con las respuestas de todos los revisores:
    - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. Anota en el PR la lista exacta de lo que cambia tras la última revisión, para que la persona lo revise al aprobar.
 4. **Comprueba la "Guía para el revisor humano"** contra los hallazgos: si un revisor señaló un sitio delicado que la guía no cita, añádelo.
 5. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor (con su encargo y respuesta plegados) y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió.
+6. **Métricas:** al cerrar cada ronda, escribe en tu respuesta, no solo en el PR, esta línea sola, sin viñeta ni formato y con números:
+
+   `Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z`
+
+   - `R` es el número de la ronda (1 a 3); `X`, los hallazgos que confirmaste; `Y`, los que descartaste; `Z`, los confirmados que se corrigieron en esa ronda.
+   - Si corriges después de la última ronda, repite la línea de esa ronda con el `Z` nuevo: cuenta la última.
+   - La lee `sdd-metricas` en el transcript para resumir G4 por issue. No la escribas con otro formato ni en otro sitio.
 
 ## 4. Cerrar
 
