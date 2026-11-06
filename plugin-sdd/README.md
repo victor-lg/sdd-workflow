@@ -13,7 +13,7 @@ Mitad "plugin" de la distribución del núcleo (ADR-0004, Q05). La otra mitad es
   - `sdd-review` ✔ borrador: organiza G4 (revisores según riesgo) y reconcilia.
 - `agents/`: subagentes.
   - `reviewer` ✔ borrador: revisor de solo lectura con contexto limpio (G4).
-- `evals/`: casos de `claude plugin eval` (M35), uno por directorio. Corren en la CI del workflow al fusionar en `main`. En local: `claude plugin eval . --ablation none --no-publish` (sin `--no-publish`, el informe con las transcripciones se publica en claude.ai).
+- `evals/`: casos de `claude plugin eval` (M35), uno por directorio. Corren en la CI del workflow de madrugada (02:17 UTC) si `plugin-sdd/` cambió en el último día, o a mano; nunca en un PR. En local: `claude plugin eval . --ablation none --no-publish` (sin `--no-publish`, el informe con las transcripciones se publica en claude.ai).
 
 Flujo normal: `sdd-discover` → `sdd-spec` → `sdd-review` (spec) → *merge humano* → `sdd-plan` → `sdd-implement` → `sdd-review` (código) → *merge humano*. `sdd-context` se usa dentro de los demás.
 
