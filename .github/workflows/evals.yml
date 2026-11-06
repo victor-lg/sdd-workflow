@@ -43,6 +43,15 @@ jobs:
         if: steps.casos.outputs.hay == 'si'
         run: npm install -g @anthropic-ai/claude-code@2.1.307
 
+      - name: Comprobar el secreto (sin mostrarlo)
+        if: steps.casos.outputs.hay == 'si'
+        env:
+          T: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$T" ]; then echo "::error::El secreto CLAUDE_CODE_OAUTH_TOKEN está vacío"; exit 1; fi
+          if printf '%s' "$T" | grep -q '[[:space:]]'; then echo "::error::El secreto tiene espacios o saltos de línea: vuelve a pegarlo en una sola línea"; exit 1; fi
+          echo "Secreto presente: ${#T} caracteres, sin espacios."
+
       - name: Evaluar el plugin
         if: steps.casos.outputs.hay == 'si'
         working-directory: plugin-sdd
@@ -77,4 +86,11 @@ jobs:
           print("| --- | --- |")
           for c in r.get("cases", []):
               print(f"| {c.get('name') or c.get('id') or '?'} | {(c.get('aggregates') or {}).get('score', '?')} |")
+          errores = sorted({
+              str(run.get("error")) for c in r.get("cases", [])
+              for run in ((c.get("arms") or {}).get("with") or [])
+              if run.get("error")
+          })
+          for e in errores:
+              print(f"\n- Error de ejecución: `{e[:300]}`")
           PY
