@@ -104,6 +104,29 @@ class Resumen(unittest.TestCase):
         salida = self.ejecuta()
         self.assertEqual(self.fila(salida, "VIC-20")[4], "5")
 
+    def test_aviso_si_la_skill_no_anoto_la_linea(self):
+        # VIC-50 usó sdd-review y sdd-implement sin ninguna línea; VIC-12 usó sdd-review
+        # con rondas; VIC-51, sdd-implement en otra rama de la sesión de VIC-50.
+        self.guarda("s9", {"inicio": "2026-11-05T10:00", "issues": ["VIC-50"],
+                           "skills": {"sdd-review": ["VIC-50"], "sdd-implement": ["VIC-50", "VIC-51"]}})
+        self.guarda("s10", {"inicio": "2026-11-05T11:00", "issues": ["VIC-12"],
+                            "skills": {"sdd-review": ["VIC-12"]}})
+        salida = self.ejecuta()
+        self.assertEqual(self.fila(salida, "VIC-50")[5:10], ["⚠ sin línea", "—", "—", "—", "⚠ sin línea"])
+        self.assertEqual(self.fila(salida, "VIC-51")[5:10], ["0", "0", "0", "0", "⚠ sin línea"])
+        # Con rondas o mutación anotadas, no hay aviso.
+        self.assertEqual(self.fila(salida, "VIC-12")[5:10], ["2", "7", "3", "6", "5 de 5"])
+        self.assertIn("⚠ sin línea: se usó sdd-review", salida)
+
+    def test_sin_skills_no_hay_aviso(self):
+        salida = self.ejecuta()
+        self.assertNotIn("⚠", salida)
+        self.assertEqual(self.fila(salida, "main")[5:10], ["0", "0", "0", "0", "—"])
+
+    def test_skill_sin_issue_va_a_la_clave_de_la_sesion(self):
+        self.guarda("s11", {"inicio": "2026-11-05T12:00", "ramas": ["main"], "skills": {"sdd-review": [None]}})
+        self.assertEqual(self.fila(self.ejecuta(), "main")[5], "⚠ sin línea")
+
     def test_csv_de_linear_con_columna_id(self):
         ruta = self.csv('﻿ID,Title,Origen\nVIC-30,"Redondeo, mal",VIC-12\n')
         self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")

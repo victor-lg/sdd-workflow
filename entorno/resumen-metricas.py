@@ -16,6 +16,10 @@ de la segunda. G4 y mutación se atribuyen a la issue de la rama en la que se
 escribió su línea (o, en sesiones anteriores, a la de la sesión): una revisión
 lanzada desde main sale en la fila de main.
 
+Si una sesión usó sdd-review en una issue y esa issue no tiene ninguna ronda de G4,
+la tabla marca "⚠ sin línea" en vez de 0; lo mismo con sdd-implement y la mutación.
+Así se distingue "no hubo hallazgos" de "la skill no anotó la línea".
+
 Los defectos escapados no salen de las sesiones, sino de Linear: las issues con la
 etiqueta "defecto-escapado". --defectos recibe un CSV con las columnas issue y
 origen (la issue del defecto y la issue cuya entrega lo dejó pasar), exportado de
@@ -36,6 +40,7 @@ import sys
 from collections import Counter, defaultdict
 
 ID = re.compile(r"^vic-\d+$", re.I)
+SIN_LINEA = "⚠ sin línea"
 
 
 def lee_defectos(ruta):
@@ -94,6 +99,7 @@ def main(argv=None):
     # (clave, pr, ronda) -> ronda de G4; gana la de fecha más reciente. La clave es la
     # issue y no el repo, que es el nombre de la carpeta y cambia en cada worktree.
     rondas = {}
+    usos = defaultdict(set)  # clave -> skills con métricas usadas en esa issue
     for s in sesiones:
         # Las ramas las puede crear el agente: un | descuadraría la tabla.
         clave = (", ".join(s.get("issues") or []) or ", ".join(s.get("ramas") or []) or "—").replace("|", "\\|")
@@ -115,6 +121,10 @@ def main(argv=None):
             tm = tot[m.get("issue") or clave]
             if not tm["mutacion"] or (m.get("fecha") or "") >= (tm["mutacion"].get("fecha") or ""):
                 tm["mutacion"] = m
+        for skill, issues in (s.get("skills") or {}).items():
+            for iss in issues or [None]:
+                usos[iss or clave].add(skill)
+                tot[iss or clave]  # la fila existe aunque no haya otra cosa
         for r in (s.get("g4") or {}).values():
             k = (r.get("issue") or clave, r.get("pr"), r.get("ronda"))
             if k not in rondas or (r.get("fecha") or "") >= (rondas[k].get("fecha") or ""):
@@ -136,13 +146,21 @@ def main(argv=None):
     print("\n| Issue / rama | Sesiones | Coste est. | Minutos | Intervenciones | Rondas G4 | "
           "Confirmados | Descartados | Corregidos | Última mutación | Defectos escapados |")
     print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    marcas = False
     for clave, t in sorted(tot.items()):
         rd, conf, desc, corr = g4[clave] if clave in g4 else (0, 0, 0, 0)
+        if not rd and "sdd-review" in usos[clave]:
+            rd, conf, desc, corr = SIN_LINEA, "—", "—", "—"
         m = t["mutacion"]
-        mut = f"{m.get('detectados')} de {m.get('total')}" if m else "—"
+        mut = f"{m.get('detectados')} de {m.get('total')}" if m else (
+            SIN_LINEA if "sdd-implement" in usos[clave] else "—")
         esc = defectos.get(clave, 0) if a.defectos else "—"
+        marcas = marcas or SIN_LINEA in (rd, mut)
         print(f"| {clave} | {t['n']} | ${t['coste']:.2f} | {t['min']:.0f} | {t['interv'] + len(t['ids'])} | {rd} | "
               f"{conf} | {desc} | {corr} | {mut} | {esc} |")
+    if marcas:
+        print(f"\n{SIN_LINEA}: se usó sdd-review (G4) o sdd-implement (mutación) en esa issue y no hay "
+              "ninguna línea de métricas válida en un gh pr comment o gh pr edit.")
     print(f"\nTotal: {len(sesiones)} sesiones, ${sum(t['coste'] for t in tot.values()):.2f} estimados.")
     if sin_origen:
         print(f"Defectos sin issue de origen: {', '.join(sin_origen)}.")

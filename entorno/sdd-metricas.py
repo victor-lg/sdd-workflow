@@ -21,13 +21,18 @@ de la rama. Del transcript de la sesión guarda solo recuentos:
   no cuentan resultados de herramientas, mensajes internos, resúmenes de
   compactación, salida de comandos locales, avisos de tareas ni interrupciones;
 - G4: las líneas "Métricas G4: PR #N · ronda R · confirmados X · descartados Y ·
-  corregidos Z" que escribe sdd-review, una por PR y ronda (la última manda);
-- mutación: la última línea "Métricas mutación: detectados X de Y" de sdd-implement.
+  corregidos Z" que sdd-review escribe en el comentario de reconciliación, una por
+  PR y ronda (la última manda);
+- mutación: la última línea "Métricas mutación: detectados X de Y" de sdd-implement;
+- qué sesiones usaron sdd-review o sdd-implement, para avisar si falta su línea.
 
-Las dos líneas solo cuentan en el texto del asistente, solas en su línea y fuera
-de un bloque ``` o ~~~, y se atribuyen a la issue de la rama de esa entrada del
-transcript (gitBranch), no a la de la sesión. Son autodeclaradas: el agente las escribe y nada las comprueba,
-así que un texto que lo engañe podría falsearlas. El transcript se lee por partes
+Las dos líneas solo cuentan en la entrada de una llamada a Bash con gh pr comment o
+gh pr edit del agente principal, nunca en su resultado ni en el texto suelto del
+asistente (Claude Code no siempre lo guarda literal en el transcript). Tienen que
+ir solas en su línea y fuera de un bloque ``` o ~~~, y se atribuyen a la issue de
+la rama de esa entrada del transcript (gitBranch), no a la de la sesión. Son
+autodeclaradas: el agente las escribe y nada las comprueba, así que un texto que
+lo engañe podría falsearlas. El transcript se lee por partes
 (hasta 8 MB cada vez): el JSON de la sesión guarda hasta qué byte se ha leído. Una
 línea de más de 8 MB se salta sin analizar; si era un mensaje de la persona, no
 cuenta. Se supone que Claude Code solo añade al transcript: si se reescribe, se
@@ -60,6 +65,12 @@ N = r"(\d{1,6})"
 LINEA_G4 = re.compile(rf"^[ \t]*Métricas G4: PR #{N} · ronda {N} · confirmados {N} · "
                       rf"descartados {N} · corregidos {N}[ \t\r]*$", re.M)
 LINEA_MUTACION = re.compile(rf"^[ \t]*Métricas mutación: detectados {N} de {N}[ \t\r]*$", re.M)
+# Las líneas solo se leen de la entrada de estas órdenes, nunca de su resultado.
+GH_PR = re.compile(r"(?:^|[\s;&|(])gh\s+pr\s+(?:comment|edit)\b")
+# Skills cuyo uso sin ninguna línea válida se avisa en el resumen.
+SKILLS_CON_METRICAS = ("sdd-review", "sdd-implement")
+SKILL_DE_BARRA = re.compile(r"\s*(?:<command-message>[^<]*</command-message>\s*)?"
+                            r"<command-name>/(?:[\w-]+:)?(sdd-review|sdd-implement)</command-name>")
 # Mensajes de tipo "user" que no escribe la persona, en transcripts sin "origin". Ahí
 # no se distingue /clear de /sdd:sdd-plan, así que ningún comando de barra cuenta.
 NO_HUMANO = ("<local-command-", "<command-", "<task-notification>", "<system-reminder>",
@@ -124,6 +135,14 @@ def entero(v):
         return 0
 
 
+def anota_skill(estado, nombre, issue):
+    """Apunta que la sesión usó una skill de SKILLS_CON_METRICAS en esa issue."""
+    if nombre in SKILLS_CON_METRICAS:
+        issues = estado["skills"].setdefault(nombre, [])
+        if issue not in issues:
+            issues.append(issue)
+
+
 def es_intervencion(e):
     """True si la entrada del transcript es un mensaje escrito por la persona."""
     if e.get("type") != "user" or e.get("isSidechain") or e.get("isMeta") \
@@ -163,6 +182,7 @@ def lee_transcript(ruta, antes):
         "intervenciones": entero(antes.get("intervenciones")),
         "g4": dict(antes.get("g4") or {}),
         "mutacion": antes.get("mutacion"),
+        "skills": {k: list(v) for k, v in (antes.get("skills") or {}).items() if isinstance(v, list)},
     }
     with open(ruta, "rb") as f:
         reescrito = os.fstat(f.fileno()).st_size < desde
@@ -173,7 +193,7 @@ def lee_transcript(ruta, antes):
         if antes.get("transcript") != nombre or reescrito:
             # Otro fichero o uno reescrito: se cuenta desde el principio.
             desde, ids, a_media_linea = 0, [], False
-            estado = {"intervenciones": 0, "g4": {}, "mutacion": None}
+            estado = {"intervenciones": 0, "g4": {}, "mutacion": None, "skills": {}}
         f.seek(desde)
         bloque = f.read(MAX_LECTURA)
     if a_media_linea:
@@ -199,6 +219,12 @@ def lee_transcript(ruta, antes):
             e = json.loads(linea.decode("utf-8", errors="replace"))
             if not isinstance(e, dict):
                 continue
+            if e.get("type") == "user" and not e.get("isSidechain") and "toolUseResult" not in e:
+                # La persona puede lanzar la skill con /sdd:sdd-review en vez de pedírsela al agente.
+                m = SKILL_DE_BARRA.match(texto_de(g(e, "message", "content")))
+                if m:
+                    rama_e = e.get("gitBranch")
+                    anota_skill(estado, m.group(1), issue_de(rama_e) if isinstance(rama_e, str) else None)
             if es_intervencion(e):
                 uid = e.get("uuid")
                 if isinstance(uid, str) and uid:
@@ -208,21 +234,30 @@ def lee_transcript(ruta, antes):
                     ids.append(uid[:12])
                 estado["intervenciones"] += 1
             elif e.get("type") == "assistant" and not e.get("isSidechain"):
-                texto = fuera_de_bloques(texto_de(g(e, "message", "content")))
                 fecha = e.get("timestamp")
                 fecha = fecha[:40] if isinstance(fecha, str) else None
                 # La rama de la entrada, no la de la sesión: una sesión puede pasar por
                 # varias issues.
                 rama_e = e.get("gitBranch")
                 issue = issue_de(rama_e) if isinstance(rama_e, str) else None
-                for m in LINEA_G4.finditer(texto):
-                    pr, ronda, conf, desc, corr = (int(x) for x in m.groups())
-                    estado["g4"][f"{pr}/{ronda}"] = {"pr": pr, "ronda": ronda, "confirmados": conf,
-                                                     "descartados": desc, "corregidos": corr,
-                                                     "fecha": fecha, "issue": issue}
-                for m in LINEA_MUTACION.finditer(texto):
-                    estado["mutacion"] = {"detectados": int(m.group(1)), "total": int(m.group(2)),
-                                          "fecha": fecha, "issue": issue}
+                for b in g(e, "message", "content", defecto=[]):
+                    if not isinstance(b, dict) or b.get("type") != "tool_use":
+                        continue
+                    entrada = b.get("input") if isinstance(b.get("input"), dict) else {}
+                    if b.get("name") == "Skill" and isinstance(entrada.get("skill"), str):
+                        anota_skill(estado, entrada["skill"].split(":")[-1], issue)
+                    orden = entrada.get("command")
+                    if b.get("name") != "Bash" or not isinstance(orden, str) or not GH_PR.search(orden):
+                        continue
+                    texto = fuera_de_bloques(orden)
+                    for m in LINEA_G4.finditer(texto):
+                        pr, ronda, conf, desc, corr = (int(x) for x in m.groups())
+                        estado["g4"][f"{pr}/{ronda}"] = {"pr": pr, "ronda": ronda, "confirmados": conf,
+                                                         "descartados": desc, "corregidos": corr,
+                                                         "fecha": fecha, "issue": issue}
+                    for m in LINEA_MUTACION.finditer(texto):
+                        estado["mutacion"] = {"detectados": int(m.group(1)), "total": int(m.group(2)),
+                                              "fecha": fecha, "issue": issue}
         except Exception:
             continue  # una entrada rara no debe congelar las métricas de la sesión
     estado["intervenciones_ids"] = ids
@@ -300,7 +335,7 @@ def main():
     # Recuentos de la conversación; si el transcript falla, se conservan los anteriores.
     conversacion = {k: antes[k] for k in ("transcript", "transcript_leido", "intervenciones",
                                           "intervenciones_ids", "g4", "mutacion",
-                                          "transcript_a_media_linea") if k in antes}
+                                          "skills", "transcript_a_media_linea") if k in antes}
     transcript = g(e, "transcript_path")
     if transcript:
         try:

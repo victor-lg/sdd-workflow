@@ -50,14 +50,16 @@ Con las respuestas de todos los revisores:
    - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. Anota en el PR la lista exacta de lo que cambia tras la última revisión, para que la persona lo revise al aprobar.
 4. **Comprueba la "Guía para el revisor humano"** contra los hallazgos: si un revisor señaló un sitio delicado que la guía no cita, añádelo.
 5. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor (con su encargo y respuesta plegados) y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió.
-6. **Métricas:** al cerrar cada ronda, escribe en tu respuesta, no solo en el PR, esta línea sola, sin viñeta ni formato y con números:
+6. **Métricas:** al cerrar cada ronda, publica la reconciliación como comentario del PR e incluye en ella esta línea, sola, sin viñeta ni formato y con números:
 
    `Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z`
 
    - `R` es el número de la ronda (1 a 3); `X`, los hallazgos de esa ronda que confirmaste; `Y`, los que descartaste; `Z`, cuántos de esos `X` están corregidos hasta ahora.
-   - Si corriges después de la última ronda, repite la línea de esa ronda con el `Z` nuevo: cuenta la última.
+   - Si corriges después de la última ronda, publica otro comentario con la línea de esa ronda y el `Z` nuevo: cuenta la última.
    - Una ronda sin hallazgos también se anota, con ceros.
-   - `sdd-metricas` la lee en el transcript y la atribuye a la issue de la rama en la que estás. Si no estás en la rama de la issue, escríbela igual y avísalo; no cambies de rama por esto. No la escribas con otro formato, dentro de un bloque de código ni en otro sitio.
+   - **Cómo:** el cuerpo va en la misma orden de Bash que lo publica, por ejemplo `gh pr comment N --body-file - <<'EOF'` … `EOF`. No lo prepares antes en un fichero (con Write o en otra orden): `sdd-metricas` solo lee la entrada de las llamadas a `gh pr comment` y `gh pr edit`, nunca su resultado ni tu texto en el chat.
+   - La atribuye a la issue de la rama en la que estás. Si no estás en la rama de la issue, publícala igual y avísalo; no cambies de rama por esto. No la escribas con otro formato ni dentro de un bloque de código.
+   - Si usas esta skill y no queda ninguna línea válida, el resumen de métricas marca la issue con "⚠ sin línea".
 
 ## 4. Cerrar
 

@@ -59,6 +59,20 @@ def asistente(texto, fecha="2026-11-06T10:00:00Z", **extra):
             "message": {"role": "assistant", "content": [{"type": "text", "text": texto}]}, **extra}
 
 
+def gh(cuerpo, orden="gh pr comment 21 --body-file - <<'EOF'\n{}\nEOF", fecha="2026-11-06T10:00:00Z",
+       herramienta="Bash", **extra):
+    """El agente publica un comentario con la orden de Bash que lleva el cuerpo."""
+    return {"type": "assistant", "timestamp": fecha, "message": {"role": "assistant", "content": [
+        {"type": "tool_use", "id": "t", "name": herramienta, "input": {"command": orden.format(cuerpo)}}]},
+        **extra}
+
+
+def skill(nombre, **extra):
+    return {"type": "assistant", "message": {"role": "assistant", "content": [
+        {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": nombre, "args": "PR #21"}}]},
+        **extra}
+
+
 G4 = "Métricas G4: PR #21 · ronda {r} · confirmados {c} · descartados 1 · corregidos 2"
 
 
@@ -152,7 +166,7 @@ class Transcript(unittest.TestCase):
 
     def test_separador_de_linea_unicode_dentro_de_un_mensaje(self):
         # json.dumps(ensure_ascii=False) deja U+2028 y U+0085 sin escapar.
-        self.escribe(humano("pegado\u2028de un PDF\u0085y más"), asistente("a\u2029b\n" + G4.format(r=1, c=1)))
+        self.escribe(humano("pegado\u2028de un PDF\u0085y más"), gh("a\u2029b\n" + G4.format(r=1, c=1)))
         e = sdd_metricas.lee_transcript(self.ruta, {})
         self.assertEqual(e["intervenciones"], 1)
         self.assertEqual(set(e["g4"]), {"21/1"})
@@ -177,10 +191,13 @@ class Transcript(unittest.TestCase):
 
     def test_una_entrada_rara_no_congela_las_metricas(self):
         self.escribe(
-            asistente("Métricas G4: PR #" + "9" * 5000 + " · ronda 1 · confirmados 1 · descartados 0 · corregidos 0"),
+            gh("Métricas G4: PR #" + "9" * 5000 + " · ronda 1 · confirmados 1 · descartados 0 · corregidos 0"),
             {"type": "assistant", "message": {"content": [{"type": "text", "text": {"no": "cadena"}}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": "raro"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill", "input": {"skill": 3}}]}},
+            {"type": "assistant", "message": {"content": "no es una lista"}},
             {"type": "user", "origin": "raro", "message": {"content": None}},
-            asistente(G4.format(r=1, c=2), fecha={"no": "cadena"}),
+            gh(G4.format(r=1, c=2), fecha={"no": "cadena"}),
             humano("sigue contando"),
         )
         e = sdd_metricas.lee_transcript(self.ruta, {"transcript_leido": "basura", "intervenciones": "x"})
@@ -230,12 +247,13 @@ class Transcript(unittest.TestCase):
 
     def test_lineas_g4_por_pr_y_ronda(self):
         self.escribe(
-            asistente("Reconciliado.\n" + G4.format(r=1, c=4) + "\nSigo.", "2026-11-06T10:00:00Z",
-                      gitBranch="feat/vic-12-logica"),
-            asistente(G4.format(r=2, c=1)),
+            gh("## Reconciliación\n" + G4.format(r=1, c=4) + "\nSigo.", fecha="2026-11-06T10:00:00Z",
+               gitBranch="feat/vic-12-logica"),
+            gh(G4.format(r=2, c=1)),
             # La misma ronda repetida: manda la última.
-            asistente("  " + G4.format(r=2, c=3) + "  ", "2026-11-06T12:00:00Z"),
-            asistente("Métricas G4: PR #22 · ronda 1 · confirmados 0 · descartados 0 · corregidos 0"),
+            gh("  " + G4.format(r=2, c=3) + "  ", fecha="2026-11-06T12:00:00Z"),
+            gh("Métricas G4: PR #22 · ronda 1 · confirmados 0 · descartados 0 · corregidos 0",
+               orden="gh pr edit 22 --body-file - <<'EOF'\n{}\nEOF"),
         )
         g4 = sdd_metricas.lee_transcript(self.ruta, {})["g4"]
         self.assertEqual(set(g4), {"21/1", "21/2", "22/1"})
@@ -246,50 +264,97 @@ class Transcript(unittest.TestCase):
         self.assertEqual(g4["21/2"]["confirmados"], 3)
         self.assertEqual(g4["21/2"]["fecha"], "2026-11-06T12:00:00Z")
 
+    def test_ordenes_gh_que_cuentan(self):
+        ordenes = {
+            "heredoc a --body-file -": "gh pr comment 21 --body-file - <<'EOF'\n{}\nEOF",
+            "fichero y gh en la misma orden": "cat > $TMPDIR/r.md <<'EOF'\n{}\nEOF\ngh pr comment 21 --body-file $TMPDIR/r.md",
+            "tras &&": "cd repo && gh pr edit 21 --body \"Resumen\n{}\n\"",
+            "con espacios de más": "gh  pr   comment 21 -F - <<EOF\n{}\nEOF",
+        }
+        for caso, orden in ordenes.items():
+            with self.subTest(caso=caso):
+                open(self.ruta, "w").close()
+                self.escribe(gh(G4.format(r=1, c=1), orden=orden))
+                self.assertEqual(set(sdd_metricas.lee_transcript(self.ruta, {})["g4"]), {"21/1"})
+
     def test_lineas_que_no_cuentan(self):
-        self.escribe(
-            humano(G4.format(r=1, c=9)),                                   # la persona
-            {"type": "user", "toolUseResult": {}, "message": {"content": [
-                {"type": "tool_result", "tool_use_id": "x", "content": G4.format(r=1, c=9)}]}},
-            asistente(G4.format(r=1, c=9), isSidechain=True),              # un subagente
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "name": "Bash", "input": {"command": G4.format(r=1, c=9)}}]}},
-            asistente("Escribe `" + G4.format(r=1, c=9) + "` al final."),  # citada, no sola
-            asistente("Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z"),
-            asistente("- " + G4.format(r=1, c=9)),
-            asistente("Métricas mutación: detectados X de Y"),
-            humano("Métricas mutación: detectados 1 de 2"),
-            asistente("La salida del revisor:\n```\n" + G4.format(r=1, c=9) +
-                      "\nMétricas mutación: detectados 1 de 2\n```"),
-            asistente("~~~text\n" + G4.format(r=1, c=9) + "\n```\n" + G4.format(r=2, c=9) + "\n~~~"),
-        )
-        e = sdd_metricas.lee_transcript(self.ruta, {})
-        self.assertEqual(e["g4"], {})
-        self.assertIsNone(e["mutacion"])
+        linea, mut = G4.format(r=1, c=9), "Métricas mutación: detectados 1 de 2"
+        resultado = lambda t: {"type": "user", "toolUseResult": {}, "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t", "content": t}]}}
+        casos = {
+            "texto del asistente": asistente(linea + "\n" + mut),
+            "la persona": humano(linea + "\n" + mut),
+            "resultado de gh pr comment": resultado(linea + "\n" + mut),
+            "resultado de gh pr view": resultado("gh pr view 21 --comments\n" + linea),
+            "un subagente": gh(linea + "\n" + mut, isSidechain=True),
+            "Bash sin gh pr": gh(linea + "\n" + mut, orden="cat > r.md <<'EOF'\n{}\nEOF"),
+            "gh pr create": gh(linea, orden="gh pr create --body-file - <<'EOF'\n{}\nEOF"),
+            "gh pr view": gh(linea, orden="gh pr view 21 # {}"),
+            "otra palabra": gh(linea, orden="xgh pr comment 21 <<'EOF'\n{}\nEOF"),
+            "Write del fichero": gh(linea, orden="gh pr comment 21\n{}", herramienta="Write"),
+            "citada en una frase": gh("Escribe `" + linea + "` al final."),
+            "con letras": gh("Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z\n"
+                             "Métricas mutación: detectados X de Y"),
+            "con viñeta": gh("- " + linea),
+            "en un bloque ```": gh("Salida:\n```\n" + linea + "\n" + mut + "\n```"),
+            "en un bloque ~~~": gh("~~~text\n" + linea + "\n```\n" + mut + "\n~~~"),
+        }
+        for caso, e in casos.items():
+            with self.subTest(caso=caso):
+                open(self.ruta, "w").close()
+                self.escribe(e)
+                r = sdd_metricas.lee_transcript(self.ruta, {})
+                self.assertEqual(r["g4"], {})
+                self.assertIsNone(r["mutacion"])
 
     def test_mutacion_la_ultima(self):
-        self.escribe(asistente("Métricas mutación: detectados 3 de 5", "2026-11-06T10:00:00Z"),
-                     asistente("Hecho.\nMétricas mutación: detectados 5 de 5", "2026-11-06T11:00:00Z",
-                               gitBranch="fix/vic-13-redondeo"))
+        self.escribe(gh("Métricas mutación: detectados 3 de 5", fecha="2026-11-06T10:00:00Z"),
+                     gh("## Validación\nMétricas mutación: detectados 5 de 5", fecha="2026-11-06T11:00:00Z",
+                        orden="gh pr edit 21 --body-file - <<'EOF'\n{}\nEOF", gitBranch="fix/vic-13-redondeo"))
         self.assertEqual(sdd_metricas.lee_transcript(self.ruta, {})["mutacion"],
                          {"detectados": 5, "total": 5, "fecha": "2026-11-06T11:00:00Z", "issue": "VIC-13"})
 
     def test_issue_de_la_rama_de_cada_entrada(self):
         # Una sesión que pasa de VIC-12 a VIC-13: cada ronda va a la issue de su rama.
-        self.escribe(asistente(G4.format(r=1, c=1), gitBranch="feat/vic-12-x"),
-                     asistente("Métricas G4: PR #30 · ronda 1 · confirmados 2 · descartados 0 · corregidos 2",
-                               gitBranch="feat/vic-13-y"),
-                     asistente(G4.format(r=2, c=1), gitBranch="main"),
-                     asistente(G4.format(r=3, c=1), gitBranch=["no", "cadena"]))
+        self.escribe(gh(G4.format(r=1, c=1), gitBranch="feat/vic-12-x"),
+                     gh("Métricas G4: PR #30 · ronda 1 · confirmados 2 · descartados 0 · corregidos 2",
+                        gitBranch="feat/vic-13-y"),
+                     gh(G4.format(r=2, c=1), gitBranch="main"),
+                     gh(G4.format(r=3, c=1), gitBranch=["no", "cadena"]))
         g4 = sdd_metricas.lee_transcript(self.ruta, {})["g4"]
         self.assertEqual({k: v["issue"] for k, v in g4.items()},
                          {"21/1": "VIC-12", "30/1": "VIC-13", "21/2": None, "21/3": None})
 
     def test_retornos_de_carro(self):
-        self.escribe(asistente(G4.format(r=1, c=1) + "\r\nMétricas mutación: detectados 1 de 2\r\n"))
+        self.escribe(gh(G4.format(r=1, c=1) + "\r\nMétricas mutación: detectados 1 de 2\r\n"))
         e = sdd_metricas.lee_transcript(self.ruta, {})
         self.assertEqual(set(e["g4"]), {"21/1"})
         self.assertEqual(e["mutacion"]["total"], 2)
+
+    def test_skills_usadas(self):
+        self.escribe(
+            skill("sdd:sdd-review", gitBranch="feat/vic-12-x"),
+            skill("sdd-review", gitBranch="feat/vic-12-x"),                 # repetida en la issue
+            skill("sdd:sdd-implement", gitBranch="main"),                   # sin issue
+            humano("<command-message>sdd:sdd-review</command-message>\n"
+                   "<command-name>/sdd:sdd-review</command-name>\n<command-args>21</command-args>",
+                   gitBranch="feat/vic-13-y"),
+            # No cuentan: otras skills, subagentes, resultados y la etiqueta citada en un mensaje.
+            skill("sdd:sdd-plan", gitBranch="feat/vic-14-z"),
+            skill("sdd:sdd-review", gitBranch="feat/vic-15-z", isSidechain=True),
+            {"type": "user", "toolUseResult": {}, "gitBranch": "feat/vic-16-z", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t",
+                 "content": "<command-name>/sdd:sdd-review</command-name>"}]}},
+            humano("¿Qué hace <command-name>/sdd:sdd-implement</command-name>?", gitBranch="feat/vic-17-z"),
+        )
+        e = sdd_metricas.lee_transcript(self.ruta, {})
+        self.assertEqual(e["skills"], {"sdd-review": ["VIC-12", "VIC-13"], "sdd-implement": [None]})
+        # El comando de barra también es una intervención.
+        self.assertEqual(e["intervenciones"], 2)
+        # Se conservan entre lecturas.
+        self.escribe(skill("sdd:sdd-review", gitBranch="feat/vic-18-z"))
+        e = sdd_metricas.lee_transcript(self.ruta, e)
+        self.assertEqual(e["skills"]["sdd-review"], ["VIC-12", "VIC-13", "VIC-18"])
 
     def test_lineas_basura(self):
         self.escribe(cola="no es json\n[1, 2]\n")
@@ -321,8 +386,9 @@ class Main(unittest.TestCase):
 
     def test_guarda_recuentos_y_nunca_contenido(self):
         with open(self.transcript, "w", encoding="utf-8") as f:
-            for e in (humano("SECRETO-PERSONA"), asistente("SECRETO-ASISTENTE\n" + G4.format(r=1, c=2)),
-                      asistente("Métricas mutación: detectados 4 de 6")):
+            for e in (humano("SECRETO-PERSONA"), asistente("SECRETO-ASISTENTE"),
+                      gh("SECRETO-COMENTARIO\n" + G4.format(r=1, c=2)), skill("sdd:sdd-review"),
+                      gh("Métricas mutación: detectados 4 de 6")):
                 f.write(json.dumps(e) + "\n")
         entrada = {"session_id": "abc", "transcript_path": self.transcript,
                    "model": {"display_name": "Opus"}, "cost": {"total_cost_usd": 1.5}}
@@ -332,6 +398,7 @@ class Main(unittest.TestCase):
         self.assertEqual(d["intervenciones"], 1)
         self.assertEqual(d["g4"]["21/1"]["confirmados"], 2)
         self.assertEqual(d["mutacion"]["detectados"], 4)
+        self.assertEqual(d["skills"], {"sdd-review": [None]})
         self.assertEqual(d["transcript"], "abc.jsonl")
         self.assertNotIn("SECRETO", texto)
         self.assertNotIn(self.dir.name, texto)  # ni rutas completas
