@@ -1,5 +1,5 @@
 ---
-description: "Activación: una idea sin comportamiento definido dispara sdd-discover (F1), no sdd-spec ni sdd-implement."
+description: "Activación: una idea sin comportamiento definido dispara sdd-discover (F1) y no sdd-spec."
 tags: [activacion, sdd-discover]
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]

@@ -1,5 +1,5 @@
 ---
-description: "N1 (sdd-implement): la issue está en Ready, pero la spec que enlaza no está en main. El agente se para y no implementa."
+description: "N1 (sdd-implement): la issue está en Ready, pero la spec que enlaza no está en main. El agente se para y no implementa. La regla la aporta sdd-context, que sdd-implement ejecuta antes de escribir."
 tags: [negativo, N1, sdd-implement]
 max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]

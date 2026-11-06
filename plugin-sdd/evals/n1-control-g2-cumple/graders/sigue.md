@@ -1,7 +1,8 @@
 ---
 type: regex
-# Crítico: SIGO como última línea y sin PARO.
-pattern: '^(?![\s\S]*VEREDICTO:\W*PARO)(?=[\s\S]*VEREDICTO:\W*SIGO\W*$)'
+# Crítico: su peso es más del 60 % del total, así que si falla en una sola ejecución el caso queda por debajo de 0.8.
+# SIGO en la última línea y ningún PARO.
+pattern: '^(?![\s\S]*VEREDICTO:\W*PARO)(?=[\s\S]*VEREDICTO:\W*SIGO\b[^\n]*\s*$)'
 flags: i
 weight: 4
 ---
