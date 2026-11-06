@@ -17,7 +17,8 @@ escribió su línea (o, en sesiones anteriores, a la de la sesión): una revisi�
 lanzada desde main sale en la fila de main.
 
 Si una sesión usó sdd-review en una issue y esa issue no tiene ninguna ronda de G4,
-la tabla marca "⚠ sin línea" en vez de 0; lo mismo con sdd-implement y la mutación.
+la tabla marca "⚠ sin línea" en vez de 0; lo mismo con sdd-implement y la mutación
+(una entrega sin mutaciones lo dice con "Métricas mutación: sin mutaciones").
 Así se distingue "no hubo hallazgos" de "la skill no anotó la línea".
 
 Los defectos escapados no salen de las sesiones, sino de Linear: las issues con la
@@ -63,15 +64,22 @@ def lee_defectos(ruta):
             origen = (fila.get(col_origen) or "").strip().upper()
             if not defecto or defecto in vistos:
                 continue
-            etiquetas = {x.strip().lower() for x in (fila.get(col_etiquetas) or "").split(",")}
-            if col_etiquetas and "defecto-escapado" not in etiquetas:
-                continue
+            if col_etiquetas:
+                # Una fila con campos de más deja una lista en la clave None: aquí no llega.
+                etiquetas = str(fila.get(col_etiquetas) or "")
+                if "defecto-escapado" not in {x.strip().lower() for x in etiquetas.split(",")}:
+                    continue
             vistos.add(defecto)
             if ID.match(origen):
                 por_origen[origen] += 1
             else:
                 sin_origen.append(defecto)
     return por_origen, sin_origen
+
+
+def celda(texto):
+    # Ramas, repos y modelos los puede crear el agente: un | descuadraría la tabla.
+    return str(texto).replace("|", "\\|")
 
 
 def main(argv=None):
@@ -101,10 +109,9 @@ def main(argv=None):
     rondas = {}
     usos = defaultdict(set)  # clave -> skills con métricas usadas en esa issue
     for s in sesiones:
-        # Las ramas las puede crear el agente: un | descuadraría la tabla.
-        clave = (", ".join(s.get("issues") or []) or ", ".join(s.get("ramas") or []) or "—").replace("|", "\\|")
-        print(f"| {(s.get('inicio') or '')[:16].replace('T', ' ')} | {s.get('repo') or '—'} | {clave} | "
-              f"{', '.join(s.get('modelos') or [])} | ${s.get('coste_estimado_usd', 0):.2f} | "
+        clave = celda(", ".join(s.get("issues") or []) or ", ".join(s.get("ramas") or []) or "—")
+        print(f"| {(s.get('inicio') or '')[:16].replace('T', ' ')} | {celda(s.get('repo') or '—')} | {clave} | "
+              f"{celda(', '.join(s.get('modelos') or []))} | ${s.get('coste_estimado_usd', 0):.2f} | "
               f"{s.get('duracion_min', 0)} ({s.get('duracion_api_min', 0)}) | "
               f"+{s.get('lineas_anadidas', 0)}/−{s.get('lineas_quitadas', 0)} | {s.get('contexto_pico_pct', 0)} % | "
               f"{s.get('intervenciones', 0)} |")
@@ -152,7 +159,7 @@ def main(argv=None):
         if not rd and "sdd-review" in usos[clave]:
             rd, conf, desc, corr = SIN_LINEA, "—", "—", "—"
         m = t["mutacion"]
-        mut = f"{m.get('detectados')} de {m.get('total')}" if m else (
+        mut = ("sin mutaciones" if m.get("sin_mutaciones") else f"{m.get('detectados')} de {m.get('total')}") if m else (
             SIN_LINEA if "sdd-implement" in usos[clave] else "—")
         esc = defectos.get(clave, 0) if a.defectos else "—"
         marcas = marcas or SIN_LINEA in (rd, mut)
@@ -160,7 +167,7 @@ def main(argv=None):
               f"{conf} | {desc} | {corr} | {mut} | {esc} |")
     if marcas:
         print(f"\n{SIN_LINEA}: se usó sdd-review (G4) o sdd-implement (mutación) en esa issue y no hay "
-              "ninguna línea de métricas válida en un gh pr comment o gh pr edit.")
+              "ninguna línea de métricas válida en un gh pr comment.")
     print(f"\nTotal: {len(sesiones)} sesiones, ${sum(t['coste'] for t in tot.values()):.2f} estimados.")
     if sin_origen:
         print(f"Defectos sin issue de origen: {', '.join(sin_origen)}.")

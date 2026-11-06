@@ -127,6 +127,28 @@ class Resumen(unittest.TestCase):
         self.guarda("s11", {"inicio": "2026-11-05T12:00", "ramas": ["main"], "skills": {"sdd-review": [None]}})
         self.assertEqual(self.fila(self.ejecuta(), "main")[5], "⚠ sin línea")
 
+    def test_sin_mutaciones_quita_el_aviso(self):
+        self.guarda("s12", {"inicio": "2026-11-05T13:00", "issues": ["VIC-60"],
+                            "skills": {"sdd-implement": ["VIC-60"]},
+                            "mutacion": {"sin_mutaciones": True, "fecha": "x", "issue": "VIC-60"}})
+        salida = self.ejecuta()
+        self.assertEqual(self.fila(salida, "VIC-60")[9], "sin mutaciones")
+        self.assertNotIn("⚠", salida)
+
+    def test_csv_con_columnas_de_mas(self):
+        # Una coma sin comillas en una fila deja una lista en la clave None de DictReader.
+        ruta = self.csv("issue,origen\nVIC-30,VIC-12,sobra\n")
+        self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")
+        ruta = self.csv("ID,Labels,origen\nVIC-31,defecto-escapado,VIC-12,sobra\n")
+        self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")
+
+    def test_repo_y_modelos_escapados(self):
+        self.guarda("s13", {"inicio": "2026-11-05T14:00", "repo": "a|b", "modelos": ["m|1"], "ramas": ["r"]})
+        fila = [l for l in self.ejecuta().splitlines() if "2026-11-05 14:00" in l][0]
+        self.assertIn("a\\|b", fila)
+        self.assertIn("m\\|1", fila)
+        self.assertEqual(fila.count(" | "), 8)  # nueve columnas
+
     def test_csv_de_linear_con_columna_id(self):
         ruta = self.csv('﻿ID,Title,Origen\nVIC-30,"Redondeo, mal",VIC-12\n')
         self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")
@@ -175,6 +197,45 @@ class Resumen(unittest.TestCase):
         self.assertEqual(self.fila(salida, "VIC-40")[5:10], ["1", "3", "0", "3", "—"])
         self.assertEqual(self.fila(salida, "VIC-41")[5:10], ["1", "1", "1", "0", "2 de 3"])
         self.assertEqual(self.fila(salida, "VIC-40, VIC-41")[5:10], ["0", "0", "0", "0", "—"])
+
+
+class DeLaSesionAlResumen(unittest.TestCase):
+    """La cadena completa: transcript → sdd-metricas.py → JSON → resumen-metricas.py."""
+
+    def test_skill_sin_linea_y_con_linea(self):
+        ruta_m = pathlib.Path(__file__).resolve().parent.parent / "entorno" / "sdd-metricas.py"
+        spec = importlib.util.spec_from_file_location("sdd_metricas_e2e", ruta_m)
+        sdd_metricas = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sdd_metricas)
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            carpeta = os.path.join(d, "sdd-metricas")
+            transcript = os.path.join(d, "t.jsonl")
+            skill = lambda rama: {"type": "assistant", "gitBranch": rama, "message": {"content": [
+                {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "sdd:sdd-review"}}]}}
+            linea = "Métricas G4: PR #9 · ronda 1 · confirmados 2 · descartados 1 · corregidos 2"
+            entradas = [
+                skill("feat/vic-70-a"),  # VIC-70: sdd-review sin línea
+                skill("feat/vic-71-b"),  # VIC-71: sdd-review con línea publicada
+                {"type": "assistant", "gitBranch": "feat/vic-71-b", "timestamp": "t", "message": {"content": [
+                    {"type": "tool_use", "id": "g", "name": "Bash", "input": {"command":
+                        "{ cat r.md; cat <<'METRICAS_SDD'\n" + linea + "\nMETRICAS_SDD\n} | gh pr comment 9 -F -"}}]}},
+                {"type": "user", "toolUseResult": {}, "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": "g", "is_error": False, "content": "ok"}]}},
+            ]
+            with open(transcript, "w", encoding="utf-8") as f:
+                f.writelines(json.dumps(e, ensure_ascii=False) + "\n" for e in entradas)
+            entrada = {"session_id": "e2e", "transcript_path": transcript, "workspace": {"project_dir": d}}
+            with mock.patch.object(sdd_metricas, "CARPETA", carpeta), \
+                    mock.patch("sys.stdin", io.StringIO(json.dumps(entrada))), redirect_stdout(io.StringIO()):
+                sdd_metricas.main()
+            with redirect_stdout(io.StringIO()) as salida:
+                resumen.main([carpeta])
+            filas = {l.split("|")[1].strip(): [c.strip() for c in l.strip("|").split("|")]
+                     for l in salida.getvalue().split("| Issue / rama | Sesiones", 1)[1].splitlines()
+                     if l.startswith("| VIC-")}
+            self.assertEqual(filas["VIC-70"][5:9], ["⚠ sin línea", "—", "—", "—"])
+            self.assertEqual(filas["VIC-71"][5:9], ["1", "2", "1", "2"])
 
 
 if __name__ == "__main__":

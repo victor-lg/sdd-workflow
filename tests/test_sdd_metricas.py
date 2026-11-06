@@ -59,12 +59,26 @@ def asistente(texto, fecha="2026-11-06T10:00:00Z", **extra):
             "message": {"role": "assistant", "content": [{"type": "text", "text": texto}]}, **extra}
 
 
-def gh(cuerpo, orden="gh pr comment 21 --body-file - <<'EOF'\n{}\nEOF", fecha="2026-11-06T10:00:00Z",
-       herramienta="Bash", **extra):
-    """El agente publica un comentario con la orden de Bash que lleva el cuerpo."""
-    return {"type": "assistant", "timestamp": fecha, "message": {"role": "assistant", "content": [
-        {"type": "tool_use", "id": "t", "name": herramienta, "input": {"command": orden.format(cuerpo)}}]},
+# La forma que piden las skills: el cuerpo en un fichero y la línea en un heredoc entrecomillado.
+SEGURA = "{{ cat \"$TMPDIR/r.md\"; cat <<'METRICAS_SDD'\n{}\nMETRICAS_SDD\n}} | gh pr comment 21 --body-file -"
+_ids = iter(range(10 ** 6))
+
+
+def gh(cuerpo, orden=SEGURA, fecha="2026-11-06T10:00:00Z", herramienta="Bash", resultado="ok", **extra):
+    """El agente publica un comentario y llega su resultado: "ok", "error", "rechazada" o None."""
+    tid = f"toolu_{next(_ids)}"
+    llamada = {"type": "assistant", "timestamp": fecha, "message": {"role": "assistant", "content": [
+        {"type": "tool_use", "id": tid, "name": herramienta, "input": {"command": orden.format(cuerpo)}}]},
         **extra}
+    if resultado is None:
+        return [llamada]
+    error = resultado != "ok"
+    salida = {"type": "user", "toolUseResult": "Error" if error else {"stdout": "https://…"},
+              "message": {"role": "user", "content": [
+                  {"type": "tool_result", "tool_use_id": tid, "is_error": error, "content": "…"}]}}
+    if resultado == "rechazada":
+        salida["toolDenialKind"] = "user"
+    return [llamada, salida]
 
 
 def skill(nombre, **extra):
@@ -88,7 +102,8 @@ class Transcript(unittest.TestCase):
     def escribe(self, *entradas, cola=""):
         with open(self.ruta, "a", encoding="utf-8") as f:
             for e in entradas:
-                f.write(json.dumps(e, ensure_ascii=False) + "\n")
+                for x in (e if isinstance(e, list) else [e]):
+                    f.write(json.dumps(x, ensure_ascii=False) + "\n")
             f.write(cola)
 
     def test_cuentan_los_mensajes_de_la_persona(self):
@@ -252,8 +267,7 @@ class Transcript(unittest.TestCase):
             gh(G4.format(r=2, c=1)),
             # La misma ronda repetida: manda la última.
             gh("  " + G4.format(r=2, c=3) + "  ", fecha="2026-11-06T12:00:00Z"),
-            gh("Métricas G4: PR #22 · ronda 1 · confirmados 0 · descartados 0 · corregidos 0",
-               orden="gh pr edit 22 --body-file - <<'EOF'\n{}\nEOF"),
+            gh("Métricas G4: PR #22 · ronda 1 · confirmados 0 · descartados 0 · corregidos 0"),
         )
         g4 = sdd_metricas.lee_transcript(self.ruta, {})["g4"]
         self.assertEqual(set(g4), {"21/1", "21/2", "22/1"})
@@ -266,10 +280,11 @@ class Transcript(unittest.TestCase):
 
     def test_ordenes_gh_que_cuentan(self):
         ordenes = {
-            "heredoc a --body-file -": "gh pr comment 21 --body-file - <<'EOF'\n{}\nEOF",
-            "fichero y gh en la misma orden": "cat > $TMPDIR/r.md <<'EOF'\n{}\nEOF\ngh pr comment 21 --body-file $TMPDIR/r.md",
-            "tras &&": "cd repo && gh pr edit 21 --body \"Resumen\n{}\n\"",
-            "con espacios de más": "gh  pr   comment 21 -F - <<EOF\n{}\nEOF",
+            "la forma de las skills": SEGURA,
+            "tras &&": "cd repo && " + SEGURA,
+            "gh al principio con heredoc entrecomillado": "gh pr comment 21 --body-file - <<'METRICAS_SDD'\n{}\nMETRICAS_SDD",
+            "con espacios de más": "{{ cat r.md; cat <<'X'\n{}\nX\n}} |  gh  pr   comment 21 -F -",
+            "en una línea propia": "cat <<'X' > r.md\n{}\nX\ngh pr comment 21 --body-file r.md",
         }
         for caso, orden in ordenes.items():
             with self.subTest(caso=caso):
@@ -286,10 +301,16 @@ class Transcript(unittest.TestCase):
             "la persona": humano(linea + "\n" + mut),
             "resultado de gh pr comment": resultado(linea + "\n" + mut),
             "resultado de gh pr view": resultado("gh pr view 21 --comments\n" + linea),
+            "orden fallida": gh(linea + "\n" + mut, resultado="error"),
+            "orden rechazada": gh(linea + "\n" + mut, resultado="rechazada"),
+            "sin resultado todavía": gh(linea + "\n" + mut, resultado=None),
             "un subagente": gh(linea + "\n" + mut, isSidechain=True),
             "Bash sin gh pr": gh(linea + "\n" + mut, orden="cat > r.md <<'EOF'\n{}\nEOF"),
+            "gh pr edit": gh(linea + "\n" + mut, orden="gh pr edit 21 --body-file - <<'EOF'\n{}\nEOF"),
             "gh pr create": gh(linea, orden="gh pr create --body-file - <<'EOF'\n{}\nEOF"),
             "gh pr view": gh(linea, orden="gh pr view 21 # {}"),
+            "en un comentario de shell": gh(linea, orden="cat <<'X' > r.md\n{}\nX\n# luego gh pr comment 21"),
+            "dentro de otro texto": gh(linea, orden="git commit -m 'gh pr comment 21'\ncat <<'X'\n{}\nX"),
             "otra palabra": gh(linea, orden="xgh pr comment 21 <<'EOF'\n{}\nEOF"),
             "Write del fichero": gh(linea, orden="gh pr comment 21\n{}", herramienta="Write"),
             "citada en una frase": gh("Escribe `" + linea + "` al final."),
@@ -307,12 +328,36 @@ class Transcript(unittest.TestCase):
                 self.assertEqual(r["g4"], {})
                 self.assertIsNone(r["mutacion"])
 
+    def test_cuenta_al_llegar_el_resultado_en_otra_lectura(self):
+        llamada, salida = gh(G4.format(r=1, c=1))
+        self.escribe(llamada)
+        e = sdd_metricas.lee_transcript(self.ruta, {})
+        self.assertEqual(e["g4"], {})
+        self.assertEqual(len(e["pendientes"]), 1)
+        self.escribe(salida)
+        e = sdd_metricas.lee_transcript(self.ruta, e)
+        self.assertEqual(set(e["g4"]), {"21/1"})
+        self.assertEqual(e["pendientes"], {})
+
     def test_mutacion_la_ultima(self):
         self.escribe(gh("Métricas mutación: detectados 3 de 5", fecha="2026-11-06T10:00:00Z"),
                      gh("## Validación\nMétricas mutación: detectados 5 de 5", fecha="2026-11-06T11:00:00Z",
-                        orden="gh pr edit 21 --body-file - <<'EOF'\n{}\nEOF", gitBranch="fix/vic-13-redondeo"))
+                        gitBranch="fix/vic-13-redondeo"))
         self.assertEqual(sdd_metricas.lee_transcript(self.ruta, {})["mutacion"],
                          {"detectados": 5, "total": 5, "fecha": "2026-11-06T11:00:00Z", "issue": "VIC-13"})
+
+    def test_sin_mutaciones(self):
+        self.escribe(gh("Métricas mutación: sin mutaciones", gitBranch="fix/vic-13-redondeo"))
+        self.assertEqual(sdd_metricas.lee_transcript(self.ruta, {})["mutacion"],
+                         {"sin_mutaciones": True, "fecha": "2026-11-06T10:00:00Z", "issue": "VIC-13"})
+
+    def test_json_anterior_con_tipos_raros(self):
+        self.escribe(gh(G4.format(r=1, c=1)), skill("sdd:sdd-review"), humano("uno"))
+        raro = {"g4": [1], "skills": "x", "mutacion": 3, "pendientes": [2], "intervenciones_ids": None}
+        e = sdd_metricas.lee_transcript(self.ruta, raro)
+        self.assertEqual(set(e["g4"]), {"21/1"})
+        self.assertEqual(e["skills"], {"sdd-review": [None]})
+        self.assertEqual(e["intervenciones"], 1)
 
     def test_issue_de_la_rama_de_cada_entrada(self):
         # Una sesión que pasa de VIC-12 a VIC-13: cada ronda va a la issue de su rama.
@@ -387,8 +432,8 @@ class Main(unittest.TestCase):
     def test_guarda_recuentos_y_nunca_contenido(self):
         with open(self.transcript, "w", encoding="utf-8") as f:
             for e in (humano("SECRETO-PERSONA"), asistente("SECRETO-ASISTENTE"),
-                      gh("SECRETO-COMENTARIO\n" + G4.format(r=1, c=2)), skill("sdd:sdd-review"),
-                      gh("Métricas mutación: detectados 4 de 6")):
+                      *gh("SECRETO-COMENTARIO\n" + G4.format(r=1, c=2)), skill("sdd:sdd-review"),
+                      *gh("Métricas mutación: detectados 4 de 6")):
                 f.write(json.dumps(e) + "\n")
         entrada = {"session_id": "abc", "transcript_path": self.transcript,
                    "model": {"display_name": "Opus"}, "cost": {"total_cost_usd": 1.5}}

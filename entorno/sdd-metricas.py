@@ -23,16 +23,19 @@ de la rama. Del transcript de la sesión guarda solo recuentos:
 - G4: las líneas "Métricas G4: PR #N · ronda R · confirmados X · descartados Y ·
   corregidos Z" que sdd-review escribe en el comentario de reconciliación, una por
   PR y ronda (la última manda);
-- mutación: la última línea "Métricas mutación: detectados X de Y" de sdd-implement;
+- mutación: la última línea "Métricas mutación: detectados X de Y" (o "sin
+  mutaciones") de sdd-implement;
 - qué sesiones usaron sdd-review o sdd-implement, para avisar si falta su línea.
 
-Las dos líneas solo cuentan en la entrada de una llamada a Bash con gh pr comment o
-gh pr edit del agente principal, nunca en su resultado ni en el texto suelto del
-asistente (Claude Code no siempre lo guarda literal en el transcript). Tienen que
-ir solas en su línea y fuera de un bloque ``` o ~~~, y se atribuyen a la issue de
-la rama de esa entrada del transcript (gitBranch), no a la de la sesión. Son
-autodeclaradas: el agente las escribe y nada las comprueba, así que un texto que
-lo engañe podría falsearlas. El transcript se lee por partes
+Las dos líneas solo cuentan en la entrada de una llamada a Bash del agente principal
+con gh pr comment al principio de una orden, y solo cuando llega su resultado sin
+error (una orden fallida o rechazada no cuenta). Nunca se leen del resultado, del
+texto suelto del asistente (Claude Code no siempre lo guarda literal) ni de gh pr
+edit (reenvía la descripción entera, y con ella líneas viejas). Tienen que ir solas
+en su línea y fuera de un bloque ``` o ~~~, y se atribuyen a la issue de la rama de
+esa entrada del transcript (gitBranch), no a la de la sesión. Son autodeclaradas:
+el agente las escribe y nada las comprueba (tampoco que el PR #N sea el de la orden),
+así que un texto que lo engañe podría falsearlas. El transcript se lee por partes
 (hasta 8 MB cada vez): el JSON de la sesión guarda hasta qué byte se ha leído. Una
 línea de más de 8 MB se salta sin analizar; si era un mensaje de la persona, no
 cuenta. Se supone que Claude Code solo añade al transcript: si se reescribe, se
@@ -64,9 +67,14 @@ ISSUE = re.compile(r"^(?:[a-z]+/)?vic-(\d+)\b", re.I)
 N = r"(\d{1,6})"
 LINEA_G4 = re.compile(rf"^[ \t]*Métricas G4: PR #{N} · ronda {N} · confirmados {N} · "
                       rf"descartados {N} · corregidos {N}[ \t\r]*$", re.M)
-LINEA_MUTACION = re.compile(rf"^[ \t]*Métricas mutación: detectados {N} de {N}[ \t\r]*$", re.M)
-# Las líneas solo se leen de la entrada de estas órdenes, nunca de su resultado.
-GH_PR = re.compile(r"(?:^|[\s;&|(])gh\s+pr\s+(?:comment|edit)\b")
+# "sin mutaciones" dice que la entrega no las tuvo, sin dar números.
+LINEA_MUTACION = re.compile(rf"^[ \t]*Métricas mutación: (?:detectados {N} de {N}|(sin mutaciones))[ \t\r]*$",
+                            re.M)
+# Las líneas solo se leen de la entrada de gh pr comment al principio de una orden
+# (no en un comentario de shell ni dentro de otro texto), y solo si su resultado no
+# es un error: ni un fallo ni una orden rechazada. gh pr edit no vale porque reenvía
+# la descripción entera y con ella líneas viejas.
+GH_PR = re.compile(r"(?:^|[;&|({])[ \t]*gh[ \t]+pr[ \t]+comment\b", re.M)
 # Skills cuyo uso sin ninguna línea válida se avisa en el resumen.
 SKILLS_CON_METRICAS = ("sdd-review", "sdd-implement")
 SKILL_DE_BARRA = re.compile(r"\s*(?:<command-message>[^<]*</command-message>\s*)?"
@@ -135,6 +143,26 @@ def entero(v):
         return 0
 
 
+def lineas_de(orden, fecha, issue):
+    """Las líneas de métricas de una orden con gh pr comment, o None si no hay."""
+    texto = fuera_de_bloques(orden)
+    g4 = {}
+    for m in LINEA_G4.finditer(texto):
+        pr, ronda, conf, desc, corr = (int(x) for x in m.groups())
+        g4[f"{pr}/{ronda}"] = {"pr": pr, "ronda": ronda, "confirmados": conf, "descartados": desc,
+                               "corregidos": corr, "fecha": fecha, "issue": issue}
+    mutacion = None
+    for m in LINEA_MUTACION.finditer(texto):
+        mutacion = ({"sin_mutaciones": True} if m.group(3) else
+                    {"detectados": int(m.group(1)), "total": int(m.group(2))})
+        mutacion.update(fecha=fecha, issue=issue)
+    return {"g4": g4, "mutacion": mutacion} if g4 or mutacion else None
+
+
+def dic(v):
+    return v if isinstance(v, dict) else {}
+
+
 def anota_skill(estado, nombre, issue):
     """Apunta que la sesión usó una skill de SKILLS_CON_METRICAS en esa issue."""
     if nombre in SKILLS_CON_METRICAS:
@@ -180,9 +208,11 @@ def lee_transcript(ruta, antes):
     ids = list(antes.get("intervenciones_ids") or [])
     estado = {
         "intervenciones": entero(antes.get("intervenciones")),
-        "g4": dict(antes.get("g4") or {}),
-        "mutacion": antes.get("mutacion"),
-        "skills": {k: list(v) for k, v in (antes.get("skills") or {}).items() if isinstance(v, list)},
+        "g4": dict(dic(antes.get("g4"))),
+        "mutacion": antes.get("mutacion") if isinstance(antes.get("mutacion"), dict) else None,
+        "skills": {k: list(v) for k, v in dic(antes.get("skills")).items() if isinstance(v, list)},
+        # Líneas de un gh pr comment cuyo resultado aún no ha llegado, por tool_use_id.
+        "pendientes": dict(dic(antes.get("pendientes"))),
     }
     with open(ruta, "rb") as f:
         reescrito = os.fstat(f.fileno()).st_size < desde
@@ -193,7 +223,7 @@ def lee_transcript(ruta, antes):
         if antes.get("transcript") != nombre or reescrito:
             # Otro fichero o uno reescrito: se cuenta desde el principio.
             desde, ids, a_media_linea = 0, [], False
-            estado = {"intervenciones": 0, "g4": {}, "mutacion": None, "skills": {}}
+            estado = {"intervenciones": 0, "g4": {}, "mutacion": None, "skills": {}, "pendientes": {}}
         f.seek(desde)
         bloque = f.read(MAX_LECTURA)
     if a_media_linea:
@@ -219,6 +249,15 @@ def lee_transcript(ruta, antes):
             e = json.loads(linea.decode("utf-8", errors="replace"))
             if not isinstance(e, dict):
                 continue
+            if e.get("type") == "user" and not e.get("isSidechain"):
+                for b in g(e, "message", "content", defecto=[]):
+                    # El resultado de un gh pr comment: sus líneas cuentan si no es un error.
+                    if isinstance(b, dict) and b.get("type") == "tool_result":
+                        lineas = estado["pendientes"].pop(str(b.get("tool_use_id")), None)
+                        if isinstance(lineas, dict) and b.get("is_error") is not True:
+                            estado["g4"].update(dic(lineas.get("g4")))
+                            if isinstance(lineas.get("mutacion"), dict):
+                                estado["mutacion"] = lineas["mutacion"]
             if e.get("type") == "user" and not e.get("isSidechain") and "toolUseResult" not in e:
                 # La persona puede lanzar la skill con /sdd:sdd-review en vez de pedírsela al agente.
                 m = SKILL_DE_BARRA.match(texto_de(g(e, "message", "content")))
@@ -247,17 +286,12 @@ def lee_transcript(ruta, antes):
                     if b.get("name") == "Skill" and isinstance(entrada.get("skill"), str):
                         anota_skill(estado, entrada["skill"].split(":")[-1], issue)
                     orden = entrada.get("command")
-                    if b.get("name") != "Bash" or not isinstance(orden, str) or not GH_PR.search(orden):
+                    if b.get("name") != "Bash" or not isinstance(orden, str) or not GH_PR.search(orden) \
+                            or not isinstance(b.get("id"), str):
                         continue
-                    texto = fuera_de_bloques(orden)
-                    for m in LINEA_G4.finditer(texto):
-                        pr, ronda, conf, desc, corr = (int(x) for x in m.groups())
-                        estado["g4"][f"{pr}/{ronda}"] = {"pr": pr, "ronda": ronda, "confirmados": conf,
-                                                         "descartados": desc, "corregidos": corr,
-                                                         "fecha": fecha, "issue": issue}
-                    for m in LINEA_MUTACION.finditer(texto):
-                        estado["mutacion"] = {"detectados": int(m.group(1)), "total": int(m.group(2)),
-                                              "fecha": fecha, "issue": issue}
+                    lineas = lineas_de(orden, fecha, issue)
+                    if lineas:
+                        estado["pendientes"][b["id"]] = lineas
         except Exception:
             continue  # una entrada rara no debe congelar las métricas de la sesión
     estado["intervenciones_ids"] = ids
@@ -335,7 +369,7 @@ def main():
     # Recuentos de la conversación; si el transcript falla, se conservan los anteriores.
     conversacion = {k: antes[k] for k in ("transcript", "transcript_leido", "intervenciones",
                                           "intervenciones_ids", "g4", "mutacion",
-                                          "skills", "transcript_a_media_linea") if k in antes}
+                                          "skills", "pendientes", "transcript_a_media_linea") if k in antes}
     transcript = g(e, "transcript_path")
     if transcript:
         try:
