@@ -31,12 +31,12 @@
 | Mejora | Qué se hace |
 | --- | --- |
 | **M36** | El repo `sdd-workflow` se trabaja como un proyecto más: el agente en WSL abre PR, la CI valida y tú fusionas. Se acaba copiar desde este chat a la carpeta de Windows |
-| **M35** | Evaluaciones del propio workflow (`claude plugin eval`). Los casos N1–N8 y el comportamiento clave de cada skill (`sdd-plan` se para si la issue no está en *Ready*, `sdd-review` no pasa contexto de más…) se ejecutan en la CI del workflow |
+| **M35** | Evaluaciones del propio workflow (`claude plugin eval`). Los casos negativos que dependen del plugin (N1, N2, N6, N7 y N8; N3–N5 son barreras de GitHub y del token) y el comportamiento clave de cada skill (`sdd-plan` se para si la issue no está en *Ready*, `sdd-review` no pasa contexto de más…) se ejecutan en la CI del workflow al fusionar en `main`, no en cada PR: en una evaluación los hooks del plugin se ejecutan fuera del sandbox, y el token no debe llegar a código sin revisar |
 | **Autoría** | ADR-0007. `"attribution": {"commit": "", "pr": "", "sessionUrl": false}` en los ajustes de usuario (las cadenas vacías ocultan la mención). Se quitan de `AGENTS.md` y de la plantilla de PR el `Co-Authored-By`, el pie "Generated with" y el apartado "Perfil y modelo". Los commits y el squash quedan a nombre de la cuenta de máquina del agente, que abre el PR; la autoría de Víctor se descarta (ADR-0007, §2) |
 | **M42** | Convenciones de nombres y mensajes en `docs/convenciones.md`, adoptadas por el ADR-0007 junto con la autoría (ramas `tipo/vic-N-…`, Conventional Commits con `Refs: VIC-N` en el pie, títulos de issue y PR, versiones). `AGENTS.md`, plantillas y skills remiten a ese documento. Linear ya está preparado (team "Desarrollo", etiquetas Tipo, Riesgo y Origen, plantillas, proyecto del workflow) |
 | **Medición** | `sdd-metricas` amplía lo que guarda: rondas de G4, hallazgos (confirmados y descartados), puntuación de mutación cuando exista, defectos escapados (M10) e intervenciones humanas. `resumen-metricas.py` los resume por issue |
 
-**Hecho cuando:** un primer PR del workflow, abierto por el agente, pasa la CI con las evaluaciones, y sus commits no mencionan a Claude.
+**Hecho cuando:** un primer PR del workflow, abierto por el agente, pasa la CI, sus commits no mencionan a Claude y, al fusionarlo en `main`, las evaluaciones pasan.
 
 ## Bloque 2 — Controles en vez de instrucciones
 

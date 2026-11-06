@@ -1,3 +1,4 @@
 # Repo del workflow (M36, VIC-16).
 __pycache__/
 .tareas/
+plugin-sdd/evals/results/

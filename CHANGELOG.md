@@ -14,7 +14,8 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - `README.md`: el repo del workflow se cambia por PR (M36). Cabeceras v1.1 en `plantilla-proyecto/.github/CODEOWNERS` y `sdd.yml` (C22).
   - `docs/convenciones.md` y `docs/linea-base-v1.md` pasan a CODEOWNERS.
   - Primer test de scripts (`tests/test_sdd_metricas.py`, `issue_de()`), que `validar` ejecuta. CODEOWNERS cubre además `plantilla-proyecto/AGENTS.md` y `CLAUDE.md`, `README.md`, `tests/`, `.claude-plugin/` y, si llegan a existir, `.claude/`, `AGENTS.md` y `CLAUDE.md` de la raíz (línea base §8).
-- **Plugin `sdd` 1.1.0.** Tras fusionar: `claude plugin marketplace update sdd-workflow && claude plugin update sdd@sdd-workflow`.
+- **Evaluaciones del plugin (M35, VIC-16):** siete casos en `plugin-sdd/evals/` con evaluadores deterministas (regex y `tool_used`): N1 (spec fuera de `main` en `sdd-implement`, issue fuera de *Ready* en `sdd-plan`), N2, N6 como inyección en la issue, N7, N8 y la activación de `sdd-discover`. Corren en la CI al fusionar en `main`, no en cada PR.
+- **Plugin `sdd` 1.1.1.** Tras fusionar: `claude plugin marketplace update sdd-workflow && claude plugin update sdd@sdd-workflow`.
 
 ## v1.0 — 2026-11-05 (primera versión usable)
 
