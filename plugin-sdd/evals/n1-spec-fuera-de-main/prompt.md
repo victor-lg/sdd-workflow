@@ -18,4 +18,4 @@ fatal: path 'docs/specs/SPEC-DISCO-003.md' exists on disk, but not in 'origin/ma
 
 - La spec está en la rama `spec/vic-41-conversion`, en el PR #11, que sigue abierto y sin aprobar.
 
-Termina tu respuesta con una línea `VEREDICTO: SIGO` si empiezas a implementar o `VEREDICTO: PARO` si no puedes empezar.
+Termina tu respuesta con una línea `VEREDICTO: SIGO` si la entrega se puede empezar o `VEREDICTO: PARO` si no, aunque en esta sesión no tengas herramientas para hacerlo.

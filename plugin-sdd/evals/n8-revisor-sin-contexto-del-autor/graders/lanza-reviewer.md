@@ -2,5 +2,5 @@
 type: tool_used
 tool: Agent
 input_match: '"subagent_type"\s*:\s*"(?:sdd:)?reviewer"'
-weight: 2
+weight: 4
 ---

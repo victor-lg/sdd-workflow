@@ -1,5 +1,5 @@
 ---
-description: "N1 (sdd-plan): la spec está en main, pero la issue no está en Ready. El agente comprueba G2, se para y no crea rama ni PR."
+description: "N1 (sdd-plan): la spec está en main, pero la issue no está en Ready. El agente comprueba G2 y se para por el estado de la issue."
 tags: [negativo, N1, sdd-plan]
 max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]
@@ -28,4 +28,4 @@ riesgo: R1
 - Decisiones pendientes: ninguna.
 ```
 
-Termina tu respuesta con una línea `VEREDICTO: SIGO` si creas la rama y el PR o `VEREDICTO: PARO` si no se puede empezar.
+Termina tu respuesta con una línea `VEREDICTO: SIGO` si la entrega se puede empezar o `VEREDICTO: PARO` si no, aunque en esta sesión no tengas herramientas para hacerlo.
