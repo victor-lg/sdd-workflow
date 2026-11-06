@@ -44,7 +44,13 @@ Instrucciones para cualquier agente que trabaje en este repositorio. Son cortas 
 
 Rellena la plantilla del PR: por qué existe, qué spec y AC cubre (`SPEC-XXX-NNN/AC-NN`), si cambia comportamiento, qué ADR aplica o propone, qué se validó y qué no, el nivel de riesgo (marca uno solo) y, en los PR de código, la "Guía para el revisor humano". Un PR no mezcla cambios de spec y de código.
 
-- **Nombres y mensajes:** ramas, commits, títulos de PR, issues y versiones siguen `docs/convenciones.md` del repo del workflow (ADR-0007). En resumen: rama `<tipo>/vic-<N>-<descripcion>`; título del PR y de cada commit en Conventional Commits, con el alcance como zona y no como ID (`fix(calculo): …`); `Refs: VIC-N` en el pie de los commits. Se fusiona por squash, así que el título será el commit de `main`.
+- **Nombres y mensajes:** la norma es `docs/convenciones.md` del repo del workflow (ADR-0007); este resumen basta para trabajar:
+  - **Tipos:** `feat`, `fix`, `spec`, `adr`, `refactor`, `test`, `docs`, `ci` y `chore`, los mismos que la etiqueta de Tipo de la issue.
+  - **Rama:** `<tipo>/vic-<N>-<descripcion>`, siempre con el ID, en minúsculas, sin tildes y con unos 50 caracteres como máximo (`feat/vic-12-calculo`).
+  - **Título del commit y del PR:** `<tipo>(<alcance>)!: <descripción>`. El alcance es la zona del código o del documento (`calculo`, `SPEC-CALC-003`), nunca el ID. La descripción va en español, en imperativo y en minúscula, sin punto final y con 72 caracteres como máximo. `!` solo si rompe compatibilidad. Se fusiona por squash, así que el título del PR será el commit de `main`.
+  - **Cuerpo del commit:** opcional, separado por una línea en blanco: qué cambia y por qué.
+  - **Pie del commit**, en este orden: `Refs: VIC-N`, `Spec: SPEC-XXX-NNN/AC-NN` y `BREAKING CHANGE: …` si aplica.
+  - **Descripción del PR:** la primera línea es `Fixes VIC-N` en el último PR de la entrega y `Part of VIC-N` en los anteriores.
 - **Autoría:** los commits y el PR son de la cuenta de máquina del agente y no mencionan a Claude: sin `Co-Authored-By` ni "Generated with" (ADR-0007).
 - **Tamaño:** orientativamente, unas 400 líneas de código por PR, sin contar tests ni lockfiles. Si la entrega es mayor, pártela en varios PR.
 - **Tests existentes:** si cambias uno, dilo en la guía del revisor con el motivo. Nunca lo hagas para que la CI pase.

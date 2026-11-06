@@ -146,12 +146,10 @@ Una convención que no se comprueba se acaba incumpliendo (M25). Se comprueba en
 | `Co-Authored-By` del agente | Sin menciones a Claude |
 | Squash con el mensaje por defecto | "Pull request title and commit details" |
 
-Ficheros que hay que ajustar al aplicarla:
-- `plantilla-proyecto/AGENTS.md`;
-- la plantilla de PR;
-- `sdd-plan` y `sdd-spec`;
-- el lector de `sdd-metricas.py` y `checks.py`;
-- `docs/glosario.md` y `docs/guia-instalacion.md`, en el apartado del formato de rama de Linear;
+Aplicada en el PR de VIC-16 (ADR-0007): `plantilla-proyecto/AGENTS.md`, la plantilla de PR, `sdd-plan`, `sdd-spec`, `sdd-implement`, `sdd-review`, el lector de `sdd-metricas.py` y la guía de instalación. `docs/glosario.md` no necesitaba cambios.
+
+Pendiente:
+- `checks.py`, cuando compruebe ramas y títulos (M11, bloque 2);
 - los repos de cada proyecto, al actualizar su plantilla.
 
 El historial ya escrito no se toca.

@@ -97,7 +97,7 @@ En ese repo:
    - caducidad de **90 días**.
 
    Copia el token y apunta la renovación en tu calendario.
-3. Con **tu** cuenta, invítala como colaboradora a `calculadora-discos` y a `sdd-workflow`. En los repos de una cuenta personal GitHub no tiene roles: todo colaborador tiene lectura y escritura. Por eso `sdd-workflow` lleva también el ruleset `main-protegida` (PR con 1 aprobación, descarta aprobaciones antiguas, último push aprobado por otra persona, sin borrar ni *force push*), con tu excepción en modo "Always allow" para que puedas seguir subiendo con Fork.
+3. Con **tu** cuenta, invítala como colaboradora a `calculadora-discos` y a `sdd-workflow`. En los repos de una cuenta personal GitHub no tiene roles: todo colaborador tiene lectura y escritura. Por eso `sdd-workflow` lleva también el ruleset `main-protegida` (PR con 1 aprobación, descarta aprobaciones antiguas, último push aprobado por otra persona, sin borrar ni *force push*, check requerido `validar` y revisión de Code Owners), con tu excepción de administrador en modo **"Allow for pull requests only"**: desde M36, este repo también se cambia por PR (ADR-0007).
 4. Con la cuenta de máquina, acepta las dos invitaciones.
 5. Anota el correo `noreply` de la cuenta de máquina (*Settings → Emails*), del tipo `12345678+tu-usuario-bot@users.noreply.github.com`.
 
@@ -286,7 +286,7 @@ claude
 
 Pídele a Claude, dentro de la sesión:
 
-> Crea una rama `prueba-ci`, corrige una errata en el README, haz commit, empuja la rama y abre un PR con la plantilla del repo, marcando R0 y "AC cubiertos: no aplica (prueba de CI)".
+> Crea una rama `chore/vic-N-prueba-ci` (con el número de una issue de prueba), corrige una errata en el README, haz commit, empuja la rama y abre un PR con la plantilla del repo, marcando R0 y "AC cubiertos: no aplica (prueba de CI)".
 
 **Comprobación:**
 
@@ -399,7 +399,7 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
 ### G1. Workflow de tests
 
 1. Copia `docs/ejemplos/workflows/tests-node-playwright.yml` del repo del workflow, adaptado al stack.
-2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci-tests`). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci-tests` branch"**; si no, GitHub crea ramas nuevas (`ci-tests-1`…).
+2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci/vic-N-tests`, con el ID de la issue). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci/vic-N-tests` branch"**; si no, GitHub crea ramas nuevas (`ci/vic-N-tests-1`…).
 3. Abre un PR `ci: workflow de tests`, R2. Antes de fusionarlo, pide a una sesión del agente que lo revise con `sdd-review` (2 revisores; ADR-0006). Después, fusiónalo con tu excepción de administrador.
 4. En el ruleset de `main`, añade `tests` a los checks obligatorios.
    - Los PR que ya estaban abiertos se quedan esperando ese check. Ciérralos y vuelve a abrirlos para lanzarlo.

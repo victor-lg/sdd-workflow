@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Línea de estado de Claude Code que, además, guarda las métricas de cada sesión.
 
-Workflow SDD + IA, v0.23 (mejora M9 de historial/recorrido-2.md).
+Workflow SDD + IA, v0.23 (mejora M9 de historial/recorrido-2.md); v1.1 lee las ramas
+<tipo>/vic-N-… de docs/convenciones.md (ADR-0007).
 
 Claude Code ejecuta este script cada vez que actualiza la línea de estado y le pasa
 por la entrada estándar un JSON con los datos de la sesión. El script:
