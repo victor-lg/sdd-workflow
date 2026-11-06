@@ -13,6 +13,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - La guía de instalación cambia el *Default commit message* a "Pull request title and commit details", recoge en el ruleset de `sdd-workflow` el check `validar`, la revisión de Code Owners y la excepción "Allow for pull requests only", y usa ramas con ID en sus pruebas.
   - `README.md`: el repo del workflow se cambia por PR (M36). Cabeceras v1.1 en `plantilla-proyecto/.github/CODEOWNERS` y `sdd.yml` (C22).
   - `docs/convenciones.md` y `docs/linea-base-v1.md` pasan a CODEOWNERS.
+  - Primer test de scripts (`tests/test_sdd_metricas.py`, `issue_de()`), que `validar` ejecuta. `plantilla-proyecto/AGENTS.md`, `plantilla-proyecto/CLAUDE.md` y `README.md` pasan a CODEOWNERS.
 - **Plugin `sdd` 1.1.0.** Tras fusionar: `claude plugin marketplace update sdd-workflow && claude plugin update sdd@sdd-workflow`.
 
 ## v1.0 — 2026-11-05 (primera versión usable)
