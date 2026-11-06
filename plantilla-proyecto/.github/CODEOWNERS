@@ -1,4 +1,4 @@
-# BORRADOR del workflow SDD + IA v0.10.
+# Workflow SDD + IA v1.1.
 # Propietario: victor-lg (tu cuenta, nunca la cuenta de máquina del agente).
 # Con "Require review from Code Owners" activo en la regla de `main`, nada
 # llega a `main` sin tu aprobación. La última regla que coincide es la que manda.
