@@ -413,16 +413,12 @@ La skill lista las fuentes que ha usado y se detiene si encuentra contradiccione
 
 **Done** significa que se cumplió G6 y que, al fusionar el PR con "Fixes <ID>", la integración Linear–GitHub pasó la issue a *Done*. Fusionar no es desplegar: si un proyecto publica, eso es un paso aparte (D25) que se añadirá cuando exista.
 
-### Convenciones de GitHub (v0.18)
+### Convenciones de GitHub (v0.18, modificada por ADR-0007)
 
-Convenciones estándar, sin checks propios en la CI. Las sigue el agente por `AGENTS.md`, y la retrospectiva decide si hace falta comprobarlas.
-
-- **Títulos de PR: Conventional Commits, con el ID como alcance** y la descripción en español: `feat(VIC-5): calculadora de series de calentamiento`, `fix(VIC-7): …`, `test(VIC-6): …`, `docs(SPEC-CALC-001): v0.4, entrada tolerante`, `docs(ADR-0001): tecnología PWA`, `ci: workflow de publicación`.
-- **Fusión solo por squash**, con el título del PR como mensaje. Cada commit de `main` es un PR revisado y en verde, y el historial se lee como un changelog. Los pasos intermedios siguen en la página del PR.
-- **Ramas:** `vic-N-…` para entregas (formato de Linear), `spec-<id>-…` para specs, `adr-NNNN-…` para ADR, `ci-…` para workflows y `chore-…` para mantenimiento. GitHub borra las ramas al fusionar.
-- **Commits dentro de una rama:** mismo formato, en imperativo y en una línea. No son críticos, porque desaparecen al fusionar.
+- **Nombres y mensajes:** ramas, commits de rama, títulos de PR, mensaje del squash, títulos de issue y versiones siguen `docs/convenciones.md`, que es norma (ADR-0007). Esta sección no lo repite.
+- **Fusión solo por squash.** Cada commit de `main` es un PR revisado y en verde, y el historial se lee como un changelog. Los pasos intermedios siguen en la página del PR. GitHub borra las ramas al fusionar.
 - **PR pequeños:** orientativamente, unas 400 líneas de código por PR, sin contar tests ni lockfiles. Una entrega grande se parte en varios PR (`sdd-plan`).
-- **Autoría transparente:** los commits del agente llevan `Co-Authored-By`.
+- **Autoría:** commits con la autoría de la cuenta de máquina del agente y sin menciones a Claude: ni `Co-Authored-By` ni "Generated with" (ADR-0007). El ajuste `attribution` de Claude Code lo desactiva.
 - **Sesiones del agente:** una por PR, nombrada con el ID del trabajo ("VIC-6 · implementación"). Nunca dos sesiones a la vez sobre la misma copia del repo: en paralelo, cada una con su clon o `git worktree`.
 - **Releases:** cada publicación lleva etiqueta semver (`v0.1.0`) y una release de GitHub con notas generadas a partir de los títulos de PR.
 

@@ -1,6 +1,6 @@
-# Convenciones de nombres y mensajes (PROPUESTO, M42)
+# Convenciones de nombres y mensajes (M42)
 
-Fuente única de cómo se nombran y se escriben las cosas en el workflow. `AGENTS.md`, las skills, las plantillas y la CI remiten aquí en vez de repetirlo. Entra en vigor con el bloque 1 de la v1.1; hasta entonces manda lo que dice `AGENTS.md`.
+Fuente única de cómo se nombran y se escriben las cosas en el workflow. `AGENTS.md`, las skills, las plantillas y la CI remiten aquí en vez de repetirlo. Es norma desde el PR de VIC-16 que aplica el ADR-0007; se cambia por PR sin ADR, salvo que contradiga un ADR aceptado o la línea base (ADR-0007, §3.4).
 
 Idea de fondo: **el mismo vocabulario en todas partes.** El tipo de cambio (`feat`, `fix`, `spec`…) es el mismo en la etiqueta de Linear, en la rama, en el commit y en el título del PR, y el ID de la issue va en todos.
 

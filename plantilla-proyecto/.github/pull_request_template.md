@@ -1,14 +1,13 @@
-<!-- Workflow SDD + IA v0.22. Basado en "un PR debería permitir responder…" de las notas originales. -->
+<!-- Workflow SDD + IA v1.1. Basado en "un PR debería permitir responder…" de las notas originales. -->
 <!--
-Título del PR (Conventional Commits, con el ID como alcance):
-  feat(VIC-5): …   fix(VIC-7): …   test(VIC-6): …   refactor(VIC-8): …
-  docs(SPEC-CALC-001): …   docs(ADR-0001): …   ci: …   chore: …
-Se fusiona solo por squash: el título será el commit de `main`.
+Título del PR (Conventional Commits, con el alcance como zona, nunca el ID; docs/convenciones.md del workflow):
+  feat(calculo): …   fix(interfaz): …   test(calculo): …   spec(SPEC-CALC-001): …   adr: …   ci: …   chore: …
+Se fusiona solo por squash: el título será el commit de `main`. Sin menciones a Claude (ADR-0007).
 -->
 
 ## Por qué existe este cambio
 
-Issue de Linear: <ID> (escribe "Fixes <ID>" para que pase a Done al fusionar)
+Fixes VIC-N <!-- "Part of VIC-N" si no es el último PR de la entrega -->
 
 ## Plan y progreso
 
@@ -41,11 +40,6 @@ Issue de Linear: <ID> (escribe "Fixes <ID>" para que pase a Done al fusionar)
 - [ ] R2 sensible
 
 Motivo:
-
-## Perfil y modelo
-
-- [ ] Perfil Claude (suscripción) — modelo:
-- [ ] Perfil Go — modelo:
 
 ## Validación
 

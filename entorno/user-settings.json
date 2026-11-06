@@ -5,5 +5,10 @@
     "type": "command",
     "command": "python3 ~/.claude/sdd-metricas.py",
     "padding": 0
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
   }
 }

@@ -31,7 +31,8 @@ import tempfile
 from datetime import datetime
 
 CARPETA = os.environ.get("SDD_METRICAS_DIR", "/mnt/c/Users/victor/Documents/sdd-metricas")
-ISSUE = re.compile(r"\b([a-z]{2,10})-(\d+)\b", re.I)
+# Rama de convenciones.md (feat/vic-16-…) o del formato anterior (vic-10-…).
+ISSUE = re.compile(r"^(?:[a-z]+/)?vic-(\d+)\b", re.I)
 
 
 def g(d, *claves, defecto=None):
@@ -56,9 +57,9 @@ def rama(directorio):
 
 
 def issue_de(nombre):
-    # Ramas como vic-10-calculo o spec-calc-003-...: solo se toma el prefijo del team de Linear.
+    # Solo cuenta el ID del team de Linear: spec-calc-003-... no es una issue.
     m = ISSUE.match(nombre or "")
-    return f"{m.group(1).upper()}-{m.group(2)}" if m and m.group(1).lower() == "vic" else None
+    return f"VIC-{m.group(1)}" if m else None
 
 
 def guarda(ruta, datos):
