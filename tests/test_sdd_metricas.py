@@ -29,8 +29,13 @@ class IssueDe(unittest.TestCase):
     def test_formato_anterior_sin_tipo(self):
         self.assertEqual(sdd_metricas.issue_de("vic-10-calculo"), "VIC-10")
 
+    def test_mayusculas(self):
+        self.assertEqual(sdd_metricas.issue_de("Feat/VIC-7-x"), "VIC-7")
+
     def test_ramas_sin_issue(self):
-        for rama in ("spec-calc-003-x", "main", "feat/abc-3-x", "", None):
+        # vic-16x no termina el número; a/b/ no es un tipo de convenciones.md.
+        for rama in ("spec-calc-003-x", "main", "feat/abc-3-x", "feat/vic-16x",
+                     "a/b/vic-1-x", "", None):
             with self.subTest(rama=rama):
                 self.assertIsNone(sdd_metricas.issue_de(rama))
 
