@@ -1,0 +1,80 @@
+# Evaluaciones del plugin (M35, VIC-16). Solo corren sobre código ya
+# fusionado en main, nunca en un PR: en una evaluación los hooks del plugin
+# se ejecutan fuera del sandbox, y el token de la suscripción no debe llegar
+# a código sin revisar. Los casos viven en plugin-sdd/evals/.
+name: evals
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugin-sdd/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals
+  cancel-in-progress: false
+
+jobs:
+  evals:
+    # También con workflow_dispatch: solo main, nunca otra rama.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: ¿Hay casos?
+        id: casos
+        run: |
+          if [ -d plugin-sdd/evals ] && find plugin-sdd/evals -name prompt.md -o -name case.yaml | grep -q .; then
+            echo "hay=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=no" >> "$GITHUB_OUTPUT"
+            echo "Sin casos en plugin-sdd/evals: nada que evaluar."
+          fi
+
+      - name: Instalar Claude Code (versión fijada)
+        if: steps.casos.outputs.hay == 'si'
+        run: npm install -g @anthropic-ai/claude-code@2.1.307
+
+      - name: Evaluar el plugin
+        if: steps.casos.outputs.hay == 'si'
+        working-directory: plugin-sdd
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude plugin eval . \
+            --trust-plugin \
+            --json "$RUNNER_TEMP/resultados-evals.json" \
+            --threshold 0.8 \
+            --model claude-sonnet-5-5 \
+            --judge-model claude-haiku-5-5 \
+            --ablation none \
+            --no-publish \
+            --max-cost-usd 5
+
+      - name: Resumen
+        if: always() && steps.casos.outputs.hay == 'si'
+        run: |
+          python3 - "$RUNNER_TEMP/resultados-evals.json" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json, sys
+          try:
+              r = json.load(open(sys.argv[1]))
+          except Exception as e:
+              print(f"Sin resultados legibles: {e}")
+              sys.exit(0)
+          print("### Evaluaciones del plugin")
+          print(f"- Parcial: {r.get('partial', False)} {r.get('partialReason') or ''}")
+          print(f"- Coste estimado: {r.get('costUsd', '?')} USD; duración: {r.get('durationSeconds', '?')} s")
+          print("")
+          print("| Caso | Puntuación |")
+          print("| --- | --- |")
+          for c in r.get("cases", []):
+              print(f"| {c.get('name') or c.get('id') or '?'} | {c.get('score', '?')} |")
+          PY
