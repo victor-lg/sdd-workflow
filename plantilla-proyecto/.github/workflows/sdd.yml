@@ -1,4 +1,4 @@
-# Checks SDD del workflow SDD + IA (BORRADOR v0.10).
+# Checks SDD del workflow SDD + IA v1.1.
 #
 # El nombre del job ("checks-sdd") es el que se marca como check requerido
 # en la regla de `main` (G5). El agente no puede modificar este fichero:

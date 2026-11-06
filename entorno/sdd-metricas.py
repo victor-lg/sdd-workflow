@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Línea de estado de Claude Code que, además, guarda las métricas de cada sesión.
 
-Workflow SDD + IA, v0.23 (mejora M9 de historial/recorrido-2.md).
+Workflow SDD + IA, v0.23 (mejora M9 de historial/recorrido-2.md); v1.1 lee las ramas
+<tipo>/vic-N-… de docs/convenciones.md (ADR-0007).
 
 Claude Code ejecuta este script cada vez que actualiza la línea de estado y le pasa
 por la entrada estándar un JSON con los datos de la sesión. El script:
@@ -31,7 +32,8 @@ import tempfile
 from datetime import datetime
 
 CARPETA = os.environ.get("SDD_METRICAS_DIR", "/mnt/c/Users/victor/Documents/sdd-metricas")
-ISSUE = re.compile(r"\b([a-z]{2,10})-(\d+)\b", re.I)
+# Rama de convenciones.md (feat/vic-16-…) o del formato anterior (vic-10-…).
+ISSUE = re.compile(r"^(?:[a-z]+/)?vic-(\d+)\b", re.I)
 
 
 def g(d, *claves, defecto=None):
@@ -56,9 +58,9 @@ def rama(directorio):
 
 
 def issue_de(nombre):
-    # Ramas como vic-10-calculo o spec-calc-003-...: solo se toma el prefijo del team de Linear.
+    # Solo cuenta el ID del team de Linear: spec-calc-003-... no es una issue.
     m = ISSUE.match(nombre or "")
-    return f"{m.group(1).upper()}-{m.group(2)}" if m and m.group(1).lower() == "vic" else None
+    return f"VIC-{m.group(1)}" if m else None
 
 
 def guarda(ruta, datos):

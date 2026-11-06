@@ -8,7 +8,7 @@ Instrucciones para cualquier agente que trabaje en este repositorio. Son cortas 
 
 - Comportamiento esperado: `docs/specs/`. Solo es vigente lo que está en `main`. Los requisitos compartidos viven en specs `SPEC-XCUT-*`: cítalas por ID, nunca copies su texto.
 - Visión del producto: `docs/vision.md`.
-- Planificación de entregas: la issue de Linear de la tarea. Léela, pero nunca la modifiques. Usa su ID en el nombre de la rama y en el PR.
+- Planificación de entregas: la issue de Linear de la tarea. Léela, pero nunca la modifiques. Usa su ID en la rama, en el pie de los commits y en el PR.
 - Decisiones de arquitectura: `docs/adr/`, con estado `Aceptado` y fusionadas en `main`. Un ADR `Aceptado` en una rama sin fusionar no tiene autoridad.
 - Implementación: el código y los tests existentes.
 - Las notas de `discovery/`, la memoria, los resúmenes y las conversaciones son contexto, nunca norma.
@@ -44,9 +44,14 @@ Instrucciones para cualquier agente que trabaje en este repositorio. Son cortas 
 
 Rellena la plantilla del PR: por qué existe, qué spec y AC cubre (`SPEC-XXX-NNN/AC-NN`), si cambia comportamiento, qué ADR aplica o propone, qué se validó y qué no, el nivel de riesgo (marca uno solo) y, en los PR de código, la "Guía para el revisor humano". Un PR no mezcla cambios de spec y de código.
 
-- **Título:** Conventional Commits con el ID como alcance y la descripción en español: `feat(VIC-5): …`, `fix(…)`, `test(…)`, `refactor(…)`, `docs(SPEC-XXX-NNN): …`, `docs(ADR-NNNN): …`, `ci: …`, `chore: …`. Se fusiona por squash, así que el título será el commit de `main`.
-- **Ramas:** `vic-N-…` (entregas), `spec-<id>-…`, `adr-NNNN-…`, `ci-…` (workflows) y `chore-…` (mantenimiento).
-- **Commits en la rama:** mismo formato, en imperativo y en una línea, con `Co-Authored-By` del agente.
+- **Nombres y mensajes:** la norma es `docs/convenciones.md` del repo del workflow (ADR-0007); este resumen basta para trabajar:
+  - **Tipos:** `feat`, `fix`, `spec`, `adr`, `refactor`, `test`, `docs`, `ci` y `chore`, los mismos que la etiqueta de Tipo de la issue.
+  - **Rama:** `<tipo>/vic-<N>-<descripcion>`, siempre con el ID, en minúsculas, sin tildes y con unos 50 caracteres como máximo (`feat/vic-12-calculo`).
+  - **Título del commit y del PR:** `<tipo>(<alcance>)!: <descripción>`. El alcance es la zona del código o del documento (`calculo`, `SPEC-CALC-003`), nunca el ID. La descripción va en español, en imperativo y en minúscula, sin punto final y con 72 caracteres como máximo. `!` solo si rompe compatibilidad. Se fusiona por squash, así que el título del PR será el commit de `main`.
+  - **Cuerpo del commit:** opcional, separado por una línea en blanco: qué cambia y por qué.
+  - **Pie del commit**, en este orden: `Refs: VIC-N`, `Spec: SPEC-XXX-NNN/AC-NN` y `BREAKING CHANGE: …` si aplica.
+  - **Descripción del PR:** la primera línea es `Fixes VIC-N` en el último PR de la entrega y `Part of VIC-N` en los anteriores.
+- **Autoría:** los commits y el PR son de la cuenta de máquina del agente y no mencionan a Claude: sin `Co-Authored-By` ni "Generated with" (ADR-0007).
 - **Tamaño:** orientativamente, unas 400 líneas de código por PR, sin contar tests ni lockfiles. Si la entrega es mayor, pártela en varios PR.
 - **Tests existentes:** si cambias uno, dilo en la guía del revisor con el motivo. Nunca lo hagas para que la CI pase.
 

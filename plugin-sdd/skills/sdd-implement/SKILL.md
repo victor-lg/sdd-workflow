@@ -56,7 +56,7 @@ Toma la primera opción que funcione del todo:
 ## Al terminar
 
 1. Ejecuta las pruebas relevantes y anota en el PR qué se ejecutó y qué no, y por qué. **En R2,** añade la evidencia de los NFR afectados y un plan de vuelta atrás.
-2. Completa la plantilla del PR: AC cubiertos en formato `SPEC-XXX-NNN/AC-NN`, cambio de comportamiento, ADR, nivel de riesgo, perfil y modelo.
+2. Completa la plantilla del PR: AC cubiertos en formato `SPEC-XXX-NNN/AC-NN`, cambio de comportamiento, ADR y nivel de riesgo.
 3. Rellena la **"Guía para el revisor humano"**: es lo que la persona lee para aprobar sin auditar cada línea.
    - Mapa del cambio en 3–5 líneas.
    - Los 3–5 sitios más delicados, con fichero y motivo.

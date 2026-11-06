@@ -53,4 +53,4 @@ Con las respuestas de todos los revisores:
 
 ## 4. Cerrar
 
-Cuando no quede nada que deba corregirse y la CI esté en verde, comprueba que el título sigue Conventional Commits y que la "Guía para el revisor humano" está completa, y quita el estado de borrador del PR. La aprobación y el merge son de la persona (G6).
+Cuando no quede nada que deba corregirse y la CI esté en verde, comprueba que el título sigue `docs/convenciones.md` del workflow (Conventional Commits, alcance como zona y no como ID) y que la "Guía para el revisor humano" está completa, y quita el estado de borrador del PR. La aprobación y el merge son de la persona (G6).

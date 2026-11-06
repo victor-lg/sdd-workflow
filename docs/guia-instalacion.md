@@ -76,7 +76,7 @@ En ese repo:
   - *Workflow permissions*: "Read repository contents";
   - desmarca "Allow GitHub Actions to create and approve pull requests".
 - **Settings → General → Pull Requests** (v0.18):
-  - deja marcado solo **Allow squash merging**, con *Default commit message* en **Pull request title** (o "title and description");
+  - deja marcado solo **Allow squash merging**, con *Default commit message* en **Pull request title and commit details** (ADR-0007, `docs/convenciones.md`);
   - desmarca *Allow merge commits* y *Allow rebase merging*;
   - marca **Automatically delete head branches**.
 - **Settings → Rules → Rulesets → New branch ruleset**, activo sobre la rama por defecto:
@@ -97,7 +97,7 @@ En ese repo:
    - caducidad de **90 días**.
 
    Copia el token y apunta la renovación en tu calendario.
-3. Con **tu** cuenta, invítala como colaboradora a `calculadora-discos` y a `sdd-workflow`. En los repos de una cuenta personal GitHub no tiene roles: todo colaborador tiene lectura y escritura. Por eso `sdd-workflow` lleva también el ruleset `main-protegida` (PR con 1 aprobación, descarta aprobaciones antiguas, último push aprobado por otra persona, sin borrar ni *force push*), con tu excepción en modo "Always allow" para que puedas seguir subiendo con Fork.
+3. Con **tu** cuenta, invítala como colaboradora a `calculadora-discos` y a `sdd-workflow`. En los repos de una cuenta personal GitHub no tiene roles: todo colaborador tiene lectura y escritura. Por eso `sdd-workflow` lleva también el ruleset `main-protegida` (PR con 1 aprobación, descarta aprobaciones antiguas, último push aprobado por otra persona, sin borrar ni *force push*, check requerido `validar` y revisión de Code Owners), con tu excepción de administrador en modo **"Allow for pull requests only"**: desde M36, este repo también se cambia por PR (ADR-0007).
 4. Con la cuenta de máquina, acepta las dos invitaciones.
 5. Anota el correo `noreply` de la cuenta de máquina (*Settings → Emails*), del tipo `12345678+tu-usuario-bot@users.noreply.github.com`.
 
@@ -186,7 +186,7 @@ git config --global user.email "12345678+tu-usuario-bot@users.noreply.github.com
 gh repo clone tu-usuario/sdd-workflow ~/proyectos/sdd-workflow
 ```
 
-**Comprobación:** el clon funciona y `gh auth status` solo muestra la cuenta de máquina.
+**Comprobación:** el clon funciona y `gh auth status` solo muestra la cuenta de máquina. Todos los commits del agente llevan esta identidad, y así el squash de `main` queda a nombre de la cuenta de máquina (ADR-0007).
 
 ### B4. Claude Code
 
@@ -226,7 +226,7 @@ Qué hace cada fichero:
   - reglas `deny` para que la herramienta Read tampoco las lea;
   - `ask` al añadir dependencias;
   - el modo "saltarse permisos" desactivado.
-- **`user-settings.json`:** Remote Control en todas las sesiones, el canal de actualizaciones `stable` y la línea de estado de métricas.
+- **`user-settings.json`:** Remote Control en todas las sesiones, el canal de actualizaciones `stable`, la línea de estado de métricas y `attribution` con `commit` y `pr` vacíos y `sessionUrl` a `false`, para que ni commits ni PR mencionen a Claude (ADR-0007).
 - **`sdd-metricas.py` (v0.23):** la línea de estado muestra el modelo, el coste estimado, los minutos y la rama. Además guarda un resumen de cada sesión en `C:\Users\victor\Documents\sdd-metricas\sesiones\` (desde WSL, `/mnt/c/...`; otra carpeta con `SDD_METRICAS_DIR`). El resumen recoge:
   - modelos usados y coste estimado a precio de API (no es lo que descuenta la suscripción);
   - duración total y de API, líneas cambiadas, tokens y pico de uso del contexto;
@@ -286,7 +286,7 @@ claude
 
 Pídele a Claude, dentro de la sesión:
 
-> Crea una rama `prueba-ci`, corrige una errata en el README, haz commit, empuja la rama y abre un PR con la plantilla del repo, marcando R0 y "AC cubiertos: no aplica (prueba de CI)".
+> Crea una rama `chore/vic-N-prueba-ci` (con el número de una issue de prueba), corrige una errata en el README, haz commit, empuja la rama y abre un PR con la plantilla del repo, marcando R0 y "AC cubiertos: no aplica (prueba de CI)".
 
 **Comprobación:**
 
@@ -316,7 +316,7 @@ En la web de Linear:
    - al pedir revisión → *In Review*;
    - al fusionar → *Done*.
 4. **Plantilla de issue:** pega la de `docs/plantilla-issue-linear.md`.
-5. **Formato de rama** (integración de GitHub): `identifier-title`, por ejemplo `vic-123-titulo`. Encaja con la rama que crea `sdd-plan`.
+5. **Formato de rama** (integración de GitHub): `identifier-title`, por ejemplo `vic-123-titulo`. Linear enlaza cualquier rama que contenga el ID; la que crea `sdd-plan` le antepone el tipo (`feat/vic-123-titulo`, `docs/convenciones.md`).
 6. **App Linear Code en GitHub:** acceso solo a los repos de los proyectos (*Only select repositories*). Cada proyecto nuevo se añade a mano.
 7. **Issues de ejemplo** que crea Linear: pásalas a *Canceled*.
 
@@ -399,7 +399,7 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
 ### G1. Workflow de tests
 
 1. Copia `docs/ejemplos/workflows/tests-node-playwright.yml` del repo del workflow, adaptado al stack.
-2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci-tests`). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci-tests` branch"**; si no, GitHub crea ramas nuevas (`ci-tests-1`…).
+2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci/vic-N-tests`, con el ID de la issue). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci/vic-N-tests` branch"**; si no, GitHub crea ramas nuevas (`ci/vic-N-tests-1`…).
 3. Abre un PR `ci: workflow de tests`, R2. Antes de fusionarlo, pide a una sesión del agente que lo revise con `sdd-review` (2 revisores; ADR-0006). Después, fusiónalo con tu excepción de administrador.
 4. En el ruleset de `main`, añade `tests` a los checks obligatorios.
    - Los PR que ya estaban abiertos se quedan esperando ese check. Ciérralos y vuelve a abrirlos para lanzarlo.

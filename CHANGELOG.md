@@ -2,6 +2,19 @@
 
 Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x son de diseño; la 1.0 es la primera usable.
 
+## v1.1 — en curso
+
+- **Autoría y convenciones (ADR-0007, VIC-16):**
+  - `entorno/user-settings.json` lleva `"attribution": {"commit": "", "pr": "", "sessionUrl": false}`: ni commits ni PR mencionan a Claude.
+  - `docs/convenciones.md` pasa a ser norma. La §7 de la línea base remite a ella y deja la "Autoría transparente" por commits a nombre de la cuenta de máquina sin menciones a Claude.
+  - `plantilla-proyecto/AGENTS.md` y la plantilla de PR adoptan las convenciones; la plantilla pierde "Perfil y modelo" y abre con `Fixes VIC-N`.
+  - `sdd-plan`, `sdd-spec` y `sdd-review` usan ramas `<tipo>/vic-<N>-…` y títulos con el alcance como zona; `sdd-implement` deja de pedir el perfil y el modelo.
+  - `sdd-metricas.py` deduce la issue de las ramas `tipo/vic-N-…` sin perder el formato `vic-N-…`.
+  - La guía de instalación cambia el *Default commit message* a "Pull request title and commit details", recoge en el ruleset de `sdd-workflow` el check `validar`, la revisión de Code Owners y la excepción "Allow for pull requests only", y usa ramas con ID en sus pruebas.
+  - `README.md`: el repo del workflow se cambia por PR (M36). Cabeceras v1.1 en `plantilla-proyecto/.github/CODEOWNERS` y `sdd.yml` (C22).
+  - `docs/convenciones.md` y `docs/linea-base-v1.md` pasan a CODEOWNERS.
+- **Plugin `sdd` 1.1.0.** Tras fusionar: `claude plugin marketplace update sdd-workflow && claude plugin update sdd@sdd-workflow`.
+
 ## v1.0 — 2026-11-05 (primera versión usable)
 
 El workflow queda declarado tras dos recorridos completos con la calculadora de discos (VIC-5 a VIC-15), los ocho casos negativos y las pruebas de la revisión independiente.

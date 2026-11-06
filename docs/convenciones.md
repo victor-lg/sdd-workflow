@@ -1,6 +1,6 @@
-# Convenciones de nombres y mensajes (PROPUESTO, M42)
+# Convenciones de nombres y mensajes (M42)
 
-Fuente única de cómo se nombran y se escriben las cosas en el workflow. `AGENTS.md`, las skills, las plantillas y la CI remiten aquí en vez de repetirlo. Entra en vigor con el bloque 1 de la v1.1; hasta entonces manda lo que dice `AGENTS.md`.
+Fuente única de cómo se nombran y se escriben las cosas en el workflow. `AGENTS.md`, las skills, las plantillas y la CI remiten aquí en vez de repetirlo. Es norma desde el PR de VIC-16 que aplica el ADR-0007; se cambia por PR sin ADR, salvo que contradiga un ADR aceptado o la línea base (ADR-0007, §3.4).
 
 Idea de fondo: **el mismo vocabulario en todas partes.** El tipo de cambio (`feat`, `fix`, `spec`…) es el mismo en la etiqueta de Linear, en la rama, en el commit y en el título del PR, y el ID de la issue va en todos.
 
@@ -146,12 +146,10 @@ Una convención que no se comprueba se acaba incumpliendo (M25). Se comprueba en
 | `Co-Authored-By` del agente | Sin menciones a Claude |
 | Squash con el mensaje por defecto | "Pull request title and commit details" |
 
-Ficheros que hay que ajustar al aplicarla:
-- `plantilla-proyecto/AGENTS.md`;
-- la plantilla de PR;
-- `sdd-plan` y `sdd-spec`;
-- el lector de `sdd-metricas.py` y `checks.py`;
-- `docs/glosario.md` y `docs/guia-instalacion.md`, en el apartado del formato de rama de Linear;
+Aplicada en el PR de VIC-16 (ADR-0007): `plantilla-proyecto/AGENTS.md`, la plantilla de PR, `sdd-plan`, `sdd-spec`, `sdd-implement`, `sdd-review`, el lector de `sdd-metricas.py` y la guía de instalación. `docs/glosario.md` no necesitaba cambios.
+
+Pendiente:
+- `checks.py`, cuando compruebe ramas y títulos (M11, bloque 2);
 - los repos de cada proyecto, al actualizar su plantilla.
 
 El historial ya escrito no se toca.

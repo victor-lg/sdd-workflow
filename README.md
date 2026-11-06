@@ -76,7 +76,7 @@ sdd-workflow/
 ## Reglas de este repositorio
 
 1. Ningún documento se considera aprobado por existir. Las decisiones se toman de una en una y se registran como ADR.
-2. Hasta la v1.1, este repo se cambia por commits directos de la persona; la regla "un cambio en el plugin es R2" se aplica desde que el workflow se trabaje por PR (ADR-0006, retrospectiva #6).
+2. Este repo se cambia por PR, con el check `validar` en verde y la aprobación de la persona (M36, ADR-0007). Un cambio en el plugin es R2 (ADR-0004).
 3. Lo histórico no se edita: si algo cambia, se crea un documento o un ADR nuevo que lo sustituye.
 4. Cada idea útil tiene un único sitio. Si aparece en dos, uno de los dos enlaza al otro.
 5. Las notas, ideas o mejoras que surjan y aún no tengan sitio van a la sección "Pendiente de clasificar" de `docs/clasificacion-notas.md`.

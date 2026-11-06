@@ -77,7 +77,7 @@ Termina respondiendo a las tres preguntas:
 Clasifica la spec en uno de tres estados y justifícalo:
 
 - **En descubrimiento:** faltan respuestas o decisiones críticas. Se queda en `borrador`, sin PR.
-- **Lista para revisión:** cumple la DoR. Ábrela en un PR propio (sin código) con `estado: en-revision` y nivel de riesgo. El fichero se llama `docs/specs/<ID>-<nombre-corto>.md`; la CI valida estructura e IDs.
+- **Lista para revisión:** cumple la DoR. Ábrela en un PR propio (sin código) con `estado: en-revision` y nivel de riesgo. El fichero se llama `docs/specs/<ID>-<nombre-corto>.md`; la CI valida estructura e IDs. La rama y el título siguen `docs/convenciones.md` del workflow: `spec/vic-<N>-<descripcion>` y `spec(SPEC-XXX-NNN): …`, sin menciones a Claude (ADR-0007).
 - **Preparada para implementar:** solo después de que la persona fusione el PR. Tú no puedes declarar este estado.
 
 Cuando la revisión (G4) termina sin nada que deba corregirse, el último commit del PR cambia `estado: en-revision` por `estado: aprobada`. Así la spec llega a `main` con su estado final. Ese valor no autoriza nada por sí mismo: solo cuenta si la persona fusiona el PR (G1).
