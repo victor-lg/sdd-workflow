@@ -93,4 +93,11 @@ jobs:
           })
           for e in errores:
               print(f"\n- Error de ejecución: `{e[:300]}`")
+          # Detalle de los casos que no llegan a 1, para ver qué evaluador falla.
+          for c in r.get("cases", []):
+              score = (c.get("aggregates") or {}).get("score")
+              if isinstance(score, (int, float)) and score < 1:
+                  nombre = c.get("name") or c.get("id") or "?"
+                  detalle = json.dumps(c, ensure_ascii=False, indent=1)[:6000]
+                  print(f"\n<details><summary>Detalle de {nombre} ({score:.2f})</summary>\n\n```json\n{detalle}\n```\n</details>")
           PY
