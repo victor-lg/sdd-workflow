@@ -81,6 +81,29 @@ class Resumen(unittest.TestCase):
         self.assertEqual(self.fila(salida, "main")[-1], "0")
         self.assertIn("Defectos sin issue de origen: VIC-33.", salida)
 
+    def test_defecto_repetido_cuenta_una_vez(self):
+        ruta = self.csv("issue,origen\nVIC-30,VIC-12\nVIC-30,VIC-12\n")
+        self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")
+
+    def test_con_columna_labels_solo_cuentan_los_defectos(self):
+        ruta = self.csv('ID,Labels,origen\nVIC-30,"Bug, defecto-escapado",VIC-12\nVIC-31,Bug,VIC-12\n')
+        self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")
+
+    def test_misma_ronda_desde_otro_worktree(self):
+        # El repo es el nombre de la carpeta: en otro worktree cambia, la ronda es la misma.
+        self.guarda("s4", {"inicio": "2026-11-03T10:00", "repo": "calc-otro", "issues": ["VIC-12"],
+                           "g4": ronda(21, 1, 5, 2, 4, "2026-11-03T10:00")})
+        self.assertEqual(self.fila(self.ejecuta(), "VIC-12")[5:9], ["2", "7", "3", "6"])
+
+    def test_intervenciones_copiadas_al_reanudar(self):
+        self.guarda("s5", {"inicio": "2026-11-04T10:00", "issues": ["VIC-20"], "intervenciones": 3,
+                           "intervenciones_ids": ["a", "b", "c"]})
+        # La sesión reanudada copia a y b y añade d, más una intervención sin uuid.
+        self.guarda("s6", {"inicio": "2026-11-04T12:00", "issues": ["VIC-20"], "intervenciones": 4,
+                           "intervenciones_ids": ["a", "b", "d"]})
+        salida = self.ejecuta()
+        self.assertEqual(self.fila(salida, "VIC-20")[4], "5")
+
     def test_csv_de_linear_con_columna_id(self):
         ruta = self.csv('﻿ID,Title,Origen\nVIC-30,"Redondeo, mal",VIC-12\n')
         self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")

@@ -54,9 +54,9 @@ Con las respuestas de todos los revisores:
 
    `Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z`
 
-   - `R` es el número de la ronda (1 a 3); `X`, los hallazgos que confirmaste; `Y`, los que descartaste; `Z`, los confirmados que se corrigieron en esa ronda.
+   - `R` es el número de la ronda (1 a 3); `X`, los hallazgos de esa ronda que confirmaste; `Y`, los que descartaste; `Z`, cuántos de esos `X` están corregidos hasta ahora.
    - Si corriges después de la última ronda, repite la línea de esa ronda con el `Z` nuevo: cuenta la última.
-   - La lee `sdd-metricas` en el transcript para resumir G4 por issue. No la escribas con otro formato ni en otro sitio.
+   - Escríbela en una sesión en la rama de la issue: `sdd-metricas` la lee en el transcript y la atribuye a la issue de la rama. No la escribas con otro formato, dentro de un bloque de código ni en otro sitio.
 
 ## 4. Cerrar
 

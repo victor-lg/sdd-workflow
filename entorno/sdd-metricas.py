@@ -24,10 +24,12 @@ de la rama. Del transcript de la sesión guarda solo recuentos:
   corregidos Z" que escribe sdd-review, una por PR y ronda (la última manda);
 - mutación: la última línea "Métricas mutación: detectados X de Y" de sdd-implement.
 
-Las dos líneas solo cuentan en el texto del asistente, solas en su línea. El
-transcript se lee por partes: el JSON de la sesión guarda hasta qué byte se ha
-leído. No guarda el contenido de la conversación ni rutas fuera del proyecto
-(del transcript, solo el nombre del fichero).
+Las dos líneas solo cuentan en el texto del asistente, solas en su línea y fuera
+de un bloque ```. Son autodeclaradas: el agente las escribe y nada las comprueba,
+así que un texto que lo engañe podría falsearlas. El transcript se lee por partes
+(hasta 8 MB cada vez): el JSON de la sesión guarda hasta qué byte se ha leído. No
+guarda el contenido de la conversación ni rutas fuera del proyecto: del transcript,
+solo el nombre del fichero y el principio del uuid de cada intervención.
 
 No lee nada aparte de lo que le pasa Claude Code, el transcript que le indica y la
 rama de Git del proyecto.
@@ -48,13 +50,18 @@ from datetime import datetime
 CARPETA = os.environ.get("SDD_METRICAS_DIR", "/mnt/c/Users/victor/Documents/sdd-metricas")
 # Rama de convenciones.md (feat/vic-16-…) o del formato anterior (vic-10-…).
 ISSUE = re.compile(r"^(?:[a-z]+/)?vic-(\d+)\b", re.I)
-# Líneas de formato fijo de sdd-review y sdd-implement (docs en cada skill).
-LINEA_G4 = re.compile(r"^[ \t]*Métricas G4: PR #(\d+) · ronda (\d+) · confirmados (\d+) · "
-                      r"descartados (\d+) · corregidos (\d+)[ \t]*$", re.M)
-LINEA_MUTACION = re.compile(r"^[ \t]*Métricas mutación: detectados (\d+) de (\d+)[ \t]*$", re.M)
-# Mensajes de tipo "user" que no escribe la persona, en transcripts sin "origin".
-NO_HUMANO = ("<local-command-", "<command-name>", "<task-notification>", "<system-reminder>",
+# Líneas de formato fijo de sdd-review y sdd-implement (docs en cada skill). Los
+# números van acotados: int() con miles de dígitos lanza ValueError.
+N = r"(\d{1,6})"
+LINEA_G4 = re.compile(rf"^[ \t]*Métricas G4: PR #{N} · ronda {N} · confirmados {N} · "
+                      rf"descartados {N} · corregidos {N}[ \t]*$", re.M)
+LINEA_MUTACION = re.compile(rf"^[ \t]*Métricas mutación: detectados {N} de {N}[ \t]*$", re.M)
+# Mensajes de tipo "user" que no escribe la persona, en transcripts sin "origin". Ahí
+# no se distingue /clear de /sdd:sdd-plan, así que ningún comando de barra cuenta.
+NO_HUMANO = ("<local-command-", "<command-", "<task-notification>", "<system-reminder>",
              "This session is being continued")
+# Lo que se lee del transcript en cada ejecución, para no retrasar la línea de estado.
+MAX_LECTURA = 8 * 1024 * 1024
 
 
 def g(d, *claves, defecto=None):
@@ -89,9 +96,27 @@ def texto_de(contenido):
     if isinstance(contenido, str):
         return contenido
     if isinstance(contenido, list):
-        return "\n".join(b.get("text") or "" for b in contenido
-                         if isinstance(b, dict) and b.get("type") == "text")
+        return "\n".join(b["text"] for b in contenido if isinstance(b, dict)
+                         and b.get("type") == "text" and isinstance(b.get("text"), str))
     return ""
+
+
+def fuera_de_bloques(texto):
+    """Quita los bloques ``` : una línea de métricas citada en uno no cuenta."""
+    lineas, dentro = [], False
+    for linea in texto.split("\n"):
+        if linea.lstrip().startswith("```"):
+            dentro = not dentro
+        elif not dentro:
+            lineas.append(linea)
+    return "\n".join(lineas)
+
+
+def entero(v):
+    try:
+        return max(0, int(v or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def es_intervencion(e):
@@ -104,55 +129,97 @@ def es_intervencion(e):
                                            for b in contenido):
         return False
     texto = texto_de(contenido).lstrip()
+    # Una imagen sin texto también es un mensaje de la persona; uno vacío, no.
+    if not texto and not (isinstance(contenido, list) and any(
+            isinstance(b, dict) and b.get("type") != "text" for b in contenido)):
+        return False
     if texto.startswith("[Request interrupted") or texto.startswith("<local-command-"):
         return False
     origen = e.get("origin")
     if isinstance(origen, dict):
         # Claude Code marca así lo que escribe la persona; "peer" y las tareas no cuentan.
         return origen.get("kind") == "human"
-    if texto.startswith(NO_HUMANO):
-        return False
-    # Una imagen sin texto también es un mensaje de la persona.
-    return bool(texto) or (isinstance(contenido, list) and bool(contenido))
+    return not texto.startswith(NO_HUMANO)
 
 
 def lee_transcript(ruta, antes):
-    """Lee lo nuevo del transcript desde el byte guardado y devuelve los recuentos."""
+    """Lee lo nuevo del transcript desde el byte guardado y devuelve los recuentos.
+
+    Las intervenciones se guardan también como el principio de su uuid: al reanudar
+    una sesión, Claude Code copia los mensajes anteriores al transcript nuevo con el
+    mismo uuid, y así resumen-metricas.py no los cuenta dos veces.
+    """
     nombre = os.path.basename(ruta)
-    desde = int(antes.get("transcript_leido") or 0)
+    desde = entero(antes.get("transcript_leido"))
+    ids = list(antes.get("intervenciones_ids") or [])
     estado = {
-        "intervenciones": int(antes.get("intervenciones") or 0),
+        "intervenciones": entero(antes.get("intervenciones")),
         "g4": dict(antes.get("g4") or {}),
         "mutacion": antes.get("mutacion"),
     }
-    if antes.get("transcript") != nombre or os.path.getsize(ruta) < desde:
-        # Otro fichero o uno reescrito: se cuenta desde el principio.
-        desde, estado = 0, {"intervenciones": 0, "g4": {}, "mutacion": None}
     with open(ruta, "rb") as f:
+        reescrito = os.fstat(f.fileno()).st_size < desde
+        if desde and not reescrito:
+            # Lo leído terminaba en un salto de línea; si ahí no lo hay, el fichero cambió.
+            f.seek(desde - 1)
+            reescrito = f.read(1) != b"\n"
+        if antes.get("transcript") != nombre or reescrito:
+            # Otro fichero o uno reescrito: se cuenta desde el principio.
+            desde, ids = 0, []
+            estado = {"intervenciones": 0, "g4": {}, "mutacion": None}
         f.seek(desde)
-        bloque = f.read()
+        bloque = f.read(MAX_LECTURA)
+        corte = bloque.rfind(b"\n") + 1
+        saltado = 0
+        if not corte and len(bloque) == MAX_LECTURA:
+            # Una línea más larga que todo el bloque se salta entera, sin analizarla,
+            # para que el desplazamiento siga cayendo al final de una línea.
+            largo = len(bloque)
+            while True:
+                trozo = f.read(MAX_LECTURA)
+                if not trozo:
+                    break  # aún a medio escribir: se espera
+                fin = trozo.find(b"\n")
+                if fin >= 0:
+                    saltado = largo + fin + 1
+                    break
+                largo += len(trozo)
     # Una línea a medio escribir se deja para la próxima vez.
-    bloque = bloque[:bloque.rfind(b"\n") + 1]
-    for linea in bloque.decode("utf-8", errors="replace").splitlines():
+    if saltado:
+        desde, bloque = desde + saltado, b""
+    else:
+        bloque = bloque[:corte]
+    vistos = set(ids)
+    # Se parte por bytes: splitlines() también corta en U+2028, que va sin escapar
+    # dentro de las cadenas JSON.
+    for linea in bloque.split(b"\n"):
         try:
-            e = json.loads(linea)
-        except ValueError:
-            continue
-        if not isinstance(e, dict):
-            continue
-        if es_intervencion(e):
-            estado["intervenciones"] += 1
-        elif e.get("type") == "assistant" and not e.get("isSidechain"):
-            texto = texto_de(g(e, "message", "content"))
-            fecha = e.get("timestamp")
-            for m in LINEA_G4.finditer(texto):
-                pr, ronda, conf, desc, corr = (int(x) for x in m.groups())
-                estado["g4"][f"{pr}/{ronda}"] = {"pr": pr, "ronda": ronda, "confirmados": conf,
-                                                 "descartados": desc, "corregidos": corr,
-                                                 "fecha": fecha}
-            for m in LINEA_MUTACION.finditer(texto):
-                estado["mutacion"] = {"detectados": int(m.group(1)), "total": int(m.group(2)),
-                                      "fecha": fecha}
+            e = json.loads(linea.decode("utf-8", errors="replace"))
+            if not isinstance(e, dict):
+                continue
+            if es_intervencion(e):
+                uid = e.get("uuid")
+                if isinstance(uid, str) and uid:
+                    if uid[:12] in vistos:
+                        continue
+                    vistos.add(uid[:12])
+                    ids.append(uid[:12])
+                estado["intervenciones"] += 1
+            elif e.get("type") == "assistant" and not e.get("isSidechain"):
+                texto = fuera_de_bloques(texto_de(g(e, "message", "content")))
+                fecha = e.get("timestamp")
+                fecha = fecha[:40] if isinstance(fecha, str) else None
+                for m in LINEA_G4.finditer(texto):
+                    pr, ronda, conf, desc, corr = (int(x) for x in m.groups())
+                    estado["g4"][f"{pr}/{ronda}"] = {"pr": pr, "ronda": ronda, "confirmados": conf,
+                                                     "descartados": desc, "corregidos": corr,
+                                                     "fecha": fecha}
+                for m in LINEA_MUTACION.finditer(texto):
+                    estado["mutacion"] = {"detectados": int(m.group(1)), "total": int(m.group(2)),
+                                          "fecha": fecha}
+        except Exception:
+            continue  # una entrada rara no debe congelar las métricas de la sesión
+    estado["intervenciones_ids"] = ids
     estado["transcript"] = nombre
     estado["transcript_leido"] = desde + len(bloque)
     return estado
@@ -183,7 +250,7 @@ def main():
 
     # Línea de estado: se imprime pase lo que pase con el guardado.
     minutos = dur // 60000
-    print(f"{modelo} · ${coste:.2f} · {minutos} min" + (f" · {r}" if r else ""))
+    print(f"{modelo} · ${coste:.2f} · {minutos} min" + (f" · {r}" if r else ""), flush=True)
 
     if not sid or not os.path.isdir(os.path.dirname(CARPETA.rstrip("/")) or "/"):
         return  # la unidad o la carpeta padre no existe: no se crea nada fuera de lugar
@@ -225,7 +292,7 @@ def main():
     }
     # Recuentos de la conversación; si el transcript falla, se conservan los anteriores.
     conversacion = {k: antes[k] for k in ("transcript", "transcript_leido", "intervenciones",
-                                          "g4", "mutacion") if k in antes}
+                                          "intervenciones_ids", "g4", "mutacion") if k in antes}
     transcript = g(e, "transcript_path")
     if transcript:
         try:

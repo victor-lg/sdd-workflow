@@ -77,34 +77,52 @@ class Transcript(unittest.TestCase):
                 f.write(json.dumps(e, ensure_ascii=False) + "\n")
             f.write(cola)
 
-    def test_solo_cuentan_los_mensajes_de_la_persona(self):
-        self.escribe(
-            humano("Primer mensaje"),                                       # cuenta
-            humano("Otro en cola", promptSource="queued"),                  # cuenta
-            humano("<command-message>sdd:sdd-plan</command-message>"),      # cuenta: lo escribió
-            {"type": "user", "message": {"content": "Sin origin, transcript antiguo"}},  # cuenta
-            {"type": "user", "message": {"content": [{"type": "image", "source": {}}]}},  # cuenta
-            {"type": "user", "toolUseResult": {}, "message": {"content": [
-                {"type": "tool_result", "tool_use_id": "x", "content": "salida"}]}},
-            {"type": "user", "message": {"content": [
-                {"type": "tool_result", "tool_use_id": "y", "content": "salida"}]}},
-            {"type": "user", "isMeta": True, "message": {"content": "<system-reminder>x"}},
-            {"type": "user", "isMeta": True, "message": {"content": [{"type": "text", "text": "skill"}]}},
-            {"type": "user", "isCompactSummary": True, "isVisibleInTranscriptOnly": True,
-             "message": {"content": "This session is being continued from a previous conversation"}},
-            {"type": "user", "message": {"content": "This session is being continued from a previous"}},
-            {"type": "user", "message": {"content": "<command-name>/clear</command-name>"}},
-            {"type": "user", "message": {"content": "<local-command-stdout>ok</local-command-stdout>"}},
-            humano("<local-command-stdout>ok</local-command-stdout>"),
-            {"type": "user", "message": {"content": [{"type": "text", "text": "[Request interrupted by user]"}]}},
-            humano("[Request interrupted by user for tool use]"),
-            {"type": "user", "origin": {"kind": "peer", "from": "a1"}, "message": {"content": "hola"}},
-            {"type": "user", "origin": {"kind": "task-notification"},
-             "message": {"content": "<task-notification> <task-id>1</task-id>"}},
-            {"type": "user", "isSidechain": True, "message": {"content": "encargo al subagente"}},
-            {"type": "user", "message": {"content": ""}},
-        )
-        self.assertEqual(sdd_metricas.lee_transcript(self.ruta, {})["intervenciones"], 5)
+    def test_cuentan_los_mensajes_de_la_persona(self):
+        casos = {
+            "escrito": humano("Primer mensaje"),
+            "en cola": humano("Otro en cola", promptSource="queued"),
+            "skill invocada": humano("<command-message>sdd:sdd-plan</command-message>"),
+            "sin origin": {"type": "user", "message": {"content": "Transcript antiguo"}},
+            "solo una imagen": {"type": "user", "message": {"content": [{"type": "image", "source": {}}]}},
+            "texto e imagen": humano([{"type": "text", "text": "mira"}, {"type": "image", "source": {}}]),
+        }
+        for caso, e in casos.items():
+            with self.subTest(caso=caso):
+                self.assertTrue(sdd_metricas.es_intervencion(e))
+
+    def test_no_cuentan(self):
+        resultado = [{"type": "tool_result", "tool_use_id": "x", "content": "salida"}]
+        casos = {
+            "resultado de herramienta": {"type": "user", "toolUseResult": {}, "message": {"content": resultado}},
+            "tool_result sin toolUseResult": {"type": "user", "message": {"content": resultado}},
+            "tool_result con texto": humano(resultado + [{"type": "text", "text": "y esto"}]),
+            "isMeta": {"type": "user", "isMeta": True, "message": {"content": "<system-reminder>x"}},
+            "isMeta en lista": {"type": "user", "isMeta": True,
+                                "message": {"content": [{"type": "text", "text": "skill"}]}},
+            "resumen de compactación": {"type": "user", "isCompactSummary": True,
+                                        "message": {"content": "This session is being continued"}},
+            "resumen sin marca": {"type": "user", "message": {"content": "This session is being continued"}},
+            "comando local, nombre primero": {"type": "user", "message": {"content": "<command-name>/clear</command-name>"}},
+            "comando, mensaje primero": {"type": "user", "message": {
+                "content": "<command-message>clear</command-message>\n<command-name>/clear</command-name>"}},
+            "salida de comando local": {"type": "user", "message": {"content": "<local-command-stdout>ok</local-command-stdout>"}},
+            "salida con origin humano": humano("<local-command-stdout>ok</local-command-stdout>"),
+            "interrupción": {"type": "user", "message": {"content": [{"type": "text", "text": "[Request interrupted by user]"}]}},
+            "interrupción con origin": humano("[Request interrupted by user for tool use]"),
+            "otro agente": {"type": "user", "origin": {"kind": "peer", "from": "a1"}, "message": {"content": "hola"}},
+            "aviso de tarea": {"type": "user", "origin": {"kind": "task-notification"},
+                               "message": {"content": "<task-notification> <task-id>1</task-id>"}},
+            "aviso de tarea sin origin": {"type": "user", "message": {"content": "<task-notification>x"}},
+            "recordatorio sin origin": {"type": "user", "message": {"content": "<system-reminder>x"}},
+            "subagente": {"type": "user", "isSidechain": True, "message": {"content": "encargo"}},
+            "vacío": {"type": "user", "message": {"content": ""}},
+            "vacío con origin": humano("   "),
+            "texto que no es cadena": humano([{"type": "text", "text": 3}]),
+            "del asistente": asistente("hola"),
+        }
+        for caso, e in casos.items():
+            with self.subTest(caso=caso):
+                self.assertFalse(sdd_metricas.es_intervencion(e))
 
     def test_lectura_incremental(self):
         self.escribe(humano("uno"), humano("dos"))
@@ -131,6 +149,60 @@ class Transcript(unittest.TestCase):
         self.assertEqual(sdd_metricas.lee_transcript(self.ruta, e)["intervenciones"], 1)
         otro = dict(e, transcript="otra-sesion.jsonl")
         self.assertEqual(sdd_metricas.lee_transcript(self.ruta, otro)["intervenciones"], 1)
+
+    def test_separador_de_linea_unicode_dentro_de_un_mensaje(self):
+        # json.dumps(ensure_ascii=False) deja U+2028 y U+0085 sin escapar.
+        self.escribe(humano("pegado\u2028de un PDF\u0085y más"), asistente("a\u2029b\n" + G4.format(r=1, c=1)))
+        e = sdd_metricas.lee_transcript(self.ruta, {})
+        self.assertEqual(e["intervenciones"], 1)
+        self.assertEqual(set(e["g4"]), {"21/1"})
+
+    def test_reescrito_con_tamano_mayor(self):
+        self.escribe(humano("uno"), humano("dos"))
+        e = sdd_metricas.lee_transcript(self.ruta, {})
+        with open(self.ruta, "w", encoding="utf-8") as f:
+            f.write(json.dumps(humano("un mensaje bastante más largo que los dos de antes juntos " * 4)) + "\n")
+        self.assertGreater(os.path.getsize(self.ruta), e["transcript_leido"])
+        self.assertEqual(sdd_metricas.lee_transcript(self.ruta, e)["intervenciones"], 1)
+
+    def test_mensajes_repetidos_por_uuid(self):
+        self.escribe(humano("uno", uuid="aaaaaaaa-1111-0000"), humano("uno otra vez", uuid="aaaaaaaa-1111-0000"),
+                     humano("dos", uuid="bbbbbbbb-2222-0000"), humano("sin uuid"))
+        e = sdd_metricas.lee_transcript(self.ruta, {})
+        self.assertEqual(e["intervenciones"], 3)
+        self.assertEqual(e["intervenciones_ids"], ["aaaaaaaa-111", "bbbbbbbb-222"])
+        # En lecturas posteriores tampoco se repite.
+        self.escribe(humano("uno", uuid="aaaaaaaa-1111-0000"))
+        self.assertEqual(sdd_metricas.lee_transcript(self.ruta, e)["intervenciones"], 3)
+
+    def test_una_entrada_rara_no_congela_las_metricas(self):
+        self.escribe(
+            asistente("Métricas G4: PR #" + "9" * 5000 + " · ronda 1 · confirmados 1 · descartados 0 · corregidos 0"),
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": {"no": "cadena"}}]}},
+            {"type": "user", "origin": "raro", "message": {"content": None}},
+            asistente(G4.format(r=1, c=2), fecha={"no": "cadena"}),
+            humano("sigue contando"),
+        )
+        e = sdd_metricas.lee_transcript(self.ruta, {"transcript_leido": "basura", "intervenciones": "x"})
+        self.assertEqual(e["intervenciones"], 1)
+        self.assertEqual(set(e["g4"]), {"21/1"})
+        self.assertIsNone(e["g4"]["21/1"]["fecha"])
+        self.assertEqual(e["transcript_leido"], os.path.getsize(self.ruta))
+
+    def test_lectura_acotada(self):
+        with mock.patch.object(sdd_metricas, "MAX_LECTURA", 200):
+            self.escribe(*(humano(f"mensaje {i}") for i in range(10)))
+            e = sdd_metricas.lee_transcript(self.ruta, {})
+            self.assertLess(e["intervenciones"], 10)
+            while e["transcript_leido"] < os.path.getsize(self.ruta):
+                e = sdd_metricas.lee_transcript(self.ruta, e)
+            self.assertEqual(e["intervenciones"], 10)
+            # Una línea más larga que todo el bloque se salta en vez de atascarse.
+            self.escribe(humano("x" * 500), humano("después"))
+            for _ in range(10):
+                e = sdd_metricas.lee_transcript(self.ruta, e)
+            self.assertEqual(e["intervenciones"], 11)
+            self.assertEqual(e["transcript_leido"], os.path.getsize(self.ruta))
 
     def test_lineas_g4_por_pr_y_ronda(self):
         self.escribe(
@@ -160,6 +232,8 @@ class Transcript(unittest.TestCase):
             asistente("- " + G4.format(r=1, c=9)),
             asistente("Métricas mutación: detectados X de Y"),
             humano("Métricas mutación: detectados 1 de 2"),
+            asistente("La salida del revisor:\n```\n" + G4.format(r=1, c=9) +
+                      "\nMétricas mutación: detectados 1 de 2\n```"),
         )
         e = sdd_metricas.lee_transcript(self.ruta, {})
         self.assertEqual(e["g4"], {})

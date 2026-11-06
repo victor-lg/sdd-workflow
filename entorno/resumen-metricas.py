@@ -9,13 +9,19 @@ si la sesión no tiene issue). El coste es una estimación a precio de API.
 
 Por issue, además: rondas de G4, hallazgos confirmados, descartados y corregidos,
 la última puntuación de mutación, intervenciones humanas y defectos escapados (M10).
-Una misma ronda de un PR que aparezca en varias sesiones cuenta una vez (la última).
+Una misma ronda de un PR que aparezca en varias sesiones de la issue cuenta una vez
+(la última), y un mensaje copiado al reanudar una sesión, también. G4 y mutación se
+atribuyen a la issue de la rama de la sesión: una revisión lanzada desde main sale
+en la fila de main.
 
 Los defectos escapados no salen de las sesiones, sino de Linear: las issues con la
 etiqueta "defecto-escapado". --defectos recibe un CSV con las columnas issue y
 origen (la issue del defecto y la issue cuya entrega lo dejó pasar), exportado de
 Linear o mantenido en el repo, por ejemplo historial/defectos-escapados.csv. Cada
-defecto se atribuye a su issue de origen; "ID" vale como nombre de la columna issue.
+defecto se atribuye a su issue de origen y cuenta una vez; "ID" vale como nombre de
+la columna issue. La exportación de Linear no trae la columna origen: se añade a
+mano. Si el CSV tiene una columna Labels, solo cuentan las filas con la etiqueta
+defecto-escapado. Los defectos no se filtran por fecha.
 """
 import argparse
 import csv
@@ -36,14 +42,18 @@ def lee_defectos(ruta):
         columnas = {(c or "").strip().lower(): c for c in filas.fieldnames or []}
         col_issue = columnas.get("issue") or columnas.get("id")
         col_origen = columnas.get("origen")
+        col_etiquetas = columnas.get("labels") or columnas.get("etiquetas")
         if not col_issue or not col_origen:
             sys.exit(f"{ruta}: faltan las columnas issue (o ID) y origen")
-        por_origen, sin_origen = Counter(), []
+        por_origen, sin_origen, vistos = Counter(), [], set()
         for fila in filas:
             defecto = (fila.get(col_issue) or "").strip().upper()
             origen = (fila.get(col_origen) or "").strip().upper()
-            if not defecto:
+            if not defecto or defecto in vistos:
                 continue
+            if col_etiquetas and "defecto-escapado" not in (fila.get(col_etiquetas) or "").lower():
+                continue
+            vistos.add(defecto)
             if ID.match(origen):
                 por_origen[origen] += 1
             else:
@@ -71,8 +81,11 @@ def main(argv=None):
 
     print("| Inicio | Repo | Issue / rama | Modelos | Coste est. | Min (API) | Líneas +/− | Contexto pico | Interv. |")
     print("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
-    tot = defaultdict(lambda: {"n": 0, "coste": 0.0, "min": 0.0, "interv": 0, "mutacion": None})
-    rondas = {}  # (repo, pr, ronda) -> (clave, ronda de G4); gana la de fecha más reciente
+    tot = defaultdict(lambda: {"n": 0, "coste": 0.0, "min": 0.0, "interv": 0, "ids": set(),
+                               "mutacion": None})
+    # (clave, pr, ronda) -> ronda de G4; gana la de fecha más reciente. La clave es la
+    # issue y no el repo, que es el nombre de la carpeta y cambia en cada worktree.
+    rondas = {}
     for s in sesiones:
         clave = ", ".join(s.get("issues") or []) or ", ".join(s.get("ramas") or []) or "—"
         print(f"| {(s.get('inicio') or '')[:16].replace('T', ' ')} | {s.get('repo') or '—'} | {clave} | "
@@ -84,17 +97,20 @@ def main(argv=None):
         t["n"] += 1
         t["coste"] += s.get("coste_estimado_usd", 0) or 0
         t["min"] += s.get("duracion_min", 0) or 0
-        t["interv"] += s.get("intervenciones", 0) or 0
+        ids = s.get("intervenciones_ids") or []
+        t["ids"].update(ids)
+        # Las intervenciones sin uuid (o de sesiones anteriores a la v1.1) se suman tal cual.
+        t["interv"] += max(0, (s.get("intervenciones", 0) or 0) - len(ids))
         m = s.get("mutacion")
         if m and (not t["mutacion"] or (m.get("fecha") or "") >= (t["mutacion"].get("fecha") or "")):
             t["mutacion"] = m
         for r in (s.get("g4") or {}).values():
-            k = (s.get("repo"), r.get("pr"), r.get("ronda"))
-            if k not in rondas or (r.get("fecha") or "") >= (rondas[k][1].get("fecha") or ""):
-                rondas[k] = (clave, r)
+            k = (clave, r.get("pr"), r.get("ronda"))
+            if k not in rondas or (r.get("fecha") or "") >= (rondas[k].get("fecha") or ""):
+                rondas[k] = r
 
     g4 = defaultdict(lambda: [0, 0, 0, 0])  # rondas, confirmados, descartados, corregidos
-    for clave, r in rondas.values():
+    for (clave, _, _), r in rondas.items():
         x = g4[clave]
         x[0] += 1
         x[1] += r.get("confirmados", 0) or 0
@@ -113,7 +129,7 @@ def main(argv=None):
         m = t["mutacion"]
         mut = f"{m.get('detectados')} de {m.get('total')}" if m else "—"
         esc = defectos.get(clave, 0) if a.defectos else "—"
-        print(f"| {clave} | {t['n']} | ${t['coste']:.2f} | {t['min']:.0f} | {t['interv']} | {rd} | "
+        print(f"| {clave} | {t['n']} | ${t['coste']:.2f} | {t['min']:.0f} | {t['interv'] + len(t['ids'])} | {rd} | "
               f"{conf} | {desc} | {corr} | {mut} | {esc} |")
     print(f"\nTotal: {len(sesiones)} sesiones, ${sum(t['coste'] for t in tot.values()):.2f} estimados.")
     if sin_origen:

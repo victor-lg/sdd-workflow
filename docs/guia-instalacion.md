@@ -231,11 +231,11 @@ Qué hace cada fichero:
   - modelos usados y coste estimado a precio de API (no es lo que descuenta la suscripción);
   - duración total y de API, líneas cambiadas, tokens y pico de uso del contexto;
   - repo, rama e issue de Linear deducida de la rama;
-  - del transcript de la sesión, solo recuentos: intervenciones humanas (cada mensaje que escribes, el primero incluido), rondas y hallazgos de G4 y la última mutación. Estos dos salen de las líneas `Métricas G4: …` y `Métricas mutación: …` que escriben `sdd-review` y `sdd-implement`.
+  - del transcript de la sesión, solo recuentos: intervenciones humanas (cada mensaje que escribes, el primero incluido), rondas y hallazgos de G4 y la última mutación. Estos dos salen de las líneas `Métricas G4: …` y `Métricas mutación: …` que escriben `sdd-review` y `sdd-implement`, y se atribuyen a la issue de la rama de la sesión. Son autodeclaradas: el agente las escribe y nada las comprueba.
 
-  No guarda la conversación: el transcript se lee por partes y del fichero solo queda su nombre y hasta qué byte se leyó. Corre fuera del sandbox porque lo lanza Claude Code, no el agente, y el agente no puede modificarlo, porque su sandbox no escribe en `~/.claude`. Si actualizas el repo del workflow, vuelve a copiarlo con las dos órdenes `cp` y `chmod` de arriba.
+  No guarda la conversación: el transcript se lee por partes y del fichero solo quedan su nombre, hasta qué byte se leyó y el principio del uuid de cada mensaje tuyo (al reanudar una sesión, Claude Code copia los mensajes con el mismo uuid, y así no cuentan dos veces). Corre fuera del sandbox porque lo lanza Claude Code, no el agente, y el agente no puede modificarlo, porque su sandbox no escribe en `~/.claude`. Si actualizas el repo del workflow, vuelve a copiarlo con las dos órdenes `cp` y `chmod` de arriba.
 
-  `entorno/resumen-metricas.py <carpeta> [desde AAAA-MM-DD] [--defectos <csv>]` saca las tablas por sesión y por issue para el registro del recorrido. Los defectos escapados (M10) vienen de Linear, no de las sesiones: las issues con la etiqueta `defecto-escapado`. Pásalas en un CSV con las columnas `issue` y `origen` (la issue cuya entrega dejó pasar el defecto), exportado de Linear o anotado en `historial/defectos-escapados.csv`.
+  `entorno/resumen-metricas.py <carpeta> [desde AAAA-MM-DD] [--defectos <csv>]` saca las tablas por sesión y por issue para el registro del recorrido. Los defectos escapados (M10) vienen de Linear, no de las sesiones: las issues con la etiqueta `defecto-escapado`. Pásalas en un CSV con las columnas `issue` y `origen` (la issue cuya entrega dejó pasar el defecto), exportado de Linear o anotado en `historial/defectos-escapados.csv`. La exportación de Linear no trae `origen`: añade la columna a mano. Si el CSV trae `Labels`, solo cuentan las filas con `defecto-escapado`, y cada defecto cuenta una vez.
 
 **Comprobación** (abre `claude` dentro de `~/proyectos/sdd-workflow`):
 
