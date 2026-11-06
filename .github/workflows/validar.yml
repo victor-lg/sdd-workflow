@@ -1,5 +1,6 @@
 # CI del repo del workflow (M36, VIC-16). Comprobaciones baratas y sin
-# opinión; las evaluaciones del plugin (M35) se añaden después.
+# opinión; las evaluaciones del plugin (M35) se añaden después. Los tests
+# de tests/ se ejecutan solos: añadir uno no necesita tocar este fichero.
 name: validar
 
 on:
@@ -17,6 +18,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: JSON válidos
         run: |
@@ -33,6 +35,14 @@ jobs:
           for f in $(git ls-files '*.yml' '*.yaml'); do
             python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$f" || { echo "::error file=$f::YAML no válido"; exit 1; }
           done
+
+      - name: Tests de los scripts
+        run: |
+          if [ -d tests ]; then
+            python3 -m unittest discover -s tests -p 'test_*.py' -v
+          else
+            echo "Sin carpeta tests/: nada que ejecutar."
+          fi
 
       - name: Un cambio en el plugin sube su versión y va al CHANGELOG
         env:
