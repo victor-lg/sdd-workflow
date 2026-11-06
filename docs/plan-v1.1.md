@@ -32,8 +32,8 @@
 | --- | --- |
 | **M36** | El repo `sdd-workflow` se trabaja como un proyecto más: el agente en WSL abre PR, la CI valida y tú fusionas. Se acaba copiar desde este chat a la carpeta de Windows |
 | **M35** | Evaluaciones del propio workflow (`claude plugin eval`). Los casos N1–N8 y el comportamiento clave de cada skill (`sdd-plan` se para si la issue no está en *Ready*, `sdd-review` no pasa contexto de más…) se ejecutan en la CI del workflow |
-| **Autoría** | `"attribution": {"commits": false, "pullRequests": false}` en los ajustes de usuario. Se quitan de `AGENTS.md` y de la plantilla de PR el `Co-Authored-By`, el pie "Generated with" y el apartado "Perfil y modelo". El autor de los commits del agente pasa a ser tu cuenta (variables `GIT_AUTHOR_*`), comprobando en el primer PR qué autor deja el squash |
-| **M42** | Convenciones de nombres y mensajes en `docs/convenciones.md` (ramas `tipo/vic-N-…`, Conventional Commits con `Refs: VIC-N` en el pie, títulos de issue y PR, versiones). `AGENTS.md`, plantillas y skills remiten a ese documento. Linear ya está preparado (team "Desarrollo", etiquetas Tipo, Riesgo y Origen, plantillas, proyecto del workflow) |
+| **Autoría** | ADR-0007. `"attribution": {"commits": false, "pullRequests": false}` en los ajustes de usuario. Se quitan de `AGENTS.md` y de la plantilla de PR el `Co-Authored-By`, el pie "Generated with" y el apartado "Perfil y modelo". Los commits y el squash quedan a nombre de la cuenta de máquina del agente, que abre el PR; la autoría de Víctor se descarta (ADR-0007, §2) |
+| **M42** | Convenciones de nombres y mensajes en `docs/convenciones.md`, adoptadas por el ADR-0007 junto con la autoría (ramas `tipo/vic-N-…`, Conventional Commits con `Refs: VIC-N` en el pie, títulos de issue y PR, versiones). `AGENTS.md`, plantillas y skills remiten a ese documento. Linear ya está preparado (team "Desarrollo", etiquetas Tipo, Riesgo y Origen, plantillas, proyecto del workflow) |
 | **Medición** | `sdd-metricas` amplía lo que guarda: rondas de G4, hallazgos (confirmados y descartados), puntuación de mutación cuando exista, defectos escapados (M10) e intervenciones humanas. `resumen-metricas.py` los resume por issue |
 
 **Hecho cuando:** un primer PR del workflow, abierto por el agente, pasa la CI con las evaluaciones, y sus commits no mencionan a Claude.
@@ -94,7 +94,7 @@
 
 **Por qué ahora:** es lo que más cambia tu día a día. Depende de los controles (bloques 2–3) y de la revisión fiable (bloque 4).
 
-**ADR-0007 del workflow (modifica P03, G6, N4 y ADR-0006):**
+**ADR-0008 del workflow (modifica P03, G6, N4 y ADR-0006):**
 - **Tu papel:**
   - la entrevista y la spec (G1);
   - las decisiones de producto y las lecturas de la spec (M15);
@@ -116,7 +116,7 @@
 - **M4 y M20:** "Refs" por defecto con prueba manual; una sesión por PR también en entregas partidas, con el estado en `.tareas/`. Los subagentes se lanzan solo por un motivo explícito: explorar, verificar de forma independiente o relevar una sesión larga ("delegar por un motivo", de Gentle-AI).
 - **M28:** la plantilla de la issue de Linear lleva el contrato: alcance, fuera de alcance, cuándo está hecho, ficheros permitidos y qué hacer si se bloquea.
 
-**Hecho cuando:** el ADR-0007 está aceptado, el ruleset y CODEOWNERS de la calculadora están ajustados (eso lo haces tú) y una entrega completa pasa sin copiar nada desde este chat.
+**Hecho cuando:** el ADR-0008 está aceptado, el ruleset y CODEOWNERS de la calculadora están ajustados (eso lo haces tú) y una entrega completa pasa sin copiar nada desde este chat.
 
 ## Bloque 6 — Skills de producto y plantilla
 
@@ -138,7 +138,7 @@
 
 **Por qué al final:** depende de tener tests con dientes (para "subir si falla") y de las evaluaciones del workflow (para comprobar otro ejecutor).
 
-**ADR-0008 del workflow (modifica ADR-0002):**
+**ADR-0009 del workflow (modifica ADR-0002):**
 - **M29:** una tabla en un solo fichero con qué modelo y qué esfuerzo para cada tarea, y la regla de empezar barato y subir si fallan los tests. Cambiar de modelo es cambiar una línea.
 - **M30:** piloto de portabilidad con OpenCode y un modelo de Go, en contenedor, con los mismos ficheros y repitiendo N1–N8.
 - **Perfil Go** (mejora #10 del primer recorrido): se retoma dentro de este bloque.

@@ -13,7 +13,7 @@ Repositorio del propio workflow: qué se ha decidido, qué está pendiente, las 
 - **Quiero saber qué significa un código o cómo se nombra algo:** `docs/glosario.md` y `docs/convenciones.md`.
 - **Quiero preparar el entorno:** `docs/guia-instalacion.md`.
 - **Quiero saber qué está pendiente de decidir:** sección 14 de `docs/linea-base-v1.md` (Q01–Q09 cerradas).
-- **Quiero ver una decisión ya tomada:** `docs/adr/` (ADR-0001 capa normativa; ADR-0002 ejecutor y perfiles de modelo; ADR-0003 plataforma y seguimiento; ADR-0004 Q05–Q09; ADR-0005 identidad del agente; ADR-0006 ajustes del primer recorrido).
+- **Quiero ver una decisión ya tomada:** `docs/adr/` (ADR-0001 capa normativa; ADR-0002 ejecutor y perfiles de modelo; ADR-0003 plataforma y seguimiento; ADR-0004 Q05–Q09; ADR-0005 identidad del agente; ADR-0006 ajustes del primer recorrido; ADR-0007 autoría y convenciones de nombres).
 - **Quiero saber dónde ha ido a parar cada nota original:** `docs/clasificacion-notas.md`.
 - **Quiero saber dónde queda cada decisión D00–D59:** `docs/trazabilidad-D00-D59.md`.
 - **Quiero ver lo que se copiará a cada proyecto:** `plantilla-proyecto/` (ficheros del proyecto) y `plugin-sdd/` (skills y subagentes).
