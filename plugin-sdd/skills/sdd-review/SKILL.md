@@ -56,7 +56,8 @@ Con las respuestas de todos los revisores:
 
    - `R` es el número de la ronda (1 a 3); `X`, los hallazgos de esa ronda que confirmaste; `Y`, los que descartaste; `Z`, cuántos de esos `X` están corregidos hasta ahora.
    - Si corriges después de la última ronda, repite la línea de esa ronda con el `Z` nuevo: cuenta la última.
-   - Escríbela en una sesión en la rama de la issue: `sdd-metricas` la lee en el transcript y la atribuye a la issue de la rama. No la escribas con otro formato, dentro de un bloque de código ni en otro sitio.
+   - Una ronda sin hallazgos también se anota, con ceros.
+   - `sdd-metricas` la lee en el transcript y la atribuye a la issue de la rama en la que estás. Si no estás en la rama de la issue, escríbela igual y avísalo; no cambies de rama por esto. No la escribas con otro formato, dentro de un bloque de código ni en otro sitio.
 
 ## 4. Cerrar
 

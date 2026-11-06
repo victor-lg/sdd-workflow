@@ -56,7 +56,7 @@ Toma la primera opción que funcione del todo:
 ## Al terminar
 
 1. Ejecuta las pruebas relevantes y anota en el PR qué se ejecutó y qué no, y por qué. **En R2,** añade la evidencia de los NFR afectados y un plan de vuelta atrás.
-   - **Si hiciste mutaciones,** escribe en tu respuesta, no solo en el PR, esta línea sola, sin viñeta ni formato y con números: `Métricas mutación: detectados X de Y` (`X`, mutantes que los tests detectan; `Y`, mutantes probados). La lee `sdd-metricas` en el transcript y la atribuye a la issue de la rama de la sesión; si repites las mutaciones, escríbela de nuevo: cuenta la última.
+   - **Si hiciste mutaciones,** escribe en tu respuesta, no solo en el PR, esta línea sola, sin viñeta ni formato y con números: `Métricas mutación: detectados X de Y` (`X`, mutantes que los tests detectan; `Y`, mutantes probados, sin contar los equivalentes ni los que no compilan). La lee `sdd-metricas` en el transcript y la atribuye a la issue de la rama en la que estás; si repites las mutaciones, escríbela de nuevo: cuenta la última.
 2. Completa la plantilla del PR: AC cubiertos en formato `SPEC-XXX-NNN/AC-NN`, cambio de comportamiento, ADR y nivel de riesgo.
 3. Rellena la **"Guía para el revisor humano"**: es lo que la persona lee para aprobar sin auditar cada línea.
    - Mapa del cambio en 3–5 líneas.

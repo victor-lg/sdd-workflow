@@ -10,9 +10,11 @@ si la sesión no tiene issue). El coste es una estimación a precio de API.
 Por issue, además: rondas de G4, hallazgos confirmados, descartados y corregidos,
 la última puntuación de mutación, intervenciones humanas y defectos escapados (M10).
 Una misma ronda de un PR que aparezca en varias sesiones de la issue cuenta una vez
-(la última), y un mensaje copiado al reanudar una sesión, también. G4 y mutación se
-atribuyen a la issue de la rama de la sesión: una revisión lanzada desde main sale
-en la fila de main.
+(la última), y un mensaje copiado al reanudar una sesión, también; por eso, en una
+sesión reanudada, la suma de intervenciones de la primera tabla puede pasar de la
+de la segunda. G4 y mutación se atribuyen a la issue de la rama en la que se
+escribió su línea (o, en sesiones anteriores, a la de la sesión): una revisión
+lanzada desde main sale en la fila de main.
 
 Los defectos escapados no salen de las sesiones, sino de Linear: las issues con la
 etiqueta "defecto-escapado". --defectos recibe un CSV con las columnas issue y
@@ -21,7 +23,8 @@ Linear o mantenido en el repo, por ejemplo historial/defectos-escapados.csv. Cad
 defecto se atribuye a su issue de origen y cuenta una vez; "ID" vale como nombre de
 la columna issue. La exportación de Linear no trae la columna origen: se añade a
 mano. Si el CSV tiene una columna Labels, solo cuentan las filas con la etiqueta
-defecto-escapado. Los defectos no se filtran por fecha.
+defecto-escapado. Los defectos no se filtran por fecha. El separador puede ser coma
+o punto y coma.
 """
 import argparse
 import csv
@@ -38,7 +41,11 @@ ID = re.compile(r"^vic-\d+$", re.I)
 def lee_defectos(ruta):
     """Devuelve ({issue de origen: nº de defectos}, [defectos sin origen válido])."""
     with open(ruta, encoding="utf-8-sig", newline="") as f:
-        filas = csv.DictReader(f)
+        cabecera = f.readline()
+        f.seek(0)
+        # Excel con configuración regional española exporta con punto y coma.
+        separador = ";" if cabecera.count(";") > cabecera.count(",") else ","
+        filas = csv.DictReader(f, delimiter=separador)
         columnas = {(c or "").strip().lower(): c for c in filas.fieldnames or []}
         col_issue = columnas.get("issue") or columnas.get("id")
         col_origen = columnas.get("origen")
@@ -51,7 +58,8 @@ def lee_defectos(ruta):
             origen = (fila.get(col_origen) or "").strip().upper()
             if not defecto or defecto in vistos:
                 continue
-            if col_etiquetas and "defecto-escapado" not in (fila.get(col_etiquetas) or "").lower():
+            etiquetas = {x.strip().lower() for x in (fila.get(col_etiquetas) or "").split(",")}
+            if col_etiquetas and "defecto-escapado" not in etiquetas:
                 continue
             vistos.add(defecto)
             if ID.match(origen):
@@ -87,7 +95,8 @@ def main(argv=None):
     # issue y no el repo, que es el nombre de la carpeta y cambia en cada worktree.
     rondas = {}
     for s in sesiones:
-        clave = ", ".join(s.get("issues") or []) or ", ".join(s.get("ramas") or []) or "—"
+        # Las ramas las puede crear el agente: un | descuadraría la tabla.
+        clave = (", ".join(s.get("issues") or []) or ", ".join(s.get("ramas") or []) or "—").replace("|", "\\|")
         print(f"| {(s.get('inicio') or '')[:16].replace('T', ' ')} | {s.get('repo') or '—'} | {clave} | "
               f"{', '.join(s.get('modelos') or [])} | ${s.get('coste_estimado_usd', 0):.2f} | "
               f"{s.get('duracion_min', 0)} ({s.get('duracion_api_min', 0)}) | "
@@ -102,15 +111,18 @@ def main(argv=None):
         # Las intervenciones sin uuid (o de sesiones anteriores a la v1.1) se suman tal cual.
         t["interv"] += max(0, (s.get("intervenciones", 0) or 0) - len(ids))
         m = s.get("mutacion")
-        if m and (not t["mutacion"] or (m.get("fecha") or "") >= (t["mutacion"].get("fecha") or "")):
-            t["mutacion"] = m
+        if m:
+            tm = tot[m.get("issue") or clave]
+            if not tm["mutacion"] or (m.get("fecha") or "") >= (tm["mutacion"].get("fecha") or ""):
+                tm["mutacion"] = m
         for r in (s.get("g4") or {}).values():
-            k = (clave, r.get("pr"), r.get("ronda"))
+            k = (r.get("issue") or clave, r.get("pr"), r.get("ronda"))
             if k not in rondas or (r.get("fecha") or "") >= (rondas[k].get("fecha") or ""):
                 rondas[k] = r
 
     g4 = defaultdict(lambda: [0, 0, 0, 0])  # rondas, confirmados, descartados, corregidos
     for (clave, _, _), r in rondas.items():
+        tot[clave]  # una issue con rondas aparece aunque sus sesiones sean de otra rama
         x = g4[clave]
         x[0] += 1
         x[1] += r.get("confirmados", 0) or 0

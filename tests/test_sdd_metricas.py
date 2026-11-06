@@ -189,6 +189,30 @@ class Transcript(unittest.TestCase):
         self.assertIsNone(e["g4"]["21/1"]["fecha"])
         self.assertEqual(e["transcript_leido"], os.path.getsize(self.ruta))
 
+    def test_linea_larga_a_medio_escribir_se_lee_por_partes(self):
+        with mock.patch.object(sdd_metricas, "MAX_LECTURA", 200):
+            self.escribe(humano("antes"))
+            larga = json.dumps(humano("y" * 900))
+            self.escribe(cola=larga[:800])  # sin terminar
+            e = {}
+            for _ in range(8):
+                previo = e.get("transcript_leido", 0)
+                e = sdd_metricas.lee_transcript(self.ruta, e)
+                # Cada ejecución avanza como mucho MAX_LECTURA y no vuelve atrás.
+                self.assertLessEqual(e["transcript_leido"] - previo, 200)
+                self.assertGreaterEqual(e["transcript_leido"], previo)
+            self.assertEqual(e["transcript_leido"], os.path.getsize(self.ruta))
+            self.assertTrue(e["transcript_a_media_linea"])
+            self.assertEqual(e["intervenciones"], 1)
+            # Termina la línea y llega otro mensaje: se retoma sin tomarlo por una reescritura.
+            self.escribe(cola=larga[800:] + "\n")
+            self.escribe(humano("después"))
+            for _ in range(3):
+                e = sdd_metricas.lee_transcript(self.ruta, e)
+            self.assertEqual(e["intervenciones"], 2)
+            self.assertFalse(e["transcript_a_media_linea"])
+            self.assertEqual(e["transcript_leido"], os.path.getsize(self.ruta))
+
     def test_lectura_acotada(self):
         with mock.patch.object(sdd_metricas, "MAX_LECTURA", 200):
             self.escribe(*(humano(f"mensaje {i}") for i in range(10)))
@@ -206,7 +230,8 @@ class Transcript(unittest.TestCase):
 
     def test_lineas_g4_por_pr_y_ronda(self):
         self.escribe(
-            asistente("Reconciliado.\n" + G4.format(r=1, c=4) + "\nSigo.", "2026-11-06T10:00:00Z"),
+            asistente("Reconciliado.\n" + G4.format(r=1, c=4) + "\nSigo.", "2026-11-06T10:00:00Z",
+                      gitBranch="feat/vic-12-logica"),
             asistente(G4.format(r=2, c=1)),
             # La misma ronda repetida: manda la última.
             asistente("  " + G4.format(r=2, c=3) + "  ", "2026-11-06T12:00:00Z"),
@@ -215,7 +240,9 @@ class Transcript(unittest.TestCase):
         g4 = sdd_metricas.lee_transcript(self.ruta, {})["g4"]
         self.assertEqual(set(g4), {"21/1", "21/2", "22/1"})
         self.assertEqual(g4["21/1"], {"pr": 21, "ronda": 1, "confirmados": 4, "descartados": 1,
-                                      "corregidos": 2, "fecha": "2026-11-06T10:00:00Z"})
+                                      "corregidos": 2, "fecha": "2026-11-06T10:00:00Z",
+                                      "issue": "VIC-12"})
+        self.assertIsNone(g4["22/1"]["issue"])  # sin gitBranch
         self.assertEqual(g4["21/2"]["confirmados"], 3)
         self.assertEqual(g4["21/2"]["fecha"], "2026-11-06T12:00:00Z")
 
@@ -234,6 +261,7 @@ class Transcript(unittest.TestCase):
             humano("Métricas mutación: detectados 1 de 2"),
             asistente("La salida del revisor:\n```\n" + G4.format(r=1, c=9) +
                       "\nMétricas mutación: detectados 1 de 2\n```"),
+            asistente("~~~text\n" + G4.format(r=1, c=9) + "\n```\n" + G4.format(r=2, c=9) + "\n~~~"),
         )
         e = sdd_metricas.lee_transcript(self.ruta, {})
         self.assertEqual(e["g4"], {})
@@ -241,9 +269,27 @@ class Transcript(unittest.TestCase):
 
     def test_mutacion_la_ultima(self):
         self.escribe(asistente("Métricas mutación: detectados 3 de 5", "2026-11-06T10:00:00Z"),
-                     asistente("Hecho.\nMétricas mutación: detectados 5 de 5", "2026-11-06T11:00:00Z"))
+                     asistente("Hecho.\nMétricas mutación: detectados 5 de 5", "2026-11-06T11:00:00Z",
+                               gitBranch="fix/vic-13-redondeo"))
         self.assertEqual(sdd_metricas.lee_transcript(self.ruta, {})["mutacion"],
-                         {"detectados": 5, "total": 5, "fecha": "2026-11-06T11:00:00Z"})
+                         {"detectados": 5, "total": 5, "fecha": "2026-11-06T11:00:00Z", "issue": "VIC-13"})
+
+    def test_issue_de_la_rama_de_cada_entrada(self):
+        # Una sesión que pasa de VIC-12 a VIC-13: cada ronda va a la issue de su rama.
+        self.escribe(asistente(G4.format(r=1, c=1), gitBranch="feat/vic-12-x"),
+                     asistente("Métricas G4: PR #30 · ronda 1 · confirmados 2 · descartados 0 · corregidos 2",
+                               gitBranch="feat/vic-13-y"),
+                     asistente(G4.format(r=2, c=1), gitBranch="main"),
+                     asistente(G4.format(r=3, c=1), gitBranch=["no", "cadena"]))
+        g4 = sdd_metricas.lee_transcript(self.ruta, {})["g4"]
+        self.assertEqual({k: v["issue"] for k, v in g4.items()},
+                         {"21/1": "VIC-12", "30/1": "VIC-13", "21/2": None, "21/3": None})
+
+    def test_retornos_de_carro(self):
+        self.escribe(asistente(G4.format(r=1, c=1) + "\r\nMétricas mutación: detectados 1 de 2\r\n"))
+        e = sdd_metricas.lee_transcript(self.ruta, {})
+        self.assertEqual(set(e["g4"]), {"21/1"})
+        self.assertEqual(e["mutacion"]["total"], 2)
 
     def test_lineas_basura(self):
         self.escribe(cola="no es json\n[1, 2]\n")

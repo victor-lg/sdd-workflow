@@ -120,8 +120,38 @@ class Resumen(unittest.TestCase):
         self.assertNotIn("| main |", salida)
 
     def test_fichero_del_repo(self):
+        # Hoy solo tiene la cabecera: se lee sin error y no añade defectos.
         ruta = pathlib.Path(__file__).resolve().parent.parent / "historial" / "defectos-escapados.csv"
-        self.assertIn("Total: 3 sesiones", self.ejecuta("--defectos", str(ruta)))
+        salida = self.ejecuta("--defectos", str(ruta))
+        self.assertIn("Total: 3 sesiones", salida)
+        self.assertNotIn("Defectos sin issue de origen", salida)
+        for clave in ("VIC-12", "main"):
+            self.assertEqual(self.fila(salida, clave)[-1], "0")
+
+    def test_csv_con_punto_y_coma(self):
+        ruta = self.csv("issue;origen\nVIC-30;VIC-12\n")
+        self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")
+
+    def test_etiqueta_exacta(self):
+        ruta = self.csv('ID,Labels,origen\nVIC-30,no-defecto-escapado,VIC-12\nVIC-31,"Bug,defecto-escapado",VIC-12\n')
+        self.assertEqual(self.fila(self.ejecuta("--defectos", ruta), "VIC-12")[-1], "1")
+
+    def test_rama_con_barra_vertical(self):
+        self.guarda("s7", {"inicio": "2026-11-05T10:00", "ramas": ["x|y"]})
+        self.assertIn("| x\\|y |", self.ejecuta())
+
+    def test_rondas_y_mutacion_por_la_issue_de_su_rama(self):
+        # Una sesión que pasó por dos issues: cada ronda va a la suya, no a "VIC-40, VIC-41".
+        self.guarda("s8", {"inicio": "2026-11-05T10:00", "issues": ["VIC-40", "VIC-41"],
+                           "g4": {"50/1": {"pr": 50, "ronda": 1, "confirmados": 3, "descartados": 0,
+                                           "corregidos": 3, "fecha": "2026-11-05T10:00", "issue": "VIC-40"},
+                                  "51/1": {"pr": 51, "ronda": 1, "confirmados": 1, "descartados": 1,
+                                           "corregidos": 0, "fecha": "2026-11-05T11:00", "issue": "VIC-41"}},
+                           "mutacion": {"detectados": 2, "total": 3, "fecha": "x", "issue": "VIC-41"}})
+        salida = self.ejecuta()
+        self.assertEqual(self.fila(salida, "VIC-40")[5:10], ["1", "3", "0", "3", "—"])
+        self.assertEqual(self.fila(salida, "VIC-41")[5:10], ["1", "1", "1", "0", "2 de 3"])
+        self.assertEqual(self.fila(salida, "VIC-40, VIC-41")[5:10], ["0", "0", "0", "0", "—"])
 
 
 if __name__ == "__main__":

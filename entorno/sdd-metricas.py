@@ -25,9 +25,13 @@ de la rama. Del transcript de la sesión guarda solo recuentos:
 - mutación: la última línea "Métricas mutación: detectados X de Y" de sdd-implement.
 
 Las dos líneas solo cuentan en el texto del asistente, solas en su línea y fuera
-de un bloque ```. Son autodeclaradas: el agente las escribe y nada las comprueba,
+de un bloque ``` o ~~~, y se atribuyen a la issue de la rama de esa entrada del
+transcript (gitBranch), no a la de la sesión. Son autodeclaradas: el agente las escribe y nada las comprueba,
 así que un texto que lo engañe podría falsearlas. El transcript se lee por partes
-(hasta 8 MB cada vez): el JSON de la sesión guarda hasta qué byte se ha leído. No
+(hasta 8 MB cada vez): el JSON de la sesión guarda hasta qué byte se ha leído. Una
+línea de más de 8 MB se salta sin analizar; si era un mensaje de la persona, no
+cuenta. Se supone que Claude Code solo añade al transcript: si se reescribe, se
+detecta cuando queda más corto o el byte guardado ya no cierra una línea. No
 guarda el contenido de la conversación ni rutas fuera del proyecto: del transcript,
 solo el nombre del fichero y el principio del uuid de cada intervención.
 
@@ -54,8 +58,8 @@ ISSUE = re.compile(r"^(?:[a-z]+/)?vic-(\d+)\b", re.I)
 # números van acotados: int() con miles de dígitos lanza ValueError.
 N = r"(\d{1,6})"
 LINEA_G4 = re.compile(rf"^[ \t]*Métricas G4: PR #{N} · ronda {N} · confirmados {N} · "
-                      rf"descartados {N} · corregidos {N}[ \t]*$", re.M)
-LINEA_MUTACION = re.compile(rf"^[ \t]*Métricas mutación: detectados {N} de {N}[ \t]*$", re.M)
+                      rf"descartados {N} · corregidos {N}[ \t\r]*$", re.M)
+LINEA_MUTACION = re.compile(rf"^[ \t]*Métricas mutación: detectados {N} de {N}[ \t\r]*$", re.M)
 # Mensajes de tipo "user" que no escribe la persona, en transcripts sin "origin". Ahí
 # no se distingue /clear de /sdd:sdd-plan, así que ningún comando de barra cuenta.
 NO_HUMANO = ("<local-command-", "<command-", "<task-notification>", "<system-reminder>",
@@ -102,12 +106,13 @@ def texto_de(contenido):
 
 
 def fuera_de_bloques(texto):
-    """Quita los bloques ``` : una línea de métricas citada en uno no cuenta."""
-    lineas, dentro = [], False
+    """Quita los bloques ``` y ~~~: una línea de métricas citada en uno no cuenta."""
+    lineas, valla = [], None
     for linea in texto.split("\n"):
-        if linea.lstrip().startswith("```"):
-            dentro = not dentro
-        elif not dentro:
+        inicio = linea.lstrip()[:3]
+        if inicio in ("```", "~~~") and valla in (None, inicio):
+            valla = None if valla else inicio
+        elif not valla:
             lineas.append(linea)
     return "\n".join(lineas)
 
@@ -151,6 +156,8 @@ def lee_transcript(ruta, antes):
     """
     nombre = os.path.basename(ruta)
     desde = entero(antes.get("transcript_leido"))
+    # True si la lectura anterior acabó dentro de una línea mayor que MAX_LECTURA.
+    a_media_linea = antes.get("transcript_a_media_linea") is True
     ids = list(antes.get("intervenciones_ids") or [])
     estado = {
         "intervenciones": entero(antes.get("intervenciones")),
@@ -159,35 +166,30 @@ def lee_transcript(ruta, antes):
     }
     with open(ruta, "rb") as f:
         reescrito = os.fstat(f.fileno()).st_size < desde
-        if desde and not reescrito:
+        if desde and not reescrito and not a_media_linea:
             # Lo leído terminaba en un salto de línea; si ahí no lo hay, el fichero cambió.
             f.seek(desde - 1)
             reescrito = f.read(1) != b"\n"
         if antes.get("transcript") != nombre or reescrito:
             # Otro fichero o uno reescrito: se cuenta desde el principio.
-            desde, ids = 0, []
+            desde, ids, a_media_linea = 0, [], False
             estado = {"intervenciones": 0, "g4": {}, "mutacion": None}
         f.seek(desde)
         bloque = f.read(MAX_LECTURA)
-        corte = bloque.rfind(b"\n") + 1
-        saltado = 0
-        if not corte and len(bloque) == MAX_LECTURA:
-            # Una línea más larga que todo el bloque se salta entera, sin analizarla,
-            # para que el desplazamiento siga cayendo al final de una línea.
-            largo = len(bloque)
-            while True:
-                trozo = f.read(MAX_LECTURA)
-                if not trozo:
-                    break  # aún a medio escribir: se espera
-                fin = trozo.find(b"\n")
-                if fin >= 0:
-                    saltado = largo + fin + 1
-                    break
-                largo += len(trozo)
-    # Una línea a medio escribir se deja para la próxima vez.
-    if saltado:
-        desde, bloque = desde + saltado, b""
+    if a_media_linea:
+        # Se termina de saltar la línea larga, sin analizarla.
+        fin = bloque.find(b"\n")
+        if fin < 0:
+            desde, bloque = desde + len(bloque), b""
+        else:
+            desde, bloque, a_media_linea = desde + fin + 1, bloque[fin + 1:], False
+    corte = bloque.rfind(b"\n") + 1
+    if not corte and len(bloque) == MAX_LECTURA:
+        # Una línea más larga que todo el bloque no se analiza: se salta por partes.
+        # Si es un mensaje de la persona, no cuenta (límite conocido).
+        desde, bloque, a_media_linea = desde + len(bloque), b"", True
     else:
+        # Una línea a medio escribir se deja para la próxima vez.
         bloque = bloque[:corte]
     vistos = set(ids)
     # Se parte por bytes: splitlines() también corta en U+2028, que va sin escapar
@@ -209,19 +211,24 @@ def lee_transcript(ruta, antes):
                 texto = fuera_de_bloques(texto_de(g(e, "message", "content")))
                 fecha = e.get("timestamp")
                 fecha = fecha[:40] if isinstance(fecha, str) else None
+                # La rama de la entrada, no la de la sesión: una sesión puede pasar por
+                # varias issues.
+                rama_e = e.get("gitBranch")
+                issue = issue_de(rama_e) if isinstance(rama_e, str) else None
                 for m in LINEA_G4.finditer(texto):
                     pr, ronda, conf, desc, corr = (int(x) for x in m.groups())
                     estado["g4"][f"{pr}/{ronda}"] = {"pr": pr, "ronda": ronda, "confirmados": conf,
                                                      "descartados": desc, "corregidos": corr,
-                                                     "fecha": fecha}
+                                                     "fecha": fecha, "issue": issue}
                 for m in LINEA_MUTACION.finditer(texto):
                     estado["mutacion"] = {"detectados": int(m.group(1)), "total": int(m.group(2)),
-                                          "fecha": fecha}
+                                          "fecha": fecha, "issue": issue}
         except Exception:
             continue  # una entrada rara no debe congelar las métricas de la sesión
     estado["intervenciones_ids"] = ids
     estado["transcript"] = nombre
     estado["transcript_leido"] = desde + len(bloque)
+    estado["transcript_a_media_linea"] = a_media_linea
     return estado
 
 
@@ -292,7 +299,8 @@ def main():
     }
     # Recuentos de la conversación; si el transcript falla, se conservan los anteriores.
     conversacion = {k: antes[k] for k in ("transcript", "transcript_leido", "intervenciones",
-                                          "intervenciones_ids", "g4", "mutacion") if k in antes}
+                                          "intervenciones_ids", "g4", "mutacion",
+                                          "transcript_a_media_linea") if k in antes}
     transcript = g(e, "transcript_path")
     if transcript:
         try:
