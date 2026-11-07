@@ -3,7 +3,7 @@ name: sdd-implement
 description: Implementa una entrega ya planificada (F4) a partir de los AC de su spec, con tests que citan los IDs, el cambio más pequeño que resuelve la tarea completa y el progreso registrado en el PR borrador. Úsala después de sdd-plan, con la rama y el PR ya creados.
 ---
 
-<!-- Workflow SDD + IA v1.0. Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail). -->
+<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail). -->
 
 # sdd-implement
 
@@ -56,6 +56,7 @@ Toma la primera opción que funcione del todo:
 ## Al terminar
 
 1. Ejecuta las pruebas relevantes y anota en el PR qué se ejecutó y qué no, y por qué. **En R2,** añade la evidencia de los NFR afectados y un plan de vuelta atrás.
+   - **Métricas de mutación:** publica siempre un comentario en el PR que termine con una de estas líneas, sola, sin viñeta ni formato: `Métricas mutación: detectados X de Y` (`X`, mutantes que los tests detectan; `Y`, mutantes probados, sin contar los equivalentes ni los que no compilan) o, si no hiciste mutaciones, `Métricas mutación: sin mutaciones`. No te inventes números para cumplir. Escribe el cuerpo con Write en un fichero, sin la línea, y publícalo con `{ cat "$TMPDIR/mutacion.md"; cat <<'METRICAS_SDD'` / la línea / `METRICAS_SDD` / `} | gh pr comment N --body-file -`. Nunca metas el cuerpo en la orden de Bash, ni en un heredoc sin comillas ni en `--body "…"`. `sdd-metricas` solo lee la línea de la entrada de `gh pr comment` si la orden no falla, y la atribuye a la issue de la rama en la que estás. Si repites las mutaciones, publícala de nuevo: cuenta la última. Si usas esta skill y no hay ninguna línea, el resumen de métricas marca la issue con "⚠ sin línea".
 2. Completa la plantilla del PR: AC cubiertos en formato `SPEC-XXX-NNN/AC-NN`, cambio de comportamiento, ADR y nivel de riesgo.
 3. Rellena la **"Guía para el revisor humano"**: es lo que la persona lee para aprobar sin auditar cada línea.
    - Mapa del cambio en 3–5 líneas.
