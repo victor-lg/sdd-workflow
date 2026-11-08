@@ -1,6 +1,6 @@
 {
   "name": "sdd",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Skills, subagente revisor y hooks de Git del workflow SDD + IA.",
   "license": "MIT",
   "author": {

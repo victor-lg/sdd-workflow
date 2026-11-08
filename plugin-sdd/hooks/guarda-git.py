@@ -3,7 +3,9 @@
 
 Es una segunda capa contra errores del agente, no un control de seguridad: lee el
 texto de la orden, así que bash -c, eval, variables, alias o scripts la esquivan.
-Lo que protege de verdad es el sandbox, los ajustes gestionados y la CI.
+Lo que protege de verdad es el sandbox, que imponen los ajustes gestionados, y la CI.
+Las reglas Bash(...) de esos ajustes no se pueden anular, pero también leen el texto
+de la orden: un script las esquiva igual.
 
 Las reglas, sus niveles y sus mensajes están en reglas-git.json. Si no puede mirar,
 falla cerrado.

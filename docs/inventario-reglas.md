@@ -162,7 +162,7 @@ Aparecen en VIC-17 o en las retrospectivas, pero no en `AGENTS.md`, `CLAUDE.md` 
 | --- | --- | --- | --- | --- |
 | X-01 | No configurar el seguimiento de ramas | M16 | Sí: `.git/config.lock` huérfanos en calc#31, #33 y #35; rama con base antigua en calc#20 | **Hook** (`git push -u`, `--set-upstream-to`, crear ramas desde `origin/…` sin `--no-track` y las formas de `git config` que escriben; decisión 3) |
 | X-02 | No escribir `.env*`, salvo plantillas | M25 | No consta | **Hook** (Write, Edit y su pareja en Bash) |
-| X-03 | `git add` por nombre: nada de `-A`, `.` ni equivalentes | M25 | Casi: 11 ficheros del sandbox a un `git add .` de entrar en un commit (retro-2) | **Hook** (y `deny` en ajustes gestionados, que aplica Víctor) |
+| X-03 | `git add` por nombre: nada de `-A`, `.` ni equivalentes | M25 | Casi: 11 ficheros del sandbox a un `git add .` de entrar en un commit (retro-2) | **Hook** (y `deny` en ajustes gestionados, que aplica Víctor). El `deny` solo cubre las formas literales `git add -A`, `git add --all` y `git add .`, solas o con más argumentos detrás; el resto (`git add -- .`, `git add -u`, `git stage .`, `git -C sub add .`…) depende del hook |
 | X-04 | Guarda de fugas por `.gitignore` en `git commit` | M25 | No consta | **Hook** (sin red, falla cerrado; pareja local de gitleaks, M33) |
 | X-05 | No escribir PASS sin un test en verde | M25 | No consta | Aplazado al bloque 4 (decisión 2) |
 | X-06 | Capturas dentro del repo, nunca en `/tmp` | M12 | Sí: dos permisos pedidos a mano para leer fuera del proyecto (obs. 10) | **Hook** |

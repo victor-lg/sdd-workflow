@@ -522,8 +522,10 @@ El agente trabaja dentro de WSL2 con el sandbox de Claude Code en modo estricto.
    - *Corrección v0.11:* antes decía "ajustes de usuario". La documentación aclara que solo los ajustes gestionados (o `--settings`) impiden que un repo relaje el sandbox (https://code.claude.com/docs/en/sandboxing).
 
 2. **Reglas de permisos (ejecutor).**
-   - Cubren lo que el sandbox no cubre: las herramientas Read/Edit, WebFetch y MCP.
+   - Cubren lo que el sandbox no cubre: las herramientas Read/Edit, WebFetch y MCP, y algunas órdenes de Bash que el sandbox permite.
    - `deny` de lectura para las carpetas de credenciales (`~/.ssh`, `~/.aws`, la clave de Go y los tokens de Claude Code). Claude Code aplica estas reglas `Read(...)` también al sandbox, que oculta la carpeta entera: el proceso recibe "no existe".
+   - `deny` de `git add -A`, `git add --all` y `git add .` (X-03 de `docs/inventario-reglas.md`). Solo coincide con esas formas literales; los demás equivalentes dependen del hook `guarda-git.py` del plugin.
+   - **"No se puede anular" no es "no se puede esquivar".** Ni el agente ni un repo pueden relajar estas reglas, pero las de `Bash(...)` leen el texto de la orden, igual que un hook: un script que contenga `git add .` no coincide con ninguna. No son una frontera como el sandbox.
    - El token de `gh` (`~/.config/gh`) **no** se deniega: el agente lo necesita para empujar ramas y abrir PR. Su protección es la de GitHub (ADR-0005): sin `workflow`, sin poder fusionar en `main` y solo en los repos invitados.
    - `ask` para añadir dependencias.
    - El modo "saltarse permisos" queda desactivado.

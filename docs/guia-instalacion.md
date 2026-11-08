@@ -224,6 +224,7 @@ Qué hace cada fichero:
   - red solo hacia GitHub y los registros npm y PyPI, sin preguntar por otros dominios;
   - credenciales (`~/.ssh`, `~/.aws`, la clave de Go, los tokens de Claude Code) ocultas a los comandos;
   - reglas `deny` para que la herramienta Read tampoco las lea;
+  - `deny` de `git add -A`, `git add --all` y `git add .`, solo en esas formas literales (las demás, como `git add -- .`, dependen del hook del plugin);
   - `ask` al añadir dependencias;
   - el modo "saltarse permisos" desactivado.
 - **`user-settings.json`:** Remote Control en todas las sesiones, el canal de actualizaciones `stable`, la línea de estado de métricas y `attribution` con `commit` y `pr` vacíos y `sessionUrl` a `false`, para que ni commits ni PR mencionen a Claude (ADR-0007).
@@ -252,6 +253,12 @@ Qué hace cada fichero:
    - al acabar, `rm ~/.aws/prueba.txt` en la terminal normal.
 
    No pidas leer credenciales reales ni saltarse el proxy: activa las salvaguardas del modelo.
+6. **`deny` de `git add`** (fusionar no lo activa: hace falta el `sudo cp` de arriba y reiniciar la sesión). El hook del plugin bloquea las mismas órdenes, así que con él activo no se distingue cuál de los dos actúa:
+   - si ya tienes el plugin `sdd` (B6), apágalo en una terminal normal con `claude plugin disable sdd@sdd-workflow`;
+   - crea un repo temporal y abre `claude` en él: `d=$(mktemp -d) && cd "$d" && git init -q && echo prueba > a.txt && claude`;
+   - pide a Claude que ejecute `git add .` tal cual, sin `cd` ni `git -C` delante: debe quedar denegado por los ajustes de permisos, y `git status --short` debe seguir mostrando `?? a.txt`;
+   - pide `git add a.txt`, que sí debe funcionar (`A  a.txt`);
+   - al acabar, sal de la sesión, ejecuta `cd && rm -rf "$d"` y, si lo apagaste, `claude plugin enable sdd@sdd-workflow`.
 
 **Si un proyecto necesita otro dominio** (por ejemplo, para descargar un navegador de pruebas), se añade a `allowedDomains` editando el fichero con `sudo`. Es un cambio deliberado: anótalo en el `CHANGELOG`.
 
