@@ -8,7 +8,7 @@ Instrucciones para cualquier agente que trabaje en este repositorio. Son cortas 
 
 - Comportamiento esperado: `docs/specs/`. Solo es vigente lo que está en `main`. Los requisitos compartidos viven en specs `SPEC-XCUT-*`: cítalas por ID, nunca copies su texto.
 - Visión del producto: `docs/vision.md`.
-- Planificación de entregas: la issue de Linear de la tarea. Léela, pero nunca la modifiques. Usa su ID en la rama, en el pie de los commits y en el PR.
+- Planificación de entregas: la issue de Linear de la tarea. Léela; solo puedes comentarla, nunca cambies su estado, su descripción ni sus etiquetas. Usa su ID en la rama, en el pie de los commits y en el PR.
 - Decisiones de arquitectura: `docs/adr/`, con estado `Aceptado` y fusionadas en `main`. Un ADR `Aceptado` en una rama sin fusionar no tiene autoridad.
 - Implementación: el código y los tests existentes.
 - Las notas de `discovery/`, la memoria, los resúmenes y las conversaciones son contexto, nunca norma.
