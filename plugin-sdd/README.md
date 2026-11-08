@@ -15,6 +15,11 @@ Mitad "plugin" de la distribución del núcleo (ADR-0004, Q05). La otra mitad es
   - `reviewer` ✔ borrador: revisor de solo lectura con contexto limpio (G4).
 - `evals/`: casos de `claude plugin eval` (M35), uno por directorio. Corren en la CI del workflow de madrugada (02:17 UTC) si `plugin-sdd/` cambió en el último día, o a mano; nunca en un PR. En local: `claude plugin eval . --ablation none --no-publish` (sin `--no-publish`, el informe con las transcripciones se publica en claude.ai).
 
+- `hooks/`: los primeros controles del inventario (`docs/inventario-reglas.md`), en Python sin dependencias. Reglas, niveles y mensajes en `reglas-git.json`.
+  - `guarda-git.py` (`PreToolUse` sobre Bash): sin seguimiento de ramas (M16), `git add` por nombre (X-03) y ramas desde `main` actualizado (REG-83). Cada bloqueo dice qué hacer en su lugar.
+  - `sesion-unica.py` (`SessionStart`): si hay otra sesión viva en la misma copia del repo, avisa y sugiere un worktree (REG-49).
+  - **Son una segunda capa contra errores del agente, no seguridad.** Leen el texto de la orden, así que `bash -c`, `eval`, variables, alias o scripts los esquivan. Lo que protege es el sandbox, los ajustes gestionados y la CI.
+
 Flujo normal: `sdd-discover` → `sdd-spec` → `sdd-review` (spec) → *merge humano* → `sdd-plan` → `sdd-implement` → `sdd-review` (código) → *merge humano*. `sdd-context` se usa dentro de los demás.
 
 ## Qué no contiene
