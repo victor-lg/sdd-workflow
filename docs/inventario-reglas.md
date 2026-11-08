@@ -1,6 +1,6 @@
 # Inventario de reglas del workflow (M25)
 
-**Estado:** decisiones tomadas el 2026-11-08 (VIC-17, bloque 2 de `docs/plan-v1.1.md`). De lo que aquí se decide, solo está aplicada la frase sobre la issue en `plantilla-proyecto/AGENTS.md`.
+**Estado:** decisiones tomadas el 2026-11-08 (VIC-17, bloque 2 de `docs/plan-v1.1.md`). De lo que aquí se decide, está aplicada la frase sobre la issue en `plantilla-proyecto/AGENTS.md` y, en el plugin 1.2.0, los hooks de X-01, X-03, REG-83 y REG-49.
 
 Cada regla de `plantilla-proyecto/AGENTS.md`, `plantilla-proyecto/CLAUDE.md` y las seis skills de `plugin-sdd/skills/`, con su tipo, si se ha incumplido y su destino. Las líneas citadas son las del commit `0402725`.
 

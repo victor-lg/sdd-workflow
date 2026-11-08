@@ -1,0 +1,53 @@
+{
+  "rama_principal": "main",
+  "remoto": "origin",
+  "max_minutos_desde_fetch": 15,
+  "max_segundos_analisis": 7,
+  "max_caracteres_orden": 200000,
+  "prefijos_ramas_remotas": ["origin/", "remotes/origin/", "refs/remotes/origin/"],
+  "rutas_que_abarcan_todo": ["*", "**", "**/*", ".*", "./*", "./**", ":", ":/", ":/.", ":/*", ":/**", ":(top)", ":(top).", ":(top)*", ":(glob)**", ":(glob)*", ":(top,glob)**", ":(top,glob)*"],
+  "patron_pathspec_exclusion": "^:(!|\\^|\\([^)]*exclude)",
+  "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, scripts). Si crees que aquí no aplica, díselo a la persona.",
+  "reglas": {
+    "push-seguimiento": {
+      "nivel": "bloquear",
+      "mensaje": "M16: no configures el seguimiento de ramas (-u, --set-upstream). El sandbox no deja escribir .git/config y el intento deja un .git/config.lock huérfano. En su lugar: git push origin <rama>, sin -u. gh pr create --head <rama> funciona igual sin seguimiento."
+    },
+    "branch-seguimiento": {
+      "nivel": "bloquear",
+      "mensaje": "M16: no configures el seguimiento de ramas (--set-upstream-to, -u). El sandbox no deja escribir .git/config y el intento deja un .git/config.lock huérfano. En su lugar: nombra la rama remota en cada orden, por ejemplo git push origin <rama> o git pull origin <rama>."
+    },
+    "config-escribe": {
+      "nivel": "bloquear",
+      "mensaje": "M16: git config solo se usa para leer (--get, --list). Escribir en .git/config falla en el sandbox y deja un .git/config.lock huérfano. En su lugar: para una sola orden, git -c clave=valor <orden>. Si tiene que quedar permanente, pídeselo a la persona."
+    },
+    "crear-sin-no-track": {
+      "nivel": "bloquear",
+      "mensaje": "M16: al crear una rama desde origin/… hace falta --no-track, sin --track. Si no, Git escribe el seguimiento en .git/config, falla en el sandbox y la rama puede no crearse. En su lugar: git fetch origin && git switch --no-track -c <rama> origin/main."
+    },
+    "add-sin-nombre": {
+      "nivel": "bloquear",
+      "mensaje": "X-03: git add va por nombre. -A, -u, «.» y sus equivalentes añaden ficheros que no has elegido, como los del sandbox. En su lugar: mira git status --short y añade solo los tuyos con git add <fichero> <fichero>."
+    },
+    "base-desactualizada": {
+      "nivel": "bloquear",
+      "mensaje": "REG-83: la rama tiene que salir de main actualizado, y no consta un git fetch reciente o main no coincide con origin/main. En su lugar: git fetch origin && git switch --no-track -c <rama> origin/main."
+    },
+    "base-no-main": {
+      "nivel": "preguntar",
+      "mensaje": "REG-83: esta rama no sale de main. Lo normal es git fetch origin && git switch --no-track -c <rama> origin/main. ¿Hay un motivo para usar esta base?"
+    },
+    "sin-analizar": {
+      "nivel": "bloquear",
+      "mensaje": "No he podido analizar esta orden: tiene comillas, una sustitución o un heredoc sin cerrar, o es demasiado larga. En su lugar: corrígela o sepárala en órdenes más simples."
+    },
+    "sin-mirar": {
+      "nivel": "bloquear",
+      "mensaje": "REG-83: no he podido comprobar la base de la rama. En su lugar: ejecuta la orden desde una carpeta del repo, con la ruta escrita tal cual: git fetch origin && git switch --no-track -c <rama> origin/main."
+    }
+  },
+  "sesion": {
+    "otra-viva": "REG-49: hay otra sesión de Claude Code viva en esta copia del repo, y dos sesiones en la misma carpeta se cambian la rama una a otra. Antes de tocar nada, dilo a la persona y propón abrir esta sesión en un worktree: git fetch origin && git worktree add --no-track -b <rama> ../<carpeta> origin/main.",
+    "sin-mirar": "REG-49: no he podido comprobar si hay otra sesión viva en esta copia del repo. Antes de cambiar de rama, confírmalo con la persona."
+  }
+}
