@@ -5,6 +5,7 @@ Cada sesión deja una marca en el directorio de Git de su copia, que es distinto
 cada worktree. Si hay otra marca de un proceso vivo, avisa y sugiere un worktree.
 Solo avisa: SessionStart no puede impedir que la sesión siga.
 """
+import errno
 import json
 import os
 import re
@@ -15,19 +16,19 @@ import tempfile
 import time
 
 RUTA_REGLAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reglas-git.json")
-INTERMEDIOS = {"sh", "bash", "dash", "zsh", "fish", "env", "python", "python3"}
+INTERMEDIO = re.compile(r"(sh|bash|dash|zsh|fish|env|python[\d.]*)$")
 NOMBRE_MARCA = re.compile(r"\d+\.json$")
 MAX_BYTES_MARCA = 4096
 AVISO_DE_RESPALDO = "REG-49: no he podido comprobar si hay otra sesión viva en esta copia del repo."
 
 
 def _ps(pid, *columnas):
+    """La salida de ps, o None si el proceso no existe. Si ps falla, lanza una excepción."""
     orden = ["ps", "-p", str(pid)] + [a for c in columnas for a in ("-o", f"{c}=")]
-    try:
-        r = subprocess.run(orden, capture_output=True, text=True, timeout=5)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else None
+    r = subprocess.run(orden, capture_output=True, text=True, timeout=5)
+    if r.returncode not in (0, 1):
+        raise RuntimeError(r.stderr.strip())
+    return r.stdout.strip() or None
 
 
 def proceso_de_sesion():
@@ -38,7 +39,7 @@ def proceso_de_sesion():
         if linea is None:
             raise RuntimeError("ps no responde")
         padre, _, nombre = linea.partition(" ")
-        if os.path.basename(nombre.strip()) not in INTERMEDIOS:
+        if not INTERMEDIO.match(os.path.basename(nombre.strip())):
             return pid
         pid = int(padre)
     raise RuntimeError("no encuentro el proceso de la sesión")
@@ -60,13 +61,15 @@ def leer_marca(ruta):
     directorio y el hook corre fuera del sandbox: no sigue enlaces ni espera a un FIFO."""
     try:
         fd = os.open(ruta, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    except OSError:
-        return {}
+    except OSError as e:
+        if e.errno in (errno.ELOOP, errno.ENOENT):
+            return {}
+        raise
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             return {}
         marca = json.loads(os.read(fd, MAX_BYTES_MARCA))
-    except (OSError, ValueError, RecursionError):
+    except (ValueError, RecursionError):
         return {}
     finally:
         os.close(fd)
@@ -81,8 +84,9 @@ def otras_vivas(directorio, pid_propio):
         if nombre == f"{pid_propio}.json" or not NOMBRE_MARCA.match(nombre):
             continue
         marca = leer_marca(ruta)
-        if marca.get("arranque") and _ps(marca.get("pid"), "lstart") == marca["arranque"]:
-            vivas.append(marca["pid"])
+        pid = marca.get("pid")
+        if marca.get("arranque") and type(pid) is int and pid > 0 and _ps(pid, "lstart") == marca["arranque"]:
+            vivas.append(pid)
         else:
             try:
                 os.unlink(ruta)
@@ -100,7 +104,10 @@ def registrar(git_dir, pid, session_id):
         pass
     if not stat.S_ISDIR(os.lstat(directorio).st_mode):  # lstat: un enlace no cuenta como directorio.
         raise NotADirectoryError(directorio)
-    marca = {"pid": pid, "arranque": _ps(pid, "lstart"), "session_id": session_id, "inicio": time.time()}
+    arranque = _ps(pid, "lstart")
+    if arranque is None:
+        raise RuntimeError("el proceso de la sesión no existe")
+    marca = {"pid": pid, "arranque": arranque, "session_id": session_id, "inicio": time.time()}
     with tempfile.NamedTemporaryFile("w", dir=directorio, suffix=".tmp", delete=False, encoding="utf-8") as f:
         json.dump(marca, f)
     os.replace(f.name, os.path.join(directorio, f"{pid}.json"))

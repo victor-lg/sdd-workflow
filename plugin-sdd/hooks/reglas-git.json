@@ -2,9 +2,10 @@
   "rama_principal": "main",
   "remoto": "origin",
   "max_minutos_desde_fetch": 15,
-  "max_segundos_analisis": 10,
+  "max_segundos_analisis": 7,
+  "max_caracteres_orden": 200000,
   "prefijos_ramas_remotas": ["origin/", "remotes/origin/", "refs/remotes/origin/"],
-  "rutas_que_abarcan_todo": ["*", "**", "**/*", ".*", "./*", "./**", ":", ":/", ":/.", ":/*", ":/**", ":(top)", ":(top).", ":(top)*", ":(glob)**"],
+  "rutas_que_abarcan_todo": ["*", "**", "**/*", ".*", "./*", "./**", ":", ":/", ":/.", ":/*", ":/**", ":(top)", ":(top).", ":(top)*", ":(glob)**", ":(glob)*", ":(top,glob)**", ":(top,glob)*"],
   "patron_pathspec_exclusion": "^:(!|\\^|\\([^)]*exclude)",
   "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, scripts). Si crees que aquí no aplica, díselo a la persona.",
   "reglas": {

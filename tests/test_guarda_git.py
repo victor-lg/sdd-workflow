@@ -177,6 +177,9 @@ BLOQUEADAS = {
         "git add '**/*'",
         "git add ':/**'",
         "git add ':(glob)**'",
+        "git add ':(glob)*'",
+        "git add ':(top,glob)**'",
+        "git add -n --no-dry-run -A",
         "time -p git add .",
         "(( x = 1 << 2 ))\ngit add .",
     ],
@@ -336,6 +339,7 @@ SE_ESQUIVA = [
     'echo "${X:-$(git add .)}"',
     "echo $(( $(git add .) ))",
     "function f { git add .; }",
+    "(( n << k ))\ngit add .",
 ]
 
 
@@ -371,6 +375,13 @@ class Guarda(unittest.TestCase):
     def test_analisis_con_plazo_falla_cerrado(self):
         with mock.patch.object(guarda.time, "monotonic", side_effect=itertools.count(0, 100)):
             self.assertEqual(self.decide("ls; git status"), "sin-analizar")
+
+    def test_orden_enorme_falla_cerrado(self):
+        self.assertEqual(self.decide("git status # " + "x" * CONF["max_caracteres_orden"]), "sin-analizar")
+
+    def test_el_plazo_cabe_en_el_timeout_del_hook(self):
+        registro = json.loads((HOOKS / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        self.assertLess(CONF["max_segundos_analisis"] + 4 * 3, registro["PreToolUse"][0]["hooks"][0]["timeout"])
 
     def test_sigue_cd_con_opciones(self):
         vistos = []
@@ -467,7 +478,7 @@ class BaseDeLaRama(unittest.TestCase):
 
     def test_fetch_o_pull_que_no_traen_main_no_cuentan(self):
         self.envejecer_fetch()
-        for previa in ("git fetch upstream", "git fetch origin feat/z", "git fetch --dry-run", "git fetch -n origin",
+        for previa in ("git fetch upstream", "git fetch origin feat/z", "git fetch --dry-run",
                        "git -C /otro fetch origin", "git pull origin feat/z"):
             with self.subTest(previa=previa):
                 self.assertEqual(self.decide(f"{previa}; git switch --no-track -c feat/x origin/main"),
@@ -475,7 +486,8 @@ class BaseDeLaRama(unittest.TestCase):
 
     def test_fetch_de_main_cuenta(self):
         self.envejecer_fetch()
-        for previa in ("git fetch", "git fetch origin", "git fetch origin main", "git pull origin main"):
+        for previa in ("git fetch", "git fetch origin", "git fetch -n origin", "git fetch origin main",
+                       "git pull origin main"):
             with self.subTest(previa=previa):
                 self.assertIsNone(self.decide(f"{previa}; git switch --no-track -c feat/x origin/main"))
 
@@ -508,6 +520,9 @@ class BaseDeLaRama(unittest.TestCase):
     def test_fuera_de_un_repo_falla_cerrado(self):
         self.assertEqual(guarda.decidir("git switch -c x", self.dir.name, CONF), "sin-mirar")
 
+    def test_pushd_falla_cerrado(self):
+        self.assertEqual(self.decide("pushd sub && git switch -c x"), "sin-mirar")
+
     def test_ruta_dinamica_falla_cerrado(self):
         self.assertEqual(guarda.decidir('git -C "$D" switch -c x', self.copia, CONF), "sin-mirar")
 
@@ -539,6 +554,9 @@ class Principal(unittest.TestCase):
         for entrada in ("", "no es json", "{}", '{"tool_input": {}}'):
             with self.subTest(entrada=entrada):
                 self.assertEqual(self.decision(self.ejecuta(entrada))["permissionDecision"], "deny")
+
+    def test_anidamiento_extremo_falla_cerrado(self):
+        self.assertEqual(self.decision(self.ejecuta(self.entrada("echo " + "$(" * 5000)))["permissionDecision"], "deny")
 
     def test_reglas_ilegibles_fallan_cerrado(self):
         with tempfile.TemporaryDirectory() as d:

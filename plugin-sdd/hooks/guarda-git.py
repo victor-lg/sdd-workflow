@@ -70,7 +70,7 @@ CONFIG_OPCIONES_LECTURA = {
 LARGAS_ADD = dict.fromkeys(
     ("dry-run", "verbose", "force", "interactive", "patch", "edit", "update", "all", "no-all", "ignore-removal",
      "no-ignore-removal", "intent-to-add", "refresh", "ignore-errors", "ignore-missing", "sparse",
-     "no-warn-embedded-repo", "renormalize", "pathspec-file-nul"), False)
+     "no-warn-embedded-repo", "renormalize", "pathspec-file-nul", "no-dry-run"), False)
 LARGAS_ADD.update(dict.fromkeys(("chmod", "pathspec-from-file"), True))
 
 _LARGAS_CAMBIO_RAMA = dict.fromkeys(
@@ -153,7 +153,7 @@ class _Lector:
 
     def _redireccion(self, palabras, heredocs):
         t, i = self.t, self.i
-        if palabras and palabras[-1].isdigit() and i > 0 and t[i - 1].isdigit():
+        if i > 0 and t[i - 1].isdigit() and palabras and palabras[-1].isdigit():
             palabras.pop()
         if t[i + 1:i + 2] == "(":  # <(orden) o >(orden): el paréntesis se lee como subshell.
             self.i += 1
@@ -425,7 +425,11 @@ def regla_config(args):
 def regla_add(args, conf):
     encontradas, posicionales = opciones(args, "", LARGAS_ADD)
     nombres = _nombres(encontradas)
-    if nombres & {"n", "dry-run"}:
+    vista_previa = False
+    for nombre, _ in encontradas:
+        if nombre in ("n", "dry-run", "no-dry-run"):
+            vista_previa = nombre != "no-dry-run"
+    if vista_previa:
         return None
     if nombres & {"A", "all", "no-ignore-removal", "u", "update"}:
         return "add-sin-nombre"
@@ -511,7 +515,7 @@ def _juntar(cwd, ruta):
 def _trae_main(args, conf):
     """Si un git fetch o git pull con estos argumentos trae la rama principal del remoto."""
     encontradas, posicionales = opciones(args)
-    if _nombres(encontradas) & {"n", "dry-run"}:
+    if "dry-run" in _nombres(encontradas):  # En fetch y pull, -n no es --dry-run.
         return False
     if not posicionales:
         return True
@@ -536,6 +540,8 @@ def _regla_de(sub, args, ajustes, cwd, previas, conf):
 
 def decidir(comando, cwd, conf):
     """Devuelve el id de la regla más grave que incumple la orden, o None."""
+    if len(comando) > conf["max_caracteres_orden"] and "git" in comando:
+        return "sin-analizar"
     limite = time.monotonic() + conf["max_segundos_analisis"]
     try:
         ordenes = analizar(comando)
@@ -546,6 +552,9 @@ def decidir(comando, cwd, conf):
         if time.monotonic() > limite:  # Antes de que el timeout del hook deje pasar la orden.
             return "sin-analizar"
         efectiva = orden_efectiva(palabras)
+        if efectiva[:1] in (["pushd"], ["popd"]):  # No se sigue: REG-83 falla cerrado.
+            cwd = "$"
+            continue
         if efectiva[:1] == ["cd"]:
             destinos = [a for a in efectiva[1:] if not a.startswith("-")]
             if len(destinos) == 1:

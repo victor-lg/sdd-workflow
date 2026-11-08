@@ -1,4 +1,5 @@
 """Tests de plugin-sdd/hooks/sesion-unica.py (VIC-17, REG-49): una sesión por copia del repo."""
+import errno
 import importlib.util
 import io
 import json
@@ -127,6 +128,37 @@ class Sesion(unittest.TestCase):
         with mock.patch.object(sesion, "_ps", return_value=None):
             with self.assertRaises(RuntimeError):
                 sesion.proceso_de_sesion()
+
+    def test_si_ps_falla_no_borra_la_marca_de_otra_sesion(self):
+        sesion.registrar(self.git_dir, self.otra.pid, "s1")
+        directorio = os.path.join(self.git_dir, "sdd-sesiones")
+        real = subprocess.run
+        def falla_ps(orden, **k):
+            if orden[0] == "ps":
+                raise subprocess.TimeoutExpired(orden, 5)
+            return real(orden, **k)
+        with mock.patch.object(sesion.subprocess, "run", side_effect=falla_ps):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                sesion.otras_vivas(directorio, os.getpid())
+        self.assertIn(f"{self.otra.pid}.json", os.listdir(directorio))
+
+    def test_error_al_leer_una_marca_no_la_da_por_muerta(self):
+        with mock.patch.object(sesion.os, "open", side_effect=OSError(errno.EMFILE, "x")):
+            with self.assertRaises(OSError):
+                sesion.leer_marca("/x")
+
+    def test_marca_con_pid_que_no_es_entero_no_cuenta(self):
+        directorio = self.crea_directorio()
+        for i, pid in enumerate(("1", True, -1, None)):
+            with open(os.path.join(directorio, f"90001{i}.json"), "w", encoding="utf-8") as f:
+                json.dump({"pid": pid, "arranque": "x"}, f)
+        self.assertEqual(sesion.registrar(self.git_dir, os.getpid(), "s"), [])
+
+    def test_intermedios_con_version(self):
+        procesos = {10: "9 python3.12", 9: "8 sh", 8: "1 claude"}
+        with mock.patch.object(sesion.os, "getppid", return_value=10), \
+                mock.patch.object(sesion, "_ps", side_effect=lambda pid, *c: procesos.get(pid)):
+            self.assertEqual(sesion.proceso_de_sesion(), 8)
 
     def test_un_worktree_es_otra_copia(self):
         subprocess.run(["git", "-C", self.copia, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",

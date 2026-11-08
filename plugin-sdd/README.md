@@ -18,7 +18,7 @@ Mitad "plugin" de la distribución del núcleo (ADR-0004, Q05). La otra mitad es
 - `hooks/`: los primeros controles del inventario (`docs/inventario-reglas.md`), en Python sin dependencias. Reglas, niveles y mensajes en `reglas-git.json`.
   - `guarda-git.py` (`PreToolUse` sobre Bash): sin seguimiento de ramas (M16), `git add` por nombre (X-03) y ramas desde `main` actualizado (REG-83). Cada bloqueo dice qué hacer en su lugar.
   - `sesion-unica.py` (`SessionStart`): si hay otra sesión viva en la misma copia del repo, avisa y sugiere un worktree (REG-49).
-  - **Son una segunda capa contra errores del agente, no seguridad.** Leen el texto de la orden, así que `bash -c`, `eval`, variables, alias o scripts los esquivan. Lo que protege es el sandbox, los ajustes gestionados y la CI. Tampoco miran `git branch <nueva> origin/…`, `git branch -t`, `git worktree add` ni el `git switch <rama>` que crea sola una rama remota.
+  - **Son una segunda capa contra errores del agente, no seguridad.** Leen el texto de la orden, así que `bash -c`, `eval`, variables, alias o scripts los esquivan. Lo que protege es el sandbox, los ajustes gestionados y la CI. Tampoco miran `git branch <nueva> origin/…`, `git branch -t`, `git worktree add` ni el `git switch <rama>` que crea sola una rama remota. En un repo sin `origin/main`, REG-83 no deja crear ramas: primero hay que tener el remoto y hacer `git fetch origin`.
 
 Flujo normal: `sdd-discover` → `sdd-spec` → `sdd-review` (spec) → *merge humano* → `sdd-plan` → `sdd-implement` → `sdd-review` (código) → *merge humano*. `sdd-context` se usa dentro de los demás.
 
