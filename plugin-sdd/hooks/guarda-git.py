@@ -19,11 +19,12 @@ import time
 RUTA_REGLAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reglas-git.json")
 
 ASIGNACION = re.compile(r"[A-Za-z_]\w*\+?=")
-RESERVADAS = {"if", "then", "elif", "else", "while", "until", "do", "!", "{", "time"}
+RESERVADAS = {"if", "then", "elif", "else", "while", "until", "do", "!", "{"}
 # Envolturas: opciones que llevan valor aparte y argumentos antes de la orden real.
 ENVOLTURAS = {
     "env": ({"-u", "--unset", "-C", "--chdir"}, 0),
     "command": (set(), 0),
+    "time": (set(), 0),
     "builtin": (set(), 0),
     "exec": ({"-a"}, 0),
     "nohup": (set(), 0),
@@ -92,8 +93,9 @@ class NoPuedoMirar(Exception):
 
 class _Lector:
     """Divide un texto de bash en órdenes simples. Las palabras salen sin comillas;
-    lo que hay dentro de $(...) y de las comillas invertidas se lee como orden, y el
-    cuerpo de los heredocs y los comentarios no cuentan."""
+    lo que hay dentro de $(...) y de las comillas invertidas se lee como orden, salvo
+    si va dentro de ${...} o de $((...)). El cuerpo de los heredocs y los comentarios
+    no cuentan."""
 
     def __init__(self, texto, ordenes=None):
         self.t, self.i = texto, 0
@@ -167,7 +169,8 @@ class _Lector:
             desde = self.i
             delimitador = self._palabra()
             literal = any(q in t[desde:self.i] for q in "'\"\\")
-            heredocs.append((delimitador, quitar_tabs, literal))
+            if not delimitador.isdigit():  # (( x << 2 )): un desplazamiento, no un heredoc.
+                heredocs.append((delimitador, quitar_tabs, literal))
         else:
             self.i += 1
             while t[self.i:self.i + 1] in (">", "<", "&", "|"):
@@ -318,17 +321,17 @@ def orden_efectiva(palabras):
 
 
 def separar_git(palabras):
-    """Devuelve (subcomando, argumentos, directorios de -C) o None si no es git."""
+    """Devuelve (subcomando, argumentos, directorios de -C, ajustes de -c) o None si no es git."""
     if not palabras or posixpath.basename(palabras[0]) not in ("git", "git.exe"):
         return None
-    i, directorios = 1, []
+    i, directorios, ajustes = 1, [], []
     while i < len(palabras) and palabras[i].startswith("-"):
-        if palabras[i] == "-C" and i + 1 < len(palabras):
-            directorios.append(palabras[i + 1])
+        if palabras[i] in ("-C", "-c") and i + 1 < len(palabras):
+            (directorios if palabras[i] == "-C" else ajustes).append(palabras[i + 1])
         i += 2 if palabras[i] in OPCIONES_GLOBALES_CON_VALOR else 1
     if i >= len(palabras):
         return None
-    return palabras[i], palabras[i + 1:], directorios
+    return palabras[i], palabras[i + 1:], directorios, ajustes
 
 
 def _resolver(nombre, largas):
@@ -378,9 +381,26 @@ def _nombres(encontradas):
     return {nombre for nombre, _ in encontradas}
 
 
-def regla_push(args):
+def _configura_seguimiento(ajuste):
+    clave, _, valor = ajuste.partition("=")
+    return clave.lower() == "push.autosetupremote" and valor.lower() not in ("false", "no", "off", "0")
+
+
+def regla_push(args, ajustes):
     encontradas, _ = opciones(args, "o", LARGAS_PUSH)
-    return "push-seguimiento" if _nombres(encontradas) & {"u", "set-upstream"} else None
+    if _nombres(encontradas) & {"u", "set-upstream"} or any(map(_configura_seguimiento, ajustes)):
+        return "push-seguimiento"
+    return None
+
+
+def regla_traer(args):
+    """git fetch y git pull: solo la forma larga, porque -u no significa lo mismo."""
+    for a in args:
+        if a == "--":
+            break
+        if len(a) >= 5 and "--set-upstream".startswith(a):
+            return "branch-seguimiento"
+    return None
 
 
 def regla_branch(args):
@@ -409,6 +429,9 @@ def regla_add(args, conf):
         return None
     if nombres & {"A", "all", "no-ignore-removal", "u", "update"}:
         return "add-sin-nombre"
+    excluye = re.compile(conf["patron_pathspec_exclusion"])
+    if posicionales and all(excluye.match(ruta) for ruta in posicionales):
+        return "add-sin-nombre"
     for ruta in posicionales:
         partes = posixpath.normpath(ruta).split("/")
         if ruta and (set(partes) <= {".", ".."} or ruta in conf["rutas_que_abarcan_todo"]):
@@ -418,7 +441,7 @@ def regla_add(args, conf):
 
 def _git(cwd, *args, codigos_validos=(0,)):
     try:
-        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=5)
+        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=3)
     except (OSError, subprocess.SubprocessError) as e:
         raise NoPuedoMirar(str(e))
     if r.returncode not in codigos_validos:
@@ -436,8 +459,8 @@ def _fetch_reciente(cwd, conf):
 
 
 def comprobar_base(inicio, cwd, previas, conf):
-    """REG-83. inicio es el punto de partida escrito en la orden, o None.
-    previas son los subcomandos de Git anteriores en la misma orden."""
+    """REG-83. inicio es el punto de partida escrito en la orden, o None. previas son
+    los pares (subcomando, carpeta) de los fetch y pull anteriores que traen main."""
     if "$" in cwd:
         raise NoPuedoMirar("ruta dinámica")
     principal, remota = conf["rama_principal"], f'{conf["remoto"]}/{conf["rama_principal"]}'
@@ -451,9 +474,10 @@ def comprobar_base(inicio, cwd, previas, conf):
         local = principal
     else:
         return "base-no-main"
-    if "pull" in previas:
+    con_fetch, con_pull = ("fetch", cwd) in previas, ("pull", cwd) in previas
+    if local and con_pull and _git(cwd, "symbolic-ref", "--short", "-q", "HEAD", codigos_validos=(0, 1)) == principal:
         return None
-    if not ("fetch" in previas or _fetch_reciente(cwd, conf)):
+    if not (con_fetch or con_pull or _fetch_reciente(cwd, conf)):
         return "base-desactualizada"
     if local and _git(cwd, "rev-parse", local) != _git(cwd, "rev-parse", f"refs/remotes/{remota}"):
         return "base-desactualizada"
@@ -484,20 +508,26 @@ def _juntar(cwd, ruta):
     return os.path.normpath(os.path.join(cwd, os.path.expanduser(ruta)))
 
 
-def _regla_de(palabras, cwd, previas, conf):
-    separado = separar_git(palabras)
-    if separado is None:
-        return None
-    sub, args, directorios = separado
-    for directorio in directorios:
-        cwd = _juntar(cwd, directorio)
+def _trae_main(args, conf):
+    """Si un git fetch o git pull con estos argumentos trae la rama principal del remoto."""
+    encontradas, posicionales = opciones(args)
+    if _nombres(encontradas) & {"n", "dry-run"}:
+        return False
+    if not posicionales:
+        return True
+    return posicionales[0] == conf["remoto"] and (len(posicionales) == 1 or conf["rama_principal"] in posicionales[1:])
+
+
+def _regla_de(sub, args, ajustes, cwd, previas, conf):
     if sub == "push":
-        return regla_push(args)
+        return regla_push(args, ajustes)
+    if sub in ("fetch", "pull"):
+        return regla_traer(args)
     if sub == "branch":
         return regla_branch(args)
     if sub == "config":
         return regla_config(args)
-    if sub == "add":
+    if sub in ("add", "stage"):
         return regla_add(args, conf)
     if sub in ("switch", "checkout"):
         return regla_crear_rama(sub, args, cwd, previas, conf)
@@ -506,26 +536,37 @@ def _regla_de(palabras, cwd, previas, conf):
 
 def decidir(comando, cwd, conf):
     """Devuelve el id de la regla más grave que incumple la orden, o None."""
+    limite = time.monotonic() + conf["max_segundos_analisis"]
     try:
         ordenes = analizar(comando)
     except NoAnalizable:
         return "sin-analizar" if "git" in comando else None
     candidata, previas = None, set()
     for palabras in ordenes:
+        if time.monotonic() > limite:  # Antes de que el timeout del hook deje pasar la orden.
+            return "sin-analizar"
         efectiva = orden_efectiva(palabras)
-        if len(efectiva) == 2 and efectiva[0] == "cd":
-            cwd = _juntar(cwd, efectiva[1])
+        if efectiva[:1] == ["cd"]:
+            destinos = [a for a in efectiva[1:] if not a.startswith("-")]
+            if len(destinos) == 1:
+                cwd = _juntar(cwd, destinos[0])
             continue
+        separado = separar_git(efectiva)
+        if separado is None:
+            continue
+        sub, args, directorios, ajustes = separado
+        cwd_git = cwd
+        for directorio in directorios:
+            cwd_git = _juntar(cwd_git, directorio)
         try:
-            regla = _regla_de(efectiva, cwd, previas, conf)
+            regla = _regla_de(sub, args, ajustes, cwd_git, previas, conf)
         except NoPuedoMirar:
             regla = "sin-mirar"
         if regla and conf["reglas"][regla]["nivel"] != "preguntar":
             return regla
         candidata = candidata or regla
-        separado = separar_git(efectiva)
-        if separado:
-            previas.add(separado[0])
+        if sub in ("fetch", "pull") and _trae_main(args, conf):
+            previas.add((sub, cwd_git))
     return candidata
 
 

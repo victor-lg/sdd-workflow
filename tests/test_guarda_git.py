@@ -2,6 +2,7 @@
 bloquean, formas legítimas que no, y lo que el hook no pretende detectar."""
 import importlib.util
 import io
+import itertools
 import json
 import os
 import pathlib
@@ -65,6 +66,8 @@ BLOQUEADAS = {
         "git push \\\n  -u origin x",
         "git push -u origin x > /dev/null 2>&1",
         "git push -u origin x &> salida.log",
+        "git -c push.autoSetupRemote=true push origin x",
+        "git -c push.autosetupremote push origin x",
         "cat <<'FIN'\nhola git\nFIN\ngit push -u origin x",
         "cat <<FIN\n$(git push -u origin x)\nFIN",
     ],
@@ -77,6 +80,9 @@ BLOQUEADAS = {
         "git branch -uorigin/x",
         "git branch -u origin/x feat/x",
         "git -C sub branch -u origin/x",
+        "git pull --set-upstream origin x",
+        "git fetch --set-upstream origin x",
+        "git fetch --set origin x",
     ],
     "config-escribe": [
         "git config user.name Bot",
@@ -161,6 +167,18 @@ BLOQUEADAS = {
         "cd sub && git add .",
         "git add . && git commit -m x",
         "git status; git add -A; git commit -m x",
+        "git stage .",
+        "git stage -A",
+        "git add -- ':!.bashrc'",
+        "git add ':^x' ':!y'",
+        "git add ':(exclude)x'",
+        "git add '.*'",
+        "git add './**'",
+        "git add '**/*'",
+        "git add ':/**'",
+        "git add ':(glob)**'",
+        "time -p git add .",
+        "(( x = 1 << 2 ))\ngit add .",
     ],
 }
 
@@ -177,6 +195,10 @@ LEGITIMAS = [
     "git push --repo -u",
     "git push origin -- -u",
     "git push --dry-run origin x",
+    "git -c push.autoSetupRemote=false push origin x",
+    "git pull origin main",
+    "git pull --no-set-upstream origin x",
+    "git fetch -u origin x",
     # Branch sin configurar el seguimiento.
     "git branch",
     "git branch -a",
@@ -186,7 +208,7 @@ LEGITIMAS = [
     "git branch -D feat/x",
     "git branch -m nueva",
     "git branch nueva",
-    "git branch --format %(upstream) -a",
+    "git branch --format '%(upstream)' -a",
     "git branch --contains abc",
     "git branch --unset-upstream",
     # Config de lectura.
@@ -252,6 +274,8 @@ LEGITIMAS = [
     "git add -n .",
     "git add --dry-run -A",
     'git add "$FICHERO"',
+    "git add src/a.py ':!src/b.py'",
+    "git stage src/a.py",
     "git add -- -A",
     # La regla aparece solo como texto.
     "echo 'git push -u origin x'",
@@ -273,7 +297,6 @@ LEGITIMAS = [
     "git diff origin/main...HEAD",
     "git log --oneline -5 origin/main",
     "git fetch origin",
-    "git pull origin main",
     "git merge origin/main",
     "git commit --allow-empty -m x",
     # Heredocs: su cuerpo no se ejecuta.
@@ -310,6 +333,9 @@ SE_ESQUIVA = [
     "./subir.sh",
     "git -c alias.sube='push -u' sube origin x",
     "ls | xargs git add -A",
+    'echo "${X:-$(git add .)}"',
+    "echo $(( $(git add .) ))",
+    "function f { git add .; }",
 ]
 
 
@@ -341,6 +367,16 @@ class Guarda(unittest.TestCase):
 
     def test_sin_cerrar_sin_git_lo_deja_a_bash(self):
         self.assertIsNone(self.decide("echo 'sin cerrar"))
+
+    def test_analisis_con_plazo_falla_cerrado(self):
+        with mock.patch.object(guarda.time, "monotonic", side_effect=itertools.count(0, 100)):
+            self.assertEqual(self.decide("ls; git status"), "sin-analizar")
+
+    def test_sigue_cd_con_opciones(self):
+        vistos = []
+        with mock.patch.object(guarda, "comprobar_base", side_effect=lambda i, cwd, p, c: vistos.append(cwd)):
+            guarda.decidir("cd -P /a; git switch -c x; cd -- /b; git switch -c y", "/tmp", CONF)
+        self.assertEqual(vistos, ["/a", "/b"])
 
     def test_mensajes_dicen_que_hacer(self):
         for regla, info in CONF["reglas"].items():
@@ -423,6 +459,25 @@ class BaseDeLaRama(unittest.TestCase):
     def test_pull_en_la_misma_orden(self):
         self.commit("dos")
         self.assertIsNone(self.decide("git pull origin main && git switch -c feat/x"))
+
+    def test_pull_en_otra_rama_no_actualiza_main(self):
+        self.commit("dos")
+        self.git("switch", "-q", "-c", "feat/a")
+        self.assertEqual(self.decide("git pull origin main && git switch -c feat/b main"), "base-desactualizada")
+
+    def test_fetch_o_pull_que_no_traen_main_no_cuentan(self):
+        self.envejecer_fetch()
+        for previa in ("git fetch upstream", "git fetch origin feat/z", "git fetch --dry-run", "git fetch -n origin",
+                       "git -C /otro fetch origin", "git pull origin feat/z"):
+            with self.subTest(previa=previa):
+                self.assertEqual(self.decide(f"{previa}; git switch --no-track -c feat/x origin/main"),
+                                 "base-desactualizada")
+
+    def test_fetch_de_main_cuenta(self):
+        self.envejecer_fetch()
+        for previa in ("git fetch", "git fetch origin", "git fetch origin main", "git pull origin main"):
+            with self.subTest(previa=previa):
+                self.assertIsNone(self.decide(f"{previa}; git switch --no-track -c feat/x origin/main"))
 
     def test_otra_base_pregunta(self):
         self.git("switch", "-q", "-c", "feat/a")

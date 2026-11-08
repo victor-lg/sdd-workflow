@@ -64,10 +64,69 @@ class Sesion(unittest.TestCase):
     def test_marca_rota_se_limpia(self):
         directorio = os.path.join(self.git_dir, "sdd-sesiones")
         os.makedirs(directorio)
-        with open(os.path.join(directorio, "1234.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(directorio, "900007.json"), "w", encoding="utf-8") as f:
             f.write("{rota")
         self.assertEqual(sesion.registrar(self.git_dir, os.getpid(), "s2"), [])
-        self.assertNotIn("1234.json", os.listdir(directorio))
+        self.assertNotIn("900007.json", os.listdir(directorio))
+
+    def crea_directorio(self):
+        directorio = os.path.join(self.git_dir, "sdd-sesiones")
+        os.makedirs(directorio)
+        return directorio
+
+    def test_no_toca_lo_que_apunta_un_enlace(self):
+        victima = os.path.join(self.dir.name, "victima")
+        os.makedirs(victima)
+        for nombre in ("settings.json", "900007.json"):
+            with open(os.path.join(victima, nombre), "w", encoding="utf-8") as f:
+                f.write("{}")
+        os.symlink(victima, os.path.join(self.git_dir, "sdd-sesiones"))
+        with self.assertRaises(NotADirectoryError):
+            sesion.registrar(self.git_dir, os.getpid(), "s")
+        self.assertEqual(sorted(os.listdir(victima)), ["900007.json", "settings.json"])
+
+    def test_solo_borra_nombres_de_marca(self):
+        directorio = self.crea_directorio()
+        for nombre in ("settings.json", "nota.txt"):
+            with open(os.path.join(directorio, nombre), "w", encoding="utf-8") as f:
+                f.write("{}")
+        sesion.registrar(self.git_dir, os.getpid(), "s")
+        self.assertTrue({"settings.json", "nota.txt"} <= set(os.listdir(directorio)))
+
+    def test_marcas_hostiles_no_cuelgan_ni_cuentan(self):
+        directorio = self.crea_directorio()
+        fuera = os.path.join(self.dir.name, "fuera.json")
+        with open(fuera, "w", encoding="utf-8") as f:
+            json.dump({"pid": self.otra.pid, "arranque": sesion._ps(self.otra.pid, "lstart")}, f)
+        os.mkfifo(os.path.join(directorio, "900001.json"))
+        os.symlink("/dev/zero", os.path.join(directorio, "900002.json"))
+        os.symlink(fuera, os.path.join(directorio, "900003.json"))
+        with open(os.path.join(directorio, "900004.json"), "w", encoding="utf-8") as f:
+            f.write("[]")
+        with open(os.path.join(directorio, "900005.json"), "w", encoding="utf-8") as f:
+            f.write("[" * 3000)
+        os.mkdir(os.path.join(directorio, "900006.json"))
+        self.assertEqual(sesion.registrar(self.git_dir, os.getpid(), "s"), [])
+        self.assertTrue(os.path.exists(fuera))
+        self.assertEqual(sorted(os.listdir(directorio)), [f"{os.getpid()}.json", "900006.json"])
+
+    def test_error_de_git_no_es_estar_fuera_de_un_repo(self):
+        with open(os.path.join(self.git_dir, "config"), "w", encoding="utf-8") as f:
+            f.write("[rota")
+        r = self.ejecuta(self.copia)
+        self.assertIn("no he podido comprobar", json.loads(r.stdout)["systemMessage"])
+
+    def test_sin_reglas_avisa_con_el_respaldo(self):
+        with tempfile.TemporaryDirectory() as d:
+            copia = pathlib.Path(d) / "sesion-unica.py"
+            copia.write_text(RUTA.read_text(encoding="utf-8"), encoding="utf-8")
+            r = subprocess.run([sys.executable, str(copia)], input="{}", capture_output=True, text=True)
+        self.assertIn("no he podido comprobar", json.loads(r.stdout)["systemMessage"])
+
+    def test_sin_ps_avisa(self):
+        with mock.patch.object(sesion, "_ps", return_value=None):
+            with self.assertRaises(RuntimeError):
+                sesion.proceso_de_sesion()
 
     def test_un_worktree_es_otra_copia(self):
         subprocess.run(["git", "-C", self.copia, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",

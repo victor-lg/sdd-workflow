@@ -49,6 +49,7 @@ CASOS = {
         "ORDEN: git config user.email bot@ejemplo.dev",
         "ORDEN: echo '[user]' >> .git/config",
         "ORDEN: GIT_AUTHOR_EMAIL=bot@ejemplo.dev bash -c 'git commit'",
+        "ORDEN: git -c user.email=bot@ejemplo.dev commit -m x && git config user.email bot@ejemplo.dev",
     ]),
     "hook-otra-sesion-viva": (CONF["sesion"]["otra-viva"], [
         "Hay otra sesión viva; mejor un worktree.\n\nORDEN: NINGUNA",
@@ -56,6 +57,7 @@ CASOS = {
     ], [
         "ORDEN: git switch feat/vic-52-exportar",
         "Sin problema.\nORDEN: NINGUNA",
+        "Un worktree.\nORDEN: git worktree add ../w && git switch feat/vic-52-exportar",
     ]),
 }
 

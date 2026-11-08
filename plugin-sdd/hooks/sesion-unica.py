@@ -7,6 +7,8 @@ Solo avisa: SessionStart no puede impedir que la sesión siga.
 """
 import json
 import os
+import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -14,6 +16,9 @@ import time
 
 RUTA_REGLAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reglas-git.json")
 INTERMEDIOS = {"sh", "bash", "dash", "zsh", "fish", "env", "python", "python3"}
+NOMBRE_MARCA = re.compile(r"\d+\.json$")
+MAX_BYTES_MARCA = 4096
+AVISO_DE_RESPALDO = "REG-49: no he podido comprobar si hay otra sesión viva en esta copia del repo."
 
 
 def _ps(pid, *columnas):
@@ -31,19 +36,41 @@ def proceso_de_sesion():
     for _ in range(8):
         linea = _ps(pid, "ppid", "comm")
         if linea is None:
-            break
+            raise RuntimeError("ps no responde")
         padre, _, nombre = linea.partition(" ")
         if os.path.basename(nombre.strip()) not in INTERMEDIOS:
             return pid
         pid = int(padre)
-    return os.getppid()
+    raise RuntimeError("no encuentro el proceso de la sesión")
 
 
 def directorio_de_git(cwd):
     """Directorio de Git de la copia, o None si cwd no está en un repo."""
     r = subprocess.run(["git", "-C", cwd, "rev-parse", "--absolute-git-dir"],
-                       capture_output=True, text=True, timeout=5)
-    return r.stdout.strip() if r.returncode == 0 else None
+                       capture_output=True, text=True, timeout=5, env={**os.environ, "LC_ALL": "C"})
+    if r.returncode == 0:
+        return r.stdout.strip()
+    if "not a git repository" in r.stderr:
+        return None
+    raise RuntimeError(r.stderr.strip())
+
+
+def leer_marca(ruta):
+    """La marca, si es un fichero normal y pequeño. El agente puede escribir en este
+    directorio y el hook corre fuera del sandbox: no sigue enlaces ni espera a un FIFO."""
+    try:
+        fd = os.open(ruta, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return {}
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return {}
+        marca = json.loads(os.read(fd, MAX_BYTES_MARCA))
+    except (OSError, ValueError, RecursionError):
+        return {}
+    finally:
+        os.close(fd)
+    return marca if isinstance(marca, dict) else {}
 
 
 def otras_vivas(directorio, pid_propio):
@@ -51,13 +78,9 @@ def otras_vivas(directorio, pid_propio):
     vivas = []
     for nombre in os.listdir(directorio):
         ruta = os.path.join(directorio, nombre)
-        if nombre == f"{pid_propio}.json" or not nombre.endswith(".json"):
+        if nombre == f"{pid_propio}.json" or not NOMBRE_MARCA.match(nombre):
             continue
-        try:
-            with open(ruta, encoding="utf-8") as f:
-                marca = json.load(f)
-        except (OSError, ValueError):
-            marca = {}
+        marca = leer_marca(ruta)
         if marca.get("arranque") and _ps(marca.get("pid"), "lstart") == marca["arranque"]:
             vivas.append(marca["pid"])
         else:
@@ -71,7 +94,12 @@ def otras_vivas(directorio, pid_propio):
 def registrar(git_dir, pid, session_id):
     """Deja la marca propia y devuelve los pids de las otras sesiones vivas."""
     directorio = os.path.join(git_dir, "sdd-sesiones")
-    os.makedirs(directorio, exist_ok=True)
+    try:
+        os.mkdir(directorio, 0o700)
+    except FileExistsError:
+        pass
+    if not stat.S_ISDIR(os.lstat(directorio).st_mode):  # lstat: un enlace no cuenta como directorio.
+        raise NotADirectoryError(directorio)
     marca = {"pid": pid, "arranque": _ps(pid, "lstart"), "session_id": session_id, "inicio": time.time()}
     with tempfile.NamedTemporaryFile("w", dir=directorio, suffix=".tmp", delete=False, encoding="utf-8") as f:
         json.dump(marca, f)
@@ -80,9 +108,11 @@ def registrar(git_dir, pid, session_id):
 
 
 def main():
-    with open(RUTA_REGLAS, encoding="utf-8") as f:
-        avisos = json.load(f)["sesion"]
-    try:
+    aviso = AVISO_DE_RESPALDO
+    try:  # SessionStart no puede bloquear: fallar cerrado aquí es avisar.
+        with open(RUTA_REGLAS, encoding="utf-8") as f:
+            avisos = json.load(f)["sesion"]
+        aviso = avisos["sin-mirar"]
         datos = json.load(sys.stdin)
         git_dir = directorio_de_git(datos.get("cwd") or os.getcwd())
         if git_dir is None:
@@ -91,8 +121,8 @@ def main():
         if not otras:
             return
         aviso = avisos["otra-viva"]
-    except Exception:  # SessionStart no puede bloquear: fallar cerrado aquí es avisar.
-        aviso = avisos["sin-mirar"]
+    except Exception:
+        pass
     json.dump({"systemMessage": aviso,
                "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": aviso}},
               sys.stdout, ensure_ascii=False)
