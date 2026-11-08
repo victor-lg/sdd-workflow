@@ -11,7 +11,13 @@
       "Read(~/.aws/**)",
       "Read(~/.config/opencode-go/**)",
       "Read(~/.claude/.credentials.json)",
-      "Read(~/.claude.json)"
+      "Read(~/.claude.json)",
+      "Bash(git add -A)",
+      "Bash(git add -A *)",
+      "Bash(git add --all)",
+      "Bash(git add --all *)",
+      "Bash(git add .)",
+      "Bash(git add . *)"
     ],
     "ask": [
       "Bash(npm install *)",
