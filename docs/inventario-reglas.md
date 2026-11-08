@@ -1,16 +1,16 @@
 # Inventario de reglas del workflow (M25)
 
-**Estado:** propuesta para que Víctor la apruebe antes de escribir hooks (2026-11-08, VIC-17, bloque 2 de `docs/plan-v1.1.md`). Nada de lo que aquí se propone está aplicado.
+**Estado:** decisiones tomadas el 2026-11-08 (VIC-17, bloque 2 de `docs/plan-v1.1.md`). De lo que aquí se decide, solo está aplicada la frase sobre la issue en `plantilla-proyecto/AGENTS.md`.
 
 Cada regla de `plantilla-proyecto/AGENTS.md`, `plantilla-proyecto/CLAUDE.md` y las seis skills de `plugin-sdd/skills/`, con su tipo, si se ha incumplido y su destino. Las líneas citadas son las del commit `0402725`.
 
 ## Resumen
 
-- **102 reglas:** 39 mecánicas y 63 de criterio. Además, 10 controles previstos que no tienen regla escrita (X-01 a X-10).
-- **Destino:** 68 se quedan como instrucción, 21 van a la CI (10 de ellas ya tienen control), 9 a hooks y 4 se eliminan. La mayoría de las instrucciones se queda en una sola skill, así que `AGENTS.md` puede quedar como mapa corto.
-- **Incumplidas:** 17 con evidencia, 5 con casos anteriores a la regla, 12 probadas y 67 sin constancia. En una no se puede determinar.
-- **Excepciones al criterio de M25:** 8 reglas mecánicas se quedan como instrucción porque ya las impone otra capa, un control no compensa o la CI no tiene el dato (REG-38, REG-46, REG-58, REG-78, REG-92, REG-94, REG-99, REG-101). 5 reglas incumplidas también se quedan como instrucción, porque son de criterio o, en REG-46 y REG-58, por esos mismos motivos (REG-10, REG-23, REG-46, REG-58, REG-72).
-- **Antes de escribir hooks,** hay que resolver las cinco decisiones del final.
+- **103 reglas:** 40 mecánicas y 63 de criterio. Además, 10 controles previstos que no tienen regla escrita (X-01 a X-10).
+- **Destino:** 75 se quedan como instrucción, 17 van a la CI (10 de ellas ya tienen control), 7 a hooks y 4 se eliminan. La mayoría de las instrucciones se queda en una sola skill, así que `AGENTS.md` puede quedar como mapa corto.
+- **Incumplidas:** 17 con evidencia, 6 con casos anteriores a la regla, 12 probadas y 67 sin constancia. En una no se puede determinar.
+- **Excepciones al criterio de M25:** 15 reglas mecánicas se quedan como instrucción. En REG-38, REG-46, REG-58, REG-78, REG-92, REG-94, REG-99 y REG-101, porque ya las impone otra capa, un control no compensa o la CI no tiene el dato. En REG-21, REG-29, REG-35, REG-39, REG-48, REG-65 y REG-103, por ahora (decisión 5 y regla nueva). De las incumplidas, 8 se quedan como instrucción: REG-10, REG-23 y REG-72 son de criterio, y REG-29, REG-35, REG-46, REG-48 y REG-58 están entre las anteriores.
+- **Las cinco decisiones y la regla nueva** están al final del documento.
 
 ## Cómo se ha clasificado
 
@@ -53,7 +53,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-01 | Solo es vigente la spec que está en `main` | A:9; context:15; spec:15,18; plan:17 | Mecánica | Probada: N1 lo frenó el agente y C18 la CI (calc#38) | **CI** (ya: `trazabilidad`) |
 | REG-02 | Los requisitos compartidos viven en `SPEC-XCUT-*`: citar por ID, nunca copiar | A:9; context:16 | Criterio | No consta | **Instrucción** (`spec`) |
 | REG-03 | Mapa de fuentes: visión, issue, ADR, código y tests | A:10-13 | Criterio | No consta | **Instrucción** (`AGENTS.md`, es el mapa) |
-| REG-04 | La issue de Linear se lee y nunca se modifica; las issues las crea y las mueve la persona | A:11; plan:16,51; discover:51,63 | Mecánica | No consta en el agente. Claude en el navegador movió VIC-5 a *Ready* con permiso (recorrido-1); ADR-0006 lo reservó después a la persona | **Hook** (`deny` de las herramientas de escritura del MCP de Linear; ver decisión 1) |
+| REG-04 | La issue de Linear se lee y solo se comenta; las issues las crea y las mueve la persona | A:11; plan:16,51; discover:51,63 | Mecánica | No consta en el agente. Claude en el navegador movió VIC-5 a *Ready* con permiso (recorrido-1); ADR-0006 lo reservó después a la persona | **Hook** (bloquea cambiar estado, descripción y etiquetas por el MCP de Linear y deja comentar; decisión 1) |
 | REG-05 | Solo vale un ADR `Aceptado` y fusionado en `main` | A:12; context:17 | Criterio | No consta | **Instrucción** (`context`) |
 | REG-06 | `discovery/`, memoria, resúmenes y conversaciones son contexto, no norma | A:14; context:19,25 | Criterio | No consta | **Instrucción** (`context`) |
 | REG-07 | Los documentos históricos o sustituidos no son instrucciones | A:15; context:25 | Criterio | No consta | **Instrucción** (`context`) |
@@ -70,7 +70,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-18 | Un PR no mezcla spec y código | A:45; implement:74; spec:90 | Mecánica | Probada: N2 y C18 | **CI** (ya: `mezcla`) |
 | REG-19 | Si cambia el comportamiento, primero la spec, en su propio PR | A:30; implement:49 | Criterio | Probada: N2. Huecos que salieron al implementar y se resolvieron con PR de spec (calc#6, #27) | **Instrucción** (`implement`) |
 | REG-20 | Proponer un ADR cuando convenga recordar la decisión | A:31; implement:50 | Criterio | No consta | **Instrucción** (`implement`) |
-| REG-21 | `estado: aprobada` o `Aceptado` solo en el último commit del PR | A:31; spec:83,89 | Mecánica | Antes de la regla: nadie cambiaba el estado (v0.16 y v0.17). N1 la simuló con una spec falsa y aguantó | **CI** (nuevo: `estado` solo cambia a final en un PR de spec o ADR) |
+| REG-21 | `estado: aprobada` o `Aceptado` solo en el último commit del PR | A:31; spec:83,89 | Mecánica | Antes de la regla: nadie cambiaba el estado (v0.16 y v0.17). N1 la simuló con una spec falsa y aguantó | **Instrucción** (`spec`, por ahora; decisión 5) |
 | REG-22 | Cada AC tiene un test que lo cita como `SPEC-XXX-NNN/AC-NN` | A:35; implement:32 | Mecánica | Sí: calc#5, AC-10, 12, 13 y 22 sin test hasta que falló la CI (N7) | **CI** (ya: `trazabilidad`) |
 | REG-23 | Nunca eliminar tests, relajar controles ni modificar AC para que la CI pase | A:36,56; implement:72 | Criterio | Sí: calc#5, el cambio de `allHeaders()` a `headers()` debilitó AC-13; lo cazó G4 | **Instrucción** (`implement`; la CI ya lista los tests que cambian) |
 | REG-24 | Distinguir un fallo propio de uno previo o de infraestructura | A:37; implement:51 | Criterio | No consta | **Instrucción** (`implement`) |
@@ -78,17 +78,17 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-26 | Tras 3 intentos fallidos, parar, resumir y preguntar | A:39; implement:53 | Criterio | No consta | **Instrucción** (`implement`) |
 | REG-27 | Informar de las pruebas no ejecutadas y por qué | A:40; implement:58 | Criterio | No consta | **Instrucción** (`implement`) |
 | REG-28 | No afirmar fuentes o pruebas no consultadas o no ejecutadas | A:41; context:28 | Criterio | No consta | **Instrucción** (`AGENTS.md`, una línea; ver X-05) |
-| REG-29 | Rellenar la plantilla del PR | A:45; implement:60 | Mecánica | Sí: calc#7 y #8 con `<ID>` sin sustituir, abiertos desde la web | **CI** (nuevo: secciones vacías o con el texto de ejemplo) |
+| REG-29 | Rellenar la plantilla del PR | A:45; implement:60 | Mecánica | Sí: calc#7 y #8 con `<ID>` sin sustituir, abiertos desde la web | **Instrucción** (`implement`, por ahora; decisión 5) |
 | REG-30 | Rama `<tipo>/vic-<N>-<descripcion>`, unos 50 caracteres | A:11,49; plan:40; spec:80 | Mecánica | Antes de la regla: ramas sin ID en calc y sesiones de VIC-13 atribuidas a VIC-10 (M11). wf#1 a #16 la cumplen | **CI** (M11) |
 | REG-31 | Título de commit y PR en Conventional Commits, con el alcance como zona | A:50; plan:42; spec:80; review:75 | Mecánica | Antes de la regla: `calc#10` y siguientes usan el ID como alcance. wf#1 a #16 la cumplen | **CI** (M11 el título; commits con lefthook, M33) |
 | REG-32 | Pie del commit con `Refs: VIC-N` y `Spec:` | A:11,52 | Mecánica | Sí: el commit de `main` de wf#16 no lleva `Refs` (wf#1 tampoco, antes de aplicar la regla) | **CI** (`commit-msg` con lefthook, M33; `docs/convenciones.md` §8) |
-| REG-33 | La descripción empieza por `Fixes VIC-N` o `Part of VIC-N` | A:53; plan:43 | Mecánica | Antes de la regla: calc usa "Issue de Linear: …" y `Refs` (M4). wf#1 a #16 la cumplen | **CI** (M11; ver decisión 4) |
+| REG-33 | La descripción empieza por `Fixes VIC-N` o `Part of VIC-N` | A:53; plan:43 | Mecánica | Antes de la regla: calc usa "Issue de Linear: …" y `Refs` (M4). wf#1 a #16 la cumplen | **CI** (M11; admite `Fixes`, `Part of` y `Refs`, decisión 4) |
 | REG-34 | Sin `Co-Authored-By` ni "Generated with" | A:54; plan:42; spec:80 | Mecánica | Antes de la regla: los PR del agente en calc lo llevan, porque la §7 de la línea base lo pedía. Ninguno desde ADR-0007 | **CI** (ya en `validar` para este repo; nuevo en `checks.py` para los proyectos) |
-| REG-35 | Unas 400 líneas de código por PR; si no, partir o explicar | A:55; plan:39; implement:66 | Mecánica | Sí: calc#33, ~990 líneas estimadas en ~550 | **CI** (nuevo: aviso, sin bloquear; es orientativa) |
+| REG-35 | Unas 400 líneas de código por PR; si no, partir o explicar | A:55; plan:39; implement:66 | Mecánica | Sí: calc#33, ~990 líneas estimadas en ~550 | **Instrucción** (`plan`, por ahora; decisión 5) |
 | REG-36 | Decir en la guía cada test existente que cambia | A:56; implement:64 | Mecánica | No consta. La retro-2 lo da por útil | **CI** (ya: `tests`) |
 | REG-37 | Rellenar la "Guía para el revisor humano" | A:45; implement:61-66; review:51,75 | Criterio | No consta | **Instrucción** (`implement`) |
 | REG-38 | El agente no aprueba ni fusiona; la aprobación es el merge humano | A:60-61; spec:10,81,89; plan:53; implement:67,75; review:75 | Mecánica | Probada: N3, N4 y C19 | **Instrucción** (una línea en `AGENTS.md`; la impone el ruleset; fuera las copias de las skills) |
-| REG-39 | No desplegar, no operar en producción ni ejecutar operaciones destructivas | A:61 | Mecánica | No consta. El push forzado se denegó (obs. 9) | **Hook** (patrones en dos niveles: `reset --hard`, `push --force`) |
+| REG-39 | No desplegar, no operar en producción ni ejecutar operaciones destructivas | A:61 | Mecánica | No consta. El push forzado se denegó (obs. 9) | **Instrucción** (`AGENTS.md`, por ahora; decisión 5) |
 | REG-40 | No leer, copiar ni escribir secretos | A:62 | Mecánica | Probada: N6 y C20. Hueco: `~/.config/gh`, con el token del agente, no está en `deny` (obs. 10) | **Hook** (guarda de `.env`, X-02; el hueco de `gh` se propone en ajustes gestionados) |
 | REG-41 | No tocar `.github/workflows/`, ajustes de seguridad ni secretos | implement:73 | Mecánica | Probada: N5 | **Eliminar** (lo impone el token, que no tiene `workflow`) |
 | REG-42 | El estado de la entrega vive en la issue | A:66 | Criterio | No consta | **Instrucción** (`AGENTS.md`, mapa) |
@@ -97,7 +97,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-45 | Si la sesión se interrumpe, guardar el estado en `.tareas/<ID>.md` | A:68; implement:54 | Criterio | No consta | **Instrucción** (`implement`) |
 | REG-46 | Borrar `.tareas/<ID>.md` al cerrar la tarea | A:68; implement:68 | Mecánica | Sí: `.tareas/VIC-12.md` seguía con VIC-12 en Done (recorrido-1, C18) | **Instrucción** (`implement`, hasta `sdd-status`, M41; detectarlo exige leer Linear) |
 | REG-47 | Al reanudar, contrastar los resúmenes con Git y la CI | A:69; implement:54 | Criterio | No consta | **Instrucción** (`implement`) |
-| REG-48 | Una sesión por PR | A:70 | Mecánica | Sí: dos sesiones de VIC-12 con dos y tres PR, picos del 48 % y el 57 % (recorrido-2, M20) | **Hook** (aviso al cambiar de rama con un PR ya abierto en la sesión) |
+| REG-48 | Una sesión por PR | A:70 | Mecánica | Sí: dos sesiones de VIC-12 con dos y tres PR, picos del 48 % y el 57 % (recorrido-2, M20) | **Instrucción** (`AGENTS.md`, por ahora; decisión 5) |
 | REG-49 | No trabajar en una copia que usa otra sesión; clon o `git worktree` | A:70 | Mecánica | Sí: dos sesiones en la misma copia; una cambió de rama debajo de la otra (recorrido-1) | **Hook** (marca por copia del repo en `SessionStart`) |
 | REG-50 | Usar las skills y `reviewer`, no improvisar | C:7 | Criterio | No consta. Hay evaluaciones `activacion-*`; no se han consultado sus resultados | **Instrucción** (`CLAUDE.md`) |
 | REG-51 | Al revisor no se le pasa el razonamiento ni las conclusiones del autor | C:8; review:38 | Criterio | Probada: N8 (recorrido-1) | **Instrucción** (`review`; fuera la copia de `CLAUDE.md`) |
@@ -114,7 +114,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-62 | Decir si la búsqueda no encuentra algo que debería existir, señal para la búsqueda semántica aplazada | context:21 | Criterio | No consta | **Eliminar** (la señal no se ha usado en dos recorridos; basta con REG-64) |
 | REG-63 | Que dos textos se parezcan no prueba que digan lo mismo | context:26 | Criterio | No consta | **Instrucción** (`context`) |
 | REG-64 | Devolver fuentes, requisitos, contradicciones, huecos y veredicto | context:32-40 | Criterio | No consta | **Instrucción** (`context`) |
-| REG-65 | Al modificar una spec, mantener los IDs y no reutilizar los eliminados | spec:18; `docs/convenciones.md` §1 | Mecánica | No consta | **CI** (nuevo: comparar los IDs con `main`) |
+| REG-65 | Al modificar una spec, mantener los IDs y no reutilizar los eliminados | spec:18; `docs/convenciones.md` §1 | Mecánica | No consta | **Instrucción** (`spec`, por ahora; decisión 5) |
 | REG-66 | Hacer primero las preguntas bloqueantes; si faltan respuestas, detenerse | spec:29,32 | Criterio | No consta | **Instrucción** (`spec`) |
 | REG-67 | No inventar reglas de negocio, arquitectura, tecnologías ni API | spec:30,39; implement:43 | Criterio | No consta. El agente se detuvo a preguntar (retro-1) | **Instrucción** (`spec` e `implement`) |
 | REG-68 | Usar la plantilla, con las secciones 1 a 6 | spec:36 | Mecánica | No consta | **CI** (ya: `specs`) |
@@ -152,6 +152,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-100 | Lista exacta de lo que cambia tras la última ronda | review:50 | Mecánica | Sí: calc#16, 10 cambios sin lista (obs. 6, M8) | **CI** (nuevo: aviso; bloque 4) |
 | REG-101 | Publicar la línea `Métricas G4` en cada ronda | review:53-71 | Mecánica | No consta desde que existe (wf#15 y #16 la llevan) | **Instrucción** (`review`; el control ya está en `sdd-metricas`) |
 | REG-102 | Quitar el borrador solo sin hallazgos y con la CI en verde | review:75 | Mecánica | Sí: `checks-sdd` quedó cancelado y el agente no lo vio (calc#19, obs. 2; avisos en VIC-12) | **Hook** (`gh pr ready` comprueba los checks, M5) |
+| REG-103 | Los PR que abre Claude desde el navegador (workflows, `managed-settings`) pasan `sdd-review` por el agente antes de que Víctor los fusione | Regla nueva (2026-11-08); aún sin texto en `review` | Mecánica | Antes de la regla: los PR de REG-52 | **Instrucción** (`review`, por ahora) |
 
 ## Controles previstos que no tienen regla escrita
 
@@ -159,23 +160,33 @@ Aparecen en VIC-17 o en las retrospectivas, pero no en `AGENTS.md`, `CLAUDE.md` 
 
 | ID | Control | Origen | ¿Ha pasado? (evidencia) | Destino propuesto |
 | --- | --- | --- | --- | --- |
-| X-01 | No configurar el seguimiento de ramas | M16 | Sí: `.git/config.lock` huérfanos en calc#31, #33 y #35; rama con base antigua en calc#20 | **Hook** (ver decisión 3) |
+| X-01 | No configurar el seguimiento de ramas | M16 | Sí: `.git/config.lock` huérfanos en calc#31, #33 y #35; rama con base antigua en calc#20 | **Hook** (`git push -u`, `--set-upstream-to`, crear ramas desde `origin/…` sin `--no-track` y las formas de `git config` que escriben; decisión 3) |
 | X-02 | No escribir `.env*`, salvo plantillas | M25 | No consta | **Hook** (Write, Edit y su pareja en Bash) |
 | X-03 | `git add` por nombre: nada de `-A`, `.` ni equivalentes | M25 | Casi: 11 ficheros del sandbox a un `git add .` de entrar en un commit (retro-2) | **Hook** (y `deny` en ajustes gestionados, que aplica Víctor) |
 | X-04 | Guarda de fugas por `.gitignore` en `git commit` | M25 | No consta | **Hook** (sin red, falla cerrado; pareja local de gitleaks, M33) |
-| X-05 | No escribir PASS sin un test en verde | M25 | No consta | **Hook** (ver decisión 2) |
+| X-05 | No escribir PASS sin un test en verde | M25 | No consta | Aplazado al bloque 4 (decisión 2) |
 | X-06 | Capturas dentro del repo, nunca en `/tmp` | M12 | Sí: dos permisos pedidos a mano para leer fuera del proyecto (obs. 10) | **Hook** |
 | X-07 | Ignorar los ficheros del sandbox y `capturas-*/` | M17 | Sí: 11 ficheros y `.claude/` sin seguimiento en calc (retro-2) | **CI** (`.gitignore` de la plantilla) |
 | X-08 | Specs sin historial en la cabecera | M39 | Sí: SPEC-CALC-003 (retro-2) | **CI** (aviso en `checks.py`) |
 | X-09 | Referencias entre comillas en la cabecera YAML de los ADR | M7 | Sí: `#` de "PR #12" en ADR-0002 (obs. 8) | **CI** (`checks.py`) |
 | X-10 | Consentimiento con caducidad que el agente no pueda falsificar | M24 | No aplica todavía | **Hook** (se diseña en el bloque 2 y se activa en el bloque 5) |
 
-## Decisiones para Víctor
+## Decisiones (2026-11-08)
 
-1. **Escribir en la issue.** `AGENTS.md:11` dice que la issue nunca se modifica, pero VIC-17 pide "anotar en esta issue qué falta" si hay un bloqueo. Propongo permitir solo comentarios: el hook bloquea cambiar la issue (estado, descripción, etiquetas) y deja comentar. Si prefieres lo estricto, el aviso va en el PR y en la plantilla de issue hay que cambiar esa frase.
-2. **Dónde se ancla "no escribir PASS".** En baseline hay un fichero de verificación donde se escribe PASS; aquí no existe nada equivalente, porque lo que el agente afirma va en texto libre en el PR. Propongo aplazarlo al bloque 4, donde encaja la conciliación (el revisor no cierra un hallazgo sin prueba), y mantener REG-28 como instrucción. La alternativa es que un hook que ejecute los tests guarde el último resultado y se compare al publicar la sección "Validación".
-3. **Lista de M16.** Le faltan dos ajustes:
-   - `git switch -c <rama> origin/main` y `git checkout -b` también escriben `.git/config` (seguimiento automático, comprobado en un clon de prueba), y es el caso de la obs. 9. Hay que exigir `--no-track`.
-   - Bloquear `git config` entero impide leer (`git config --get`). Propongo bloquear solo las formas que escriben.
-4. **`Fixes` frente a `Refs`.** M4 acepta `Refs` cuando la prueba manual es posterior a publicar, pero `AGENTS.md:53` solo admite `Fixes` o `Part of`. Si la CI de M11 se escribe tal cual, rechazará esos PR. Propongo que admita los tres.
-5. **Controles que no están en la lista de VIC-17.** El inventario propone además REG-04, REG-21, REG-29, REG-34 (en `checks.py`), REG-35, REG-39, REG-43, REG-48, REG-49, REG-65, REG-83, REG-93 y REG-102 (esta es M5). Dime cuáles entran en este bloque; los que no, se quedan como instrucción por ahora. Por coste y evidencia, empezaría por REG-43, REG-83, REG-93 y REG-102.
+1. **La issue solo se comenta.** El agente puede comentarla, y el hook bloquea cambiar su estado, su descripción y sus etiquetas (REG-04). `AGENTS.md:11` ya lo dice así.
+2. **"No escribir PASS" pasa al bloque 4,** donde encaja la conciliación. REG-28 sigue como instrucción (X-05).
+3. **M16:** se exige `--no-track` al crear ramas desde `origin/…` con `git switch -c` y `git checkout -b`, y de `git config` se bloquean solo las formas que escriben (X-01).
+4. **CI de M11:** admite `Fixes`, `Part of` y `Refs` (REG-33).
+5. **Controles de este bloque, además de la lista de VIC-17:** REG-43, REG-83, REG-93, REG-102 (M5), REG-49 y REG-34 (en `checks.py`), y REG-04 por la decisión 1. El resto de lo propuesto (REG-21, REG-29, REG-35, REG-39, REG-48 y REG-65) se queda como instrucción por ahora.
+
+## Regla nueva (2026-11-08)
+
+Los PR que abre Claude desde el navegador (workflows, `managed-settings`) pasan `sdd-review` por el agente antes de que Víctor los fusione (REG-103).
+
+## Textos que faltan por alinear
+
+Siguen diciendo lo anterior y no se han cambiado aquí:
+
+- **Decisión 1:** `sdd-plan:51`, `sdd-discover:63` y `docs/plantilla-issue-linear.md:5`.
+- **Decisión 4:** `AGENTS.md:53` y `sdd-plan:43`.
+- **Regla nueva:** `sdd-review`.
