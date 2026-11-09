@@ -67,6 +67,8 @@ jobs:
           claude plugin eval . \
             --trust-plugin \
             --json "$RUNNER_TEMP/resultados-evals.json" \
+            --output-dir "$RUNNER_TEMP/evals-out" \
+            --keep-temp \
             --threshold 0.8 \
             --model claude-sonnet-5-5 \
             --judge-model claude-haiku-5-5 \
@@ -107,3 +109,44 @@ jobs:
                   detalle = json.dumps(c, ensure_ascii=False, indent=1)[:6000]
                   print(f"\n<details><summary>Detalle de {nombre} ({score:.2f})</summary>\n\n```json\n{detalle}\n```\n</details>")
           PY
+
+      # Resultados, informe y la traza de cada ejecución como artefacto de 7 días,
+      # para leer la respuesta final de un caso que no llega a 1 sin reproducirlo.
+      - name: Reunir resultados y trazas (sin el token)
+        if: always() && steps.casos.outputs.hay == 'si'
+        env:
+          T: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/evals-artefacto/trazas"
+          python3 - "$RUNNER_TEMP/resultados-evals.json" "$RUNNER_TEMP/evals-artefacto" <<'PY'
+          import json, pathlib, shutil, sys
+          src, dst = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          if not src.is_file():
+              sys.exit(0)
+          shutil.copy(src, dst / "resultados-evals.json")
+          r = json.loads(src.read_text(encoding="utf-8"))
+          for c in r.get("cases", []):
+              nombre = c.get("name") or "caso"
+              for i, run in enumerate(((c.get("arms") or {}).get("with") or []), 1):
+                  p = run.get("tracePath")
+                  if p and pathlib.Path(p).is_file():
+                      shutil.copy(p, dst / "trazas" / f"{nombre}-{i}.jsonl")
+          PY
+          if [ -d "$RUNNER_TEMP/evals-out" ]; then
+            cp -r "$RUNNER_TEMP/evals-out" "$RUNNER_TEMP/evals-artefacto/informe"
+          fi
+          # Si el token apareciera en algo, no se sube nada.
+          if [ -n "$T" ] && grep -rqF -- "$T" "$RUNNER_TEMP/evals-artefacto"; then
+            echo "::error::El token aparece en los resultados; no se suben."
+            rm -rf "$RUNNER_TEMP/evals-artefacto"
+            exit 1
+          fi
+
+      - name: Subir resultados y trazas (7 días)
+        if: always() && steps.casos.outputs.hay == 'si'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evals-${{ github.run_number }}
+          path: ${{ runner.temp }}/evals-artefacto
+          retention-days: 7
+          if-no-files-found: ignore
