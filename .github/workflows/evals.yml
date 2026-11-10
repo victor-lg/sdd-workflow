@@ -2,13 +2,15 @@
 # fusionado en main, nunca en un PR: en una evaluación los hooks del plugin
 # se ejecutan fuera del sandbox, y el token de la suscripción no debe llegar
 # a código sin revisar. Los casos viven en plugin-sdd/evals/.
-# Corren de madrugada y solo si el plugin cambió en el último día: consumen
-# del mismo plan que el trabajo diario, y de día chocan con su límite.
+# Corren una vez por semana, la madrugada del domingo, y solo si el plugin
+# cambió en la última semana: cada ejecución gasta un 2 % de la cuota semanal
+# del plan que se usa a diario, y de día chocan con su límite. Antes de cerrar
+# un bloque o publicar una versión se lanzan a mano (workflow_dispatch).
 name: evals
 
 on:
   schedule:
-    - cron: '17 2 * * *'   # 02:17 UTC, de madrugada en Madrid
+    - cron: '17 2 * * 0'   # domingo, 02:17 UTC, de madrugada en Madrid
   workflow_dispatch:
 
 permissions:
@@ -30,14 +32,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: ¿Hay casos y, de madrugada, cambió el plugin?
+      - name: ¿Hay casos y, si es la semanal, cambió el plugin?
         id: casos
         env:
           EVENTO: ${{ github.event_name }}
         run: |
-          if [ "$EVENTO" = "schedule" ] && [ -z "$(git log --since='25 hours ago' --format=%h -- plugin-sdd)" ]; then
+          if [ "$EVENTO" = "schedule" ] && [ -z "$(git log --since='169 hours ago' --format=%h -- plugin-sdd)" ]; then
             echo "hay=no" >> "$GITHUB_OUTPUT"
-            echo "El plugin no ha cambiado en el último día: nada que evaluar."
+            echo "El plugin no ha cambiado en la última semana: nada que evaluar."
           elif [ -d plugin-sdd/evals ] && find plugin-sdd/evals -name prompt.md -o -name case.yaml | grep -q .; then
             echo "hay=si" >> "$GITHUB_OUTPUT"
           else
