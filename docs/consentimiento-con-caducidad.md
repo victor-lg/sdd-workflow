@@ -30,7 +30,8 @@ La idea sale de baseline (`historial/analisis-herramientas-1.md` §16): un hook 
    - la misma sesión (`session_id`): un permiso no sirve en otra sesión, tampoco en otro worktree;
    - sin caducar;
    - con usos restantes;
-   - para `fusionar`, la cabeza del PR sigue en el SHA de la marca.
+   - para `fusionar`, la cabeza del PR sigue en el SHA de la marca;
+   - para `fusionar`, solo opciones de un conjunto cerrado (`--squash`, `--match-head-commit`, el número): `--admin` y `--auto` se bloquean.
    
    Si la encuentra, la consume con un `rename` atómico a `.usada` y deja pasar la orden. Si no, bloquea: "pide a la persona `/permitir fusionar 54`". Para `fusionar`, la orden tiene que llevar `--match-head-commit <SHA de la marca>`: si alguien empuja entre la comprobación y la fusión, GitHub la rechaza.
 5. **Caducidad por defecto:** 10 minutos y un solo uso. Se puede acortar en el JSON; alargarla no se ofrece en el mensaje.
@@ -42,6 +43,8 @@ La idea sale de baseline (`historial/analisis-herramientas-1.md` §16): un hook 
 | Escribir la marca con Bash | `~/.claude/` no está en la lista de escritura del sandbox. Además, la guarda de ficheros bloquea cualquier mención a `sdd-consentimientos` en Bash (segunda capa) |
 | Escribirla con Write, Edit, MultiEdit o NotebookEdit, que no pasan por el sandbox | Se propone `deny` de las cuatro sobre `~/.claude/sdd-consentimientos/**` en los ajustes gestionados (lo aplica Víctor), más una regla de `guarda-ficheros.py` que compara la ruta ya resuelta (`realpath`): un enlace dentro del proyecto a `~/.claude` no la esquiva |
 | Un servidor MCP local que escribe ficheros, que también corre fuera del sandbox | Ninguno aprobado hoy (`docs/herramientas.md`). Si se aprueba uno, su entrada dice si puede escribir en `~/.claude/` |
+| Lanzar otro `claude` desde Bash o el SDK (`claude -p "/permitir fusionar 54"`, `claude --resume <sesión> -p …`), cuyo mensaje sí pasa por `UserPromptSubmit` | **Por comprobar antes de activar:** si ese mensaje llega con el mismo `session_id` y si se distingue. Si no, `deny` de `Bash(claude:*)` en los ajustes gestionados mientras X-10 esté activo |
+| Configuración que el agente puede escribir y que corre fuera del sandbox: hooks en `.claude/settings.json` del proyecto (se cargan en la sesión siguiente), servidores en `.mcp.json`, o la configuración de un repo que mira un hook (`core.fsmonitor`, que las guardas ya desactivan) | Proponer `allowManagedHooksOnly` y comprobar que el sandbox niega escribir `.claude/settings*.json` y `.mcp.json`. Cualquiera de esas vías escribiría la marca |
 | Que el modelo lance `/permitir` con su propia herramienta de órdenes, o se lo encargue a un subagente | `commands/permitir.md` con `disable-model-invocation: true`. **Por comprobar antes de activar:** que esa vía y los encargos a subagentes no disparan `UserPromptSubmit` |
 | Generar un mensaje que parezca de la persona: `ScheduleWakeup`, `CronCreate`, `/loop`, `RemoteTrigger`, mensajes de otras sesiones | **Por comprobar antes de activar:** si la entrada de `UserPromptSubmit` distingue un mensaje escrito por la persona de uno programado. Si no lo distingue, esas herramientas van a `deny` en los ajustes gestionados mientras X-10 esté activo. Si tampoco se puede, X-10 no se activa |
 | Que la persona pegue un texto ajeno (una issue, un comentario) que contiene `/permitir …` | Solo vale si el mensaje es únicamente esa línea. Un texto pegado con más contenido no da permiso |
@@ -49,6 +52,10 @@ La idea sale de baseline (`historial/analisis-herramientas-1.md` §16): un hook 
 | Reutilizarlo | Un solo uso y consumo atómico. Dos órdenes a la vez: solo una consigue el `rename` |
 | Alargarlo cambiando la hora | La hora es la del sistema, fuera del sandbox. La caducidad se calcula al crear la marca, no al leerla |
 | Esquivar la guarda de la acción (`bash -c`, `gh api`) | No lo impide: es una segunda capa, como las demás guardas. La barrera real sigue siendo el ruleset y CODEOWNERS (G6). X-10 decide cuándo el agente puede intentar la acción, no si GitHub la acepta |
+
+**Riesgo que hay que aceptar o resolver en el ADR-0008:** si el token del agente puede fusionar los PR no sensibles (M24), el ruleset ya no distingue un PR permitido de otro, y para esos PR la única barrera es una guarda que lee el texto de la orden: `bash -c` o `gh api -X PUT …/merge` la esquivan. La alternativa es sacar la fusión del alcance del agente, por ejemplo un workflow o un entorno de GitHub que exija una marca puesta por la persona en GitHub.
+
+**El permiso se gasta al intentarlo:** se consume en `PreToolUse`, antes de ejecutar la orden. Si otra guarda bloquea en paralelo o la orden falla, se pierde y hay que pedirlo de nuevo. Es aceptable porque falla cerrado.
 
 Si cualquier comprobación no puede hacerse (marca ilegible, `gh` sin red, JSON roto), la acción se bloquea. Es el criterio 5 del inventario: falla cerrado.
 
@@ -77,4 +84,5 @@ Si cualquier comprobación no puede hacerse (marca ilegible, `gh` sin red, JSON 
 
 1. **Qué acciones entran:** en principio `fusionar` (R0 y R1 no sensibles, primer peldaño de M24) y `mover` (*Ready* y *Done* en Linear, si el ADR-0008 lo deja al agente).
 2. **Caducidad:** 10 minutos y un uso, o varios usos dentro de la ventana.
-3. **Qué hacer con las herramientas que generan mensajes:** depende de la comprobación de arriba.
+3. **Qué hacer con las herramientas que generan mensajes y con `claude` lanzado desde Bash:** depende de las comprobaciones de arriba.
+4. **Si la fusión queda en manos del agente** con solo esta guarda delante, o pasa por una barrera de GitHub que la persona controla.

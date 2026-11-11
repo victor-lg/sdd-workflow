@@ -48,7 +48,7 @@
     },
     "ready-sin-mirar": {
       "nivel": "bloquear",
-      "mensaje": "REG-102: no he podido consultar el PR en GitHub, así que no sé si la CI está en verde. En su lugar: comprueba que gh funciona (gh pr view <N>) desde una carpeta del repo y, si sigue fallando, díselo a la persona."
+      "mensaje": "REG-102: no he podido consultar el PR en GitHub, así que no sé si la CI está en verde. Pasa si gh falla, si la orden cambia de repo o de host (GH_REPO, GH_HOST, cd sin destino claro) o si el PR o el repo no tienen la forma 12, https://github.com/o/r/pull/12, una rama u o/r. En su lugar: lanza gh pr ready <N> solo, desde una carpeta del repo; si sigue fallando, díselo a la persona."
     },
     "sin-analizar": {
       "nivel": "bloquear",

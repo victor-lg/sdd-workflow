@@ -25,7 +25,7 @@ def decidir(nombre, entrada, conf):
     partes = nombre.split("__")
     if len(partes) < 3 or partes[0] != "mcp" or conf["servidor"] not in partes[1].lower():
         return None
-    if not re.search(conf["permitidas"], partes[-1]) or (partes[-1].endswith("_comment") and entrada.get("id")):
+    if not re.search(conf["permitidas"], partes[-1]) or (re.match(r"(create|save)_comment$", partes[-1]) and entrada.get("id")):
         return "solo-comentar"
     return None
 

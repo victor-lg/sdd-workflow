@@ -48,6 +48,10 @@ class Guarda(unittest.TestCase):
         self.assertEqual(guarda.decidir("mcp__linear__save_comment", {"id": "abc", "body": "x"}, CONF),
                          "solo-comentar")
 
+    def test_leer_un_comentario_por_id(self):
+        self.assertIsNone(guarda.decidir("mcp__linear__get_comment", {"id": "abc"}, CONF))
+        self.assertEqual(guarda.decidir("mcp__linear__create_comment", {"id": "abc"}, CONF), "solo-comentar")
+
     def test_otros_servidores_no_son_cosa_suya(self):
         for nombre in ("mcp__github__create_issue", "mcp__claude_ai_Claude_Docs__update", "Bash", "Write",
                        "mcp__notion__save_issue", "mcp_linear_save_issue", "linear__save_issue"):

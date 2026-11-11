@@ -64,6 +64,21 @@ def _candidatas(palabra):
     return candidatas
 
 
+def _escribe(nombre, efectiva, conf):
+    """Si la orden escribe en los ficheros que nombra: sed y perl solo con -i, y de git,
+    rm, mv, restore y checkout salvo los que solo tocan el índice."""
+    env, args = conf["env"], efectiva[1:]
+    if nombre in env["escritores_con_i"]:
+        return any(a.startswith("--in-place") or (a[:1] == "-" and a[1:2] != "-" and "i" in a[1:]) for a in args)
+    if nombre in ("git", "git.exe"):
+        i = 0
+        while i < len(args) and args[i].startswith("-"):
+            i += 2 if args[i] in ("-C", "-c") else 1
+        sub = args[i] if i < len(args) else ""
+        return sub in env["git_escritores"] and not set(args[i:]) & set(env["git_solo_indice"])
+    return nombre in env["escritores"]
+
+
 def decidir_bash(comando, cwd, conf):
     """Devuelve (regla, fichero) de la regla más grave, o (None, None)."""
     if len(comando) > conf["max_caracteres_orden"]:
@@ -81,6 +96,7 @@ def decidir_bash(comando, cwd, conf):
     for indice in range(max([len(analisis.ordenes)] + [i + 1 for i in redirecciones])):
         efectiva = orden_efectiva(analisis.ordenes[indice]) if indice < len(analisis.ordenes) else []
         nombre = posixpath.basename(efectiva[0]) if efectiva else ""
+        escribe = bool(efectiva) and _escribe(nombre, efectiva, conf)
         for operador, destino in redirecciones.get(indice, []):
             if es_temporal(destino, cwd, conf):
                 return "temporal", destino
@@ -92,10 +108,11 @@ def decidir_bash(comando, cwd, conf):
             for ruta in _candidatas(palabra):
                 if nombre not in conf["temporales"]["solo_citan"] and es_temporal(ruta, cwd, conf):
                     return "temporal", ruta
-                if nombre not in conf["env"]["solo_citan"] and es_env(ruta, conf):
-                    if nombre in conf["env"]["escritores"]:
+                if es_env(ruta, conf):
+                    if escribe:
                         return "env-escribe", ruta
-                    candidata = candidata if candidata[0] else ("env-lee", ruta)
+                    if nombre not in conf["env"]["solo_citan"]:
+                        candidata = candidata if candidata[0] else ("env-lee", ruta)
     return candidata
 
 

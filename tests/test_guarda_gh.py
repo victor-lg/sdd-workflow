@@ -193,6 +193,9 @@ class Ready(unittest.TestCase):
         self.assertEqual(self.decide(pr([nuevo, en_cola])), ("ready-ci-pendiente", ["checks-sdd"]))
         cero = run("checks-sdd", conclusion=None, status="QUEUED", inicio="0001-01-01T00:00:00Z")
         self.assertEqual(self.decide(pr([nuevo, cero]))[0], "ready-ci-pendiente")
+        # G4 del PR #26, ronda 2: un cancelado ya terminado con fecha cero no gana al relanzado.
+        cancelado_cero = run("checks-sdd", "CANCELLED", inicio="0001-01-01T00:00:00Z")
+        self.assertEqual(self.decide(pr([cancelado_cero, nuevo])), (None, None))
 
     def test_ci_roja(self):
         for conclusion in ("FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE", None):
@@ -240,11 +243,12 @@ class Ready(unittest.TestCase):
                         "gh pr ready -- --web", "gh pr ready -- --jq=.x", "gh pr ready 3 4",
                         "gh pr ready -R a/b -R c/d 3", "gh pr ready --repo 'a/b c' 3", "gh pr ready 3 --web",
                         "GH_REPO=a/b gh pr ready 3", "GH_HOST=atacante.example gh pr ready 3",
-                        "env GH_REPO=a/b gh pr ready 3"):
+                        "env GH_REPO=a/b gh pr ready 3", "export GH_REPO=a/b; gh pr ready 3",
+                        "GH_REPO=a/b; export GH_REPO; gh pr ready 3", "cd; gh pr ready 3", "cd - && gh pr ready 3"):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(pr(VERDE), comando), ("ready-sin-mirar", None))
                 self.assertIsNone(self.llamada)
-        for comando in ("gh pr ready 3", "gh pr ready https://github.com/a/b/pull/3", "gh pr ready feat/vic-1-x",
+        for comando in ("gh pr ready 3", "GH_TOKEN=x gh pr ready 3", "gh pr ready https://github.com/a/b/pull/3", "gh pr ready feat/vic-1-x",
                         "gh pr ready -R a/b 3", "gh pr ready --repo github.com/a/b 3"):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(pr(VERDE), comando), (None, None))
@@ -274,6 +278,14 @@ class Ready(unittest.TestCase):
             with self.subTest(efecto=efecto), mock.patch.object(guarda, "_gh", side_effect=efecto):
                 self.assertEqual(guarda.decidir("gh pr ready 3", "/home/u/proyecto", CONF)[0], "ready-sin-mirar")
         self.assertEqual(guarda.decidir("pushd x && gh pr ready", "/home/u/proyecto", CONF)[0], "ready-sin-mirar")
+
+    def test_gh_llama_a_git_con_proteccion(self):
+        respuesta = subprocess.CompletedProcess([], 0, json.dumps(pr(VERDE, borrador=False)), "")
+        with mock.patch.object(guarda.subprocess, "run", return_value=respuesta) as run_:
+            guarda.decidir("gh pr ready 3", "/home/u/proyecto", CONF)
+        entorno = run_.call_args.kwargs["env"]
+        self.assertEqual((entorno["GIT_CONFIG_KEY_0"], entorno["GIT_CONFIG_VALUE_0"]), ("core.fsmonitor", "false"))
+        self.assertEqual(entorno["GIT_OPTIONAL_LOCKS"], "0")
 
     def test_gh_real_sin_red_falla_cerrado(self):
         with mock.patch.object(guarda.subprocess, "run", side_effect=OSError("sin gh")):

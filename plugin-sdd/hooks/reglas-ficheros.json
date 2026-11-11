@@ -3,7 +3,10 @@
   "env": {
     "patron": "^\\.env(rc)?([._*-].*)?$",
     "excepciones": "\\.(example|sample|template|dist|tpl)$",
-    "escritores": ["cp", "mv", "tee", "touch", "ln", "install", "rsync", "dd", "truncate", "rm", "shred", "sed", "perl", "chmod", "chown"],
+    "escritores": ["cp", "mv", "tee", "touch", "ln", "install", "rsync", "dd", "truncate", "rm", "shred", "chmod", "chown"],
+    "escritores_con_i": ["sed", "perl"],
+    "git_escritores": ["rm", "mv", "restore", "checkout"],
+    "git_solo_indice": ["--cached", "--staged", "-S"],
     "solo_citan": ["echo", "printf", "git"]
   },
   "temporales": {

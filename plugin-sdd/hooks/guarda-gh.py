@@ -41,7 +41,7 @@ CORTAS_CON_VALOR = {
 # Opciones que llevan el cuerpo en la propia orden; en close, el comentario.
 OPCIONES_CUERPO = {"b", "body"}
 OPCIONES_CUERPO_CLOSE = {"c", "comment"}
-VARIABLES_GH = re.compile(r"GH_(REPO|HOST|ENTERPRISE_TOKEN|TOKEN|CONFIG_DIR)=")
+VARIABLES_GH = re.compile(r"(GH_(REPO|HOST|CONFIG_DIR)|GITHUB_REPOSITORY)(=|$)")
 LARGAS_CON_VALOR = dict.fromkeys(
     ("assignee", "base", "body", "body-file", "head", "label", "milestone", "project", "reviewer", "title",
      "template", "repo", "recover", "add-assignee", "remove-assignee", "add-label", "remove-label",
@@ -57,6 +57,10 @@ SELECTOR = re.compile(r"^(\d+|https://github\.com/[\w.-]+/[\w.-]+/pull/\d+|[\w][
 REPO = re.compile(r"^((https://)?github\.com/)?[\w.-]+/[\w.-]+$")
 GIT_SEGURO = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "--no-optional-locks")
 NOMBRE_SEGURO = re.compile(r"[^\w .:/()-]")
+# gh llama a git por su cuenta en la carpeta de la orden: con la misma protección.
+ENTORNO_GH = {**os.environ, "GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "core.fsmonitor",
+              "GIT_CONFIG_VALUE_0": "false", "GIT_CONFIG_KEY_1": "core.untrackedCache",
+              "GIT_CONFIG_VALUE_1": "false", "GIT_OPTIONAL_LOCKS": "0"}
 
 
 class NoPuedoMirar(Exception):
@@ -71,7 +75,7 @@ def _gh(cwd, *args, conf, limite):
     if _quedan(limite) < 1:
         raise NoPuedoMirar("sin tiempo")
     try:
-        r = subprocess.run(["gh", *args], cwd=cwd, capture_output=True, text=True,
+        r = subprocess.run(["gh", *args], cwd=cwd, capture_output=True, text=True, env=ENTORNO_GH,
                            timeout=min(conf["segundos_gh"], _quedan(limite)))
     except (OSError, subprocess.SubprocessError) as e:
         raise NoPuedoMirar(str(e))
@@ -131,7 +135,7 @@ def _ultimos(checks):
     for check in checks:
         clave = (check.get("workflowName"), _nombre_check(check))
         fecha = check.get("startedAt") or ""
-        if fecha.startswith("0001") or (not fecha and check.get("status") not in (None, "COMPLETED")):
+        if (not fecha or fecha.startswith("0001")) and check.get("status") not in (None, "COMPLETED"):
             fecha = "9999"  # En cola, sin fecha: es la más reciente.
         if clave not in ultimos or fecha >= ultimos[clave][0]:
             ultimos[clave] = (fecha, check)
@@ -209,13 +213,13 @@ def decidir(comando, cwd, conf):
             cwd = "$"
         elif primera == "cd":
             destinos = [a for a in efectiva[1:] if not a.startswith("-")]
-            if len(destinos) == 1:
-                cwd = juntar(cwd, destinos[0])
+            cwd = juntar(cwd, destinos[0]) if len(destinos) == 1 and destinos[0] != "-" else "$"
         elif primera in ("gh", "gh.exe") and len(efectiva) >= 2:
             grupo, accion, args = efectiva[1], (efectiva[2:3] or [""])[0], efectiva[3:]
             resultado = (None, None)
-            # GH_REPO y compañía cambian a qué repo o host pregunta gh: la consulta no sería la del PR.
-            entorno_gh = any(VARIABLES_GH.match(p) for p in palabras[:len(palabras) - len(efectiva)])
+            # GH_REPO y compañía, en cualquier parte de la orden (también con export), cambian
+            # a qué repo o host pregunta gh: la consulta no sería la del PR.
+            entorno_gh = any(VARIABLES_GH.match(p) for orden in analisis.ordenes for p in orden)
             if {"-h", "--help"} & set(efectiva):
                 pass
             elif grupo == "api":

@@ -631,8 +631,12 @@ class Fugas(unittest.TestCase):
         for comando in ("git commit -am x", "git commit --all -m x", "git commit -m x .npmrc",
                         "git commit -m x -- .npmrc", "cd src && git commit -m x ../.npmrc"):
             with self.subTest(comando=comando):
-                self.assertEqual(self.decide(comando), ("commit-fuga", [".npmrc"]))
+                self.assertEqual(self.decide(comando), ("commit-fuga-todo", [".npmrc"]))
         self.assertEqual(self.decide("git commit -m x .gitignore"), (None, None))
+        self.assertEqual(self.decide("git add .npmrc && git commit -m x"), ("commit-fuga", [".npmrc"]))
+        self.git("restore", ".npmrc")  # Sin tocarlo, -a también lo llevaría: G4 del PR #26, ronda 2.
+        self.assertEqual(self.decide("git commit -am x"), ("commit-fuga-todo", [".npmrc"]))
+        self.assertEqual(self.decide("git add src/a.py && git commit -m x"), (None, None))
 
     def test_lo_versionado_que_gitignore_excluye_no_es_fuga(self):
         """G4 del PR #26: un fichero que ya está en HEAD se versionó a propósito; solo cuenta "fugas"."""
@@ -654,6 +658,30 @@ class Fugas(unittest.TestCase):
                         f"git -C {nombre}/src commit -m x"):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(comando, padre), ("commit-fuga", [".env"]))
+
+    def test_cwd_a_traves_de_un_enlace(self):
+        """G4 del PR #26, ronda 2: con rutas sin resolver, el git add previo se perdía."""
+        enlace = os.path.join(self.dir.name, "enlace")
+        os.symlink(self.repo, enlace)
+        self.escribe(".env", "SECRETO=1\n")
+        self.assertEqual(self.decide("git add .env && git commit -m x", enlace), ("commit-fuga", [".env"]))
+
+    def test_otro_repo_u_otro_indice_falla_cerrado(self):
+        for comando in ("git --git-dir=.git commit -m x", "git --work-tree . commit -m x",
+                        "GIT_INDEX_FILE=/x/index git commit -m x", "export GIT_DIR=/x; git commit -m x",
+                        "cd; git commit -m x", "cd -; git commit -m x", "cd a b; git commit -m x"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando)[0], "commit-sin-mirar")
+
+    def test_plazo_dentro_del_commit(self):
+        """G4 del PR #26, ronda 2: el plazo acota cada llamada a git, no solo cada orden."""
+        guarda._LIMITE[0] = time.monotonic() - 1
+        with self.assertRaises(guarda.NoPuedoMirar):
+            guarda._git(self.repo, "status")
+        rutas = " ".join(f"f{i}" for i in range(3000))
+        inicio = time.monotonic()
+        self.assertEqual(self.decide(f"git add {rutas} && git commit -m x"), (None, None))
+        self.assertLess(time.monotonic() - inicio, CONF["max_segundos_analisis"])
 
     def test_no_puede_mirar_falla_cerrado(self):
         self.assertEqual(self.decide("git commit -m x", self.dir.name)[0], "commit-sin-mirar")

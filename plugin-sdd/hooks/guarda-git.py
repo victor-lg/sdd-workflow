@@ -78,6 +78,17 @@ LARGAS_ADD.update(dict.fromkeys(("chmod", "pathspec-from-file"), True))
 # que apunta a otro gitdir): git no debe ejecutar nada de su configuración ni escribir
 # el índice (G4 del PR #26). Ninguna llamada pide al árbol de trabajo que pase filtros.
 GIT_SEGURO = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "--no-optional-locks")
+# Variables y opciones que hacen que git mire otro repo u otro índice que el de la carpeta.
+OTRO_REPO = re.compile(r"(GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|OBJECT_DIRECTORY|CEILING_DIRECTORIES)(=|$)|--(git-dir|work-tree)(=|$))")
+# Plazo de toda la orden: también acota cada llamada a git (G4 del PR #26).
+_LIMITE = [float("inf")]
+
+
+def _plazo():
+    queda = _LIMITE[0] - time.monotonic()
+    if queda < 0.2:
+        raise NoPuedoMirar("sin tiempo")
+    return min(3, queda)
 
 LARGAS_COMMIT = dict.fromkeys(
     ("all", "patch", "reset-author", "short", "branch", "porcelain", "long", "null", "signoff", "no-signoff",
@@ -182,7 +193,7 @@ def regla_add(args, conf):
 
 def _git(cwd, *args, codigos_validos=(0,)):
     try:
-        r = subprocess.run(["git", *GIT_SEGURO, "-C", cwd, *args], capture_output=True, text=True, timeout=3)
+        r = subprocess.run(["git", *GIT_SEGURO, "-C", cwd, *args], capture_output=True, text=True, timeout=_plazo())
     except (OSError, subprocess.SubprocessError) as e:
         raise NoPuedoMirar(str(e))
     if r.returncode not in codigos_validos:
@@ -258,7 +269,7 @@ def _trae_main(args, conf):
 def _git_entrada(cwd, entrada, *args, codigos_validos=(0,)):
     try:
         r = subprocess.run(["git", *GIT_SEGURO, "-C", cwd, *args], input=entrada, capture_output=True, text=True,
-                           timeout=3)
+                           timeout=_plazo())
     except (OSError, subprocess.SubprocessError) as e:
         raise NoPuedoMirar(str(e))
     if r.returncode not in codigos_validos:
@@ -275,6 +286,13 @@ def _nunca_se_sube(ruta, fugas):
     if re.search(fugas["excepciones"], nombre):
         return False
     return any(fnmatch.fnmatchcase(ruta if "/" in patron else nombre, patron) for patron in fugas["nunca"])
+
+
+def _dentro(ruta, carpeta):
+    if "$" in carpeta:
+        return False
+    ruta, carpeta = os.path.realpath(ruta), os.path.realpath(carpeta)
+    return ruta == carpeta or ruta.startswith(carpeta.rstrip("/") + "/")
 
 
 def anadidos_por_add(args, cwd):
@@ -295,22 +313,28 @@ def regla_commit(args, cwd, anadidos, conf):
         raise NoPuedoMirar("ruta dinámica")
     encontradas, posicionales = opciones(args, "mFCct", LARGAS_COMMIT)
     raiz = _git(cwd, "rev-parse", "--show-toplevel")
-    rutas = _rutas(_git_entrada(cwd, None, "diff", "--cached", "--no-relative", "--name-only", "-z",
-                                "--diff-filter=d"))
+    rutas = _rutas(_git_entrada(cwd, None, "diff", "--cached", "--no-relative", "--no-ext-diff", "--no-textconv",
+                                "--name-only", "-z", "--diff-filter=d"))
+    preparadas = set(rutas)
     if posicionales or _nombres(encontradas) & COMMIT_CON_TRABAJO:
         # Con rutas, los ficheros del índice que casan con ellas; con -a, -p o
         # --pathspec-from-file, todos. Se miran también los no modificados: comparar con
         # el árbol de trabajo pasaría los filtros del repo.
         rutas += _rutas(_git_entrada(raiz, None, "ls-files", "-z", "--full-name", "--",
                                      *[os.path.relpath(juntar(cwd, r), raiz) for r in posicionales]))
-    for ruta, forzado in anadidos:
-        relativa = os.path.relpath(ruta, raiz)
-        if relativa == ".." or relativa.startswith(".." + os.sep):
-            continue
-        # Lo que añadiría ese git add: sin -f, git se salta lo ignorado.
-        excluir = () if forzado else ("--exclude-standard",)
-        rutas += _rutas(_git_entrada(raiz, None, "ls-files", "-z", "--full-name", "--cached", "--others", *excluir,
-                                     "--", relativa))
+    # Lo que añadirían esos git add, en una llamada con -f y otra sin él (sin -f, git se
+    # salta lo ignorado).
+    for forzado in (False, True):
+        # Rutas reales en los dos lados: si cwd pasa por un enlace, relpath daría "..".
+        relativas = [os.path.relpath(os.path.realpath(ruta), os.path.realpath(raiz))
+                     for ruta, f in anadidos if f == forzado]
+        relativas = [r for r in relativas if r != ".." and not r.startswith(".." + os.sep)]
+        if relativas:
+            excluir = () if forzado else ("--exclude-standard",)
+            anadidas = _rutas(_git_entrada(raiz, None, "ls-files", "-z", "--full-name", "--cached", "--others",
+                                           *excluir, "--", *relativas))
+            rutas += anadidas
+            preparadas.update(anadidas)
     rutas = list(dict.fromkeys(rutas))
     if not rutas:
         return None
@@ -320,10 +344,13 @@ def regla_commit(args, cwd, anadidos, conf):
         ignoradas -= set(_rutas(_git_entrada(raiz, None, "ls-tree", "-r", "-z", "--name-only", "--full-tree", "HEAD",
                                              "--", *ignoradas, codigos_validos=(0, 128))))
     fugas = [r for r in rutas if r in ignoradas or _nunca_se_sube(r, conf["fugas"])]
-    return ("commit-fuga", fugas) if fugas else None
+    if not fugas:
+        return None
+    # Si solo salen de -a o de las rutas del commit, el remedio es otro: preparar por nombre.
+    return ("commit-fuga" if set(fugas) & preparadas else "commit-fuga-todo", fugas)
 
 
-def _regla_de(sub, args, ajustes, cwd, previas, conf, anadidos=()):
+def _regla_de(sub, args, ajustes, cwd, previas, conf, anadidos=(), otro_repo=False):
     if sub == "push":
         return regla_push(args, ajustes)
     if sub in ("fetch", "pull"):
@@ -338,6 +365,8 @@ def _regla_de(sub, args, ajustes, cwd, previas, conf, anadidos=()):
         return regla_crear_rama(sub, args, cwd, previas, conf)
     if sub == "commit":
         try:
+            if otro_repo:
+                raise NoPuedoMirar("otro repo u otro índice")
             return regla_commit(args, cwd, anadidos, conf)
         except NoPuedoMirar:
             return "commit-sin-mirar"
@@ -354,11 +383,14 @@ def decidir_con_detalle(comando, cwd, conf):
     if len(comando) > conf["max_caracteres_orden"] and "git" in comando:
         return "sin-analizar", None
     limite = time.monotonic() + conf["max_segundos_analisis"]
+    _LIMITE[0] = limite
+    sesion = cwd
     try:
         ordenes = analizar(comando)
     except NoAnalizable:
         return ("sin-analizar" if "git" in comando else None), None
     candidata, previas, anadidos = None, set(), []
+    otro_repo = any(OTRO_REPO.match(p) for palabras in ordenes for p in palabras)
     for palabras in ordenes:
         if time.monotonic() > limite:  # Antes de que el timeout del hook deje pasar la orden.
             return "sin-analizar", None
@@ -368,8 +400,8 @@ def decidir_con_detalle(comando, cwd, conf):
             continue
         if efectiva[:1] == ["cd"]:
             destinos = [a for a in efectiva[1:] if not a.startswith("-")]
-            if len(destinos) == 1:
-                cwd = juntar(cwd, destinos[0])
+            # cd solo, cd - o varios destinos: no se sabe a dónde va.
+            cwd = juntar(cwd, destinos[0]) if len(destinos) == 1 and destinos[0] != "-" else "$"
             continue
         separado = separar_git(efectiva)
         if separado is None:
@@ -379,7 +411,7 @@ def decidir_con_detalle(comando, cwd, conf):
         for directorio in directorios:
             cwd_git = juntar(cwd_git, directorio)
         try:
-            regla = _regla_de(sub, args, ajustes, cwd_git, previas, conf, anadidos)
+            regla = _regla_de(sub, args, ajustes, cwd_git, previas, conf, anadidos, otro_repo)
         except NoPuedoMirar:
             regla = "sin-mirar"
         regla, detalle = regla if isinstance(regla, tuple) else (regla, None)
@@ -389,7 +421,8 @@ def decidir_con_detalle(comando, cwd, conf):
         if sub in ("fetch", "pull") and _trae_main(args, conf):
             previas.add((sub, cwd_git))
         if sub in ("add", "stage"):
-            anadidos += anadidos_por_add(args, cwd_git)
+            # Solo dentro de la carpeta de la sesión: fuera, el hook listaría nombres de ficheros ajenos.
+            anadidos += [a for a in anadidos_por_add(args, cwd_git) if _dentro(a[0], sesion)]
     return candidata, None
 
 

@@ -45,6 +45,10 @@
       "nivel": "bloquear",
       "mensaje": "X-04: el commit llevaría {ficheros}, que .gitignore excluye o que nunca deben subirse (secretos, .tareas/, ficheros del sandbox). En su lugar: sácalos con git restore --staged <fichero> (o git rm --cached <fichero> si ya estaban en el repo) y, en otra orden, repite el commit: esta guarda mira lo preparado antes de ejecutar nada. Si alguno tiene que subir de verdad, díselo a la persona."
     },
+    "commit-fuga-todo": {
+      "nivel": "bloquear",
+      "mensaje": "X-04: con -a o con rutas, el commit llevaría ficheros versionados que nunca deben subirse o que .gitignore excluye ({ficheros}), aunque no los hayas tocado. En su lugar: prepara por nombre solo tus ficheros (git add <fichero> <fichero>) y haz git commit sin -a ni rutas."
+    },
     "commit-sin-mirar": {
       "nivel": "bloquear",
       "mensaje": "X-04: no he podido comprobar qué lleva este commit. En su lugar: ejecútalo desde una carpeta del repo, con la ruta escrita tal cual, y si sigue fallando, díselo a la persona."
