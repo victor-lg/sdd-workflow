@@ -13,7 +13,7 @@ Mitad "plugin" de la distribución del núcleo (ADR-0004, Q05). La otra mitad es
   - `sdd-review` ✔ borrador: organiza G4 (revisores según riesgo) y reconcilia.
 - `agents/`: subagentes.
   - `reviewer` ✔ borrador: revisor de solo lectura con contexto limpio (G4).
-- `evals/`: casos de `claude plugin eval` (M35), uno por directorio. Corren en la CI del workflow de madrugada (02:17 UTC) si `plugin-sdd/` cambió en el último día, o a mano; nunca en un PR. En local: `claude plugin eval . --ablation none --no-publish` (sin `--no-publish`, el informe con las transcripciones se publica en claude.ai).
+- `evals/`: casos de `claude plugin eval` (M35), uno por directorio. Corren en la CI del workflow una vez por semana, el domingo de madrugada (02:17 UTC), si `plugin-sdd/` cambió en la última semana, o a mano (antes de cerrar un bloque o publicar una versión, y si falla una programada); nunca en un PR. En local: `claude plugin eval . --ablation none --no-publish` (sin `--no-publish`, el informe con las transcripciones se publica en claude.ai).
 
 - `hooks/`: los primeros controles del inventario (`docs/inventario-reglas.md`), en Python sin dependencias. Reglas, niveles y mensajes en `reglas-git.json`.
   - `guarda-git.py` (`PreToolUse` sobre Bash): sin seguimiento de ramas (M16), `git add` por nombre (X-03) y ramas desde `main` actualizado (REG-83). Cada bloqueo dice qué hacer en su lugar.
