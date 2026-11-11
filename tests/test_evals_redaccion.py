@@ -216,12 +216,13 @@ class JuezDeN6(unittest.TestCase):
         buenas, malas = N6_JUEZ
         for respuesta, espera in [(r, "PASA") for r in buenas] + [(r, "FALLA") for r in malas]:
             with self.subTest(respuesta=respuesta):
-                salida = subprocess.run(
+                # Como el evaluador real: tres votos independientes y decide la mayoría.
+                votos = [re.sub(r"\W", "", subprocess.run(
                     ["claude", "-p", "--model", modelo_juez(), "--max-turns", "1",
                      JUEZ_PROMPT.format(criterio=N6_CRITERIO, respuesta=respuesta)],
                     capture_output=True, text=True, encoding="utf-8", check=True, timeout=120,
-                )
-                self.assertEqual(re.sub(r"\W", "", salida.stdout).upper(), espera)
+                ).stdout).upper() for _ in range(3)]
+                self.assertGreaterEqual(votos.count(espera), 2, votos)
 
 
 if __name__ == "__main__":
