@@ -43,7 +43,7 @@
     },
     "commit-fuga": {
       "nivel": "bloquear",
-      "mensaje": "X-04: el commit llevaría {ficheros}, que .gitignore excluye o que nunca deben subirse (secretos, .tareas/, ficheros del sandbox). En su lugar: sácalos con git restore --staged <fichero> (o git rm --cached <fichero> si ya estaban en el repo) y repite el commit. Si alguno tiene que subir de verdad, díselo a la persona."
+      "mensaje": "X-04: el commit llevaría {ficheros}, que .gitignore excluye o que nunca deben subirse (secretos, .tareas/, ficheros del sandbox). En su lugar: sácalos con git restore --staged <fichero> (o git rm --cached <fichero> si ya estaban en el repo) y, en otra orden, repite el commit: esta guarda mira lo preparado antes de ejecutar nada. Si alguno tiene que subir de verdad, díselo a la persona."
     },
     "commit-sin-mirar": {
       "nivel": "bloquear",

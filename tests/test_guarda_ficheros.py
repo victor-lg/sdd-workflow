@@ -81,6 +81,8 @@ BASH = {
         "dd if=x of=/tmp/y",
         "ls /private/var/folders/ab/T/",
         "cat x | tee /tmp/copia",
+        "curl -o/tmp/descarga.zip https://x",
+        "tar -C/tmp -xf a.tar",
     ],
 }
 
@@ -162,6 +164,7 @@ class GuardaBash(unittest.TestCase):
         dentro = "/tmp/proyecto"
         self.assertEqual(guarda.decidir_bash("echo x > notas.md; cat /tmp/proyecto/a", dentro, CONF), (None, None))
         self.assertEqual(guarda.decidir_bash("echo x > /tmp/otro/notas.md", dentro, CONF)[0], "temporal")
+        self.assertEqual(guarda.decidir_bash("echo x > /tmp/notas.md", "/", CONF)[0], "temporal")
 
     def test_sin_cerrar_falla_cerrado_si_menciona_algo(self):
         for comando in ("cat '.env", 'echo "x > /tmp/a', "cp a $TMPDIR/$(b"):
@@ -207,6 +210,19 @@ class GuardaHerramientas(unittest.TestCase):
             with self.subTest(ruta=ruta):
                 self.assertIsNone(self.decide("Write", ruta))
         self.assertIsNone(self.decide("Write", "/tmp/proyecto/a.md", cwd="/tmp/proyecto"))
+
+    def test_grep_sobre_env_pregunta(self):
+        """G4 del PR #26: con output_mode content, Grep devuelve las líneas del fichero."""
+        for entrada in ({"pattern": "KEY", "path": "/home/u/proyecto/.env"}, {"pattern": "KEY", "glob": ".env*"},
+                        {"pattern": "KEY", "path": ".env.local", "output_mode": "content"}):
+            with self.subTest(entrada=entrada):
+                self.assertEqual(guarda.decidir({"tool_name": "Grep", "tool_input": entrada, "cwd": CWD}, CONF)[0],
+                                 "env-lee")
+        for entrada in ({"pattern": "KEY"}, {"pattern": ".env", "path": "src"}, {"pattern": "x", "glob": "*.py"},
+                        {"pattern": "KEY", "path": ".env.example"}):
+            with self.subTest(entrada=entrada):
+                self.assertEqual(guarda.decidir({"tool_name": "Grep", "tool_input": entrada, "cwd": CWD}, CONF),
+                                 (None, None))
 
     def test_leer_de_temporales_no_es_cosa_suya(self):
         self.assertIsNone(self.decide("Read", "/tmp/captura.png"))
@@ -269,7 +285,7 @@ class Principal(unittest.TestCase):
     def test_registro(self):
         registro = json.loads((HOOKS / "hooks.json").read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
         grupo = next(g for g in registro if "guarda-ficheros.py" in g["hooks"][0]["command"])
-        self.assertEqual(set(grupo["matcher"].split("|")), {"Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "Read"})
+        self.assertEqual(set(grupo["matcher"].split("|")), {"Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "Read", "Grep"})
         self.assertTrue(grupo["hooks"][0]["command"].endswith("|| exit 2"))
 
 

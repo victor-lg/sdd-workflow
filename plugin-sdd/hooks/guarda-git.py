@@ -74,6 +74,11 @@ LARGAS_ADD = dict.fromkeys(
      "no-warn-embedded-repo", "renormalize", "pathspec-file-nul", "no-dry-run"), False)
 LARGAS_ADD.update(dict.fromkeys(("chmod", "pathspec-from-file"), True))
 
+# El hook corre fuera del sandbox y el agente puede preparar el repo que mira (un .git
+# que apunta a otro gitdir): git no debe ejecutar nada de su configuración ni escribir
+# el índice (G4 del PR #26). Ninguna llamada pide al árbol de trabajo que pase filtros.
+GIT_SEGURO = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "--no-optional-locks")
+
 LARGAS_COMMIT = dict.fromkeys(
     ("all", "patch", "reset-author", "short", "branch", "porcelain", "long", "null", "signoff", "no-signoff",
      "no-verify", "verify", "allow-empty", "allow-empty-message", "edit", "no-edit", "amend", "no-post-rewrite",
@@ -177,7 +182,7 @@ def regla_add(args, conf):
 
 def _git(cwd, *args, codigos_validos=(0,)):
     try:
-        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=3)
+        r = subprocess.run(["git", *GIT_SEGURO, "-C", cwd, *args], capture_output=True, text=True, timeout=3)
     except (OSError, subprocess.SubprocessError) as e:
         raise NoPuedoMirar(str(e))
     if r.returncode not in codigos_validos:
@@ -252,7 +257,8 @@ def _trae_main(args, conf):
 
 def _git_entrada(cwd, entrada, *args, codigos_validos=(0,)):
     try:
-        r = subprocess.run(["git", "-C", cwd, *args], input=entrada, capture_output=True, text=True, timeout=3)
+        r = subprocess.run(["git", *GIT_SEGURO, "-C", cwd, *args], input=entrada, capture_output=True, text=True,
+                           timeout=3)
     except (OSError, subprocess.SubprocessError) as e:
         raise NoPuedoMirar(str(e))
     if r.returncode not in codigos_validos:
@@ -272,11 +278,13 @@ def _nunca_se_sube(ruta, fugas):
 
 
 def anadidos_por_add(args, cwd):
-    """Rutas absolutas que un git add o git stage con estos argumentos va a preparar."""
+    """(ruta absoluta, forzado) de lo que un git add o git stage con estos argumentos va
+    a preparar. Las rutas pueden ser carpetas o patrones: regla_commit las expande."""
     encontradas, posicionales = opciones(args, "", LARGAS_ADD)
     if _nombres(encontradas) & {"n", "dry-run"}:
         return []
-    return [juntar(cwd, ruta) for ruta in posicionales]
+    forzado = bool(_nombres(encontradas) & {"f", "force"})
+    return [(juntar(cwd, ruta), forzado) for ruta in posicionales]
 
 
 def regla_commit(args, cwd, anadidos, conf):
@@ -287,20 +295,30 @@ def regla_commit(args, cwd, anadidos, conf):
         raise NoPuedoMirar("ruta dinámica")
     encontradas, posicionales = opciones(args, "mFCct", LARGAS_COMMIT)
     raiz = _git(cwd, "rev-parse", "--show-toplevel")
-    diff = ("diff", "--no-relative", "--name-only", "-z", "--diff-filter=d")
-    rutas = _rutas(_git_entrada(cwd, None, *diff, "--cached"))
+    rutas = _rutas(_git_entrada(cwd, None, "diff", "--cached", "--no-relative", "--name-only", "-z",
+                                "--diff-filter=d"))
     if posicionales or _nombres(encontradas) & COMMIT_CON_TRABAJO:
-        # Con rutas, solo esas; con -a, -p o --pathspec-from-file, todo lo modificado.
-        rutas += _rutas(_git_entrada(cwd, None, *diff, "--", *posicionales))
-    for ruta in anadidos:
+        # Con rutas, los ficheros del índice que casan con ellas; con -a, -p o
+        # --pathspec-from-file, todos. Se miran también los no modificados: comparar con
+        # el árbol de trabajo pasaría los filtros del repo.
+        rutas += _rutas(_git_entrada(raiz, None, "ls-files", "-z", "--full-name", "--",
+                                     *[os.path.relpath(juntar(cwd, r), raiz) for r in posicionales]))
+    for ruta, forzado in anadidos:
         relativa = os.path.relpath(ruta, raiz)
-        if relativa != "." and not relativa.startswith(".." + os.sep):
-            rutas.append(relativa.replace(os.sep, "/"))
+        if relativa == ".." or relativa.startswith(".." + os.sep):
+            continue
+        # Lo que añadiría ese git add: sin -f, git se salta lo ignorado.
+        excluir = () if forzado else ("--exclude-standard",)
+        rutas += _rutas(_git_entrada(raiz, None, "ls-files", "-z", "--full-name", "--cached", "--others", *excluir,
+                                     "--", relativa))
     rutas = list(dict.fromkeys(rutas))
     if not rutas:
         return None
     ignoradas = set(_rutas(_git_entrada(cwd, "\0".join(rutas) + "\0", "-C", raiz, "check-ignore", "--no-index",
                                         "-z", "--stdin", codigos_validos=(0, 1))))
+    if ignoradas:  # Lo que ya está en HEAD se versionó a propósito: solo cuenta la lista "fugas".
+        ignoradas -= set(_rutas(_git_entrada(raiz, None, "ls-tree", "-r", "-z", "--name-only", "--full-tree", "HEAD",
+                                             "--", *ignoradas, codigos_validos=(0, 128))))
     fugas = [r for r in rutas if r in ignoradas or _nunca_se_sube(r, conf["fugas"])]
     return ("commit-fuga", fugas) if fugas else None
 

@@ -31,10 +31,11 @@ class NoAnalizable(Exception):
 class Analisis:
     """Lo que sale de leer una orden. ordenes: las órdenes simples, como listas de
     palabras. redirecciones: (índice de la orden, operador, destino) de las que leen
-    o escriben un fichero; el operador escribe si lleva ">". heredocs_expandidos: cuántos heredocs sin comillas hay."""
+    o escriben un fichero; el operador escribe si lleva ">". heredocs_expandidos: cuántos heredocs sin comillas hay.
+    cadenas: cuántas here-strings (<<<) hay."""
 
     def __init__(self):
-        self.ordenes, self.redirecciones, self.heredocs_expandidos = [], [], 0
+        self.ordenes, self.redirecciones, self.heredocs_expandidos, self.cadenas = [], [], 0, 0
 
 
 class _Lector:
@@ -105,6 +106,7 @@ class _Lector:
         if t[i + 1:i + 2] == "(":  # <(orden) o >(orden): el paréntesis se lee como subshell.
             self.i += 1
         elif t.startswith("<<<", i):
+            self.a.cadenas += 1
             self.i += 3
             self._espacios()
             self._palabra()

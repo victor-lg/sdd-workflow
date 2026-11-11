@@ -598,6 +598,17 @@ class Fugas(unittest.TestCase):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(comando)[0], "commit-fuga")
 
+    def test_add_de_una_carpeta_en_la_misma_orden(self):
+        """G4 del PR #26: git add <carpeta> prepara lo que hay dentro, salvo lo ignorado sin -f."""
+        self.escribe("certs/servidor.key", "CLAVE\n")
+        self.escribe("src/nuevo.py", "b = 1\n")
+        self.escribe("build/salida.js", "x\n")
+        self.assertEqual(self.decide("git add certs && git commit -m x"), ("commit-fuga", ["certs/servidor.key"]))
+        self.assertEqual(self.decide("git add 'certs/*' && git commit -m x"), ("commit-fuga", ["certs/servidor.key"]))
+        self.assertEqual(self.decide("git add src build && git commit -m x"), (None, None))
+        self.assertEqual(self.decide("git add -f build && git commit -m x"), ("commit-fuga", ["build/salida.js"]))
+        self.assertEqual(self.decide("git add ../fuera && git commit -m x"), (None, None))
+
     def test_add_de_prueba_o_posterior_no_cuenta(self):
         self.escribe(".env", "SECRETO=1\n")
         for comando in ("git add -n .env && git commit -m x", "git commit -m x --allow-empty; git add .env"):
@@ -611,16 +622,29 @@ class Fugas(unittest.TestCase):
         self.git("rm", "-q", "--cached", ".env")
         self.assertEqual(self.decide("git commit -m 'quita .env'"), (None, None))
 
-    def test_commit_a_mira_lo_modificado(self):
+    def test_commit_a_mira_lo_versionado(self):
+        self.escribe(".npmrc", "registry=x\n")
+        self.git("add", ".npmrc")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "fuga anterior")
+        self.escribe(".npmrc", "//registry/:_authToken=SECRETO\n")
+        self.assertEqual(self.decide("git commit -m x"), (None, None))
+        for comando in ("git commit -am x", "git commit --all -m x", "git commit -m x .npmrc",
+                        "git commit -m x -- .npmrc", "cd src && git commit -m x ../.npmrc"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando), ("commit-fuga", [".npmrc"]))
+        self.assertEqual(self.decide("git commit -m x .gitignore"), (None, None))
+
+    def test_lo_versionado_que_gitignore_excluye_no_es_fuga(self):
+        """G4 del PR #26: un fichero que ya está en HEAD se versionó a propósito; solo cuenta "fugas"."""
         self.escribe(".gitignore", ".tareas/\nbuild/\nconfig.local\n")
         self.git("add", ".gitignore")
         self.escribe("config.local", "y\n")
-        self.assertEqual(self.decide("git commit -m x"), (None, None))
-        for comando in ("git commit -am x", "git commit --all -m x", "git commit -m x config.local",
-                        "git commit -m x -- config.local"):
+        for comando in ("git commit -am x", "git commit -m x config.local"):
             with self.subTest(comando=comando):
-                self.assertEqual(self.decide(comando), ("commit-fuga", ["config.local"]))
-        self.assertEqual(self.decide("git commit -m x .gitignore"), (None, None))
+                self.assertEqual(self.decide(comando), (None, None))
+        self.escribe("build/nuevo.js", "x\n")
+        self.git("add", "-f", "build/nuevo.js")
+        self.assertEqual(self.decide("git commit -am x"), ("commit-fuga", ["build/nuevo.js"]))
 
     def test_sigue_cd_y_dash_c(self):
         self.escribe(".env", "SECRETO=1\n")
@@ -645,6 +669,24 @@ class Fugas(unittest.TestCase):
         motivo = json.loads(r.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
         self.assertIn("llevaría .env, que", motivo)
         self.assertIn("git restore --staged", motivo)
+
+    def test_no_ejecuta_la_configuracion_del_repo(self):
+        """G4 del PR #26: el hook corre fuera del sandbox, y el agente puede preparar un
+        gitdir con core.fsmonitor o un filtro clean. X-04 no debe ejecutarlos."""
+        testigo = os.path.join(self.dir.name, "EJECUTADO")
+        orden = os.path.join(self.dir.name, "orden.sh")
+        with open(orden, "w", encoding="utf-8") as f:
+            f.write(f"#!/bin/sh\ntouch {testigo}\ncat\n")
+        os.chmod(orden, 0o755)
+        with open(os.path.join(self.repo, ".git", "config"), "a", encoding="utf-8") as f:
+            f.write(f"[core]\n\tfsmonitor = {orden}\n[filter \"x\"]\n\tclean = {orden}\n")
+        self.escribe(".gitattributes", "*.py filter=x\n")
+        self.escribe("src/a.py", "a = 3\n")
+        for comando in ("git commit -m x", "git commit -am x", "git commit -m x src/a.py",
+                        "git add src/a.py && git commit -m x"):
+            with self.subTest(comando=comando):
+                self.decide(comando)
+                self.assertFalse(os.path.exists(testigo))
 
     def test_lista_corta(self):
         self.assertEqual(guarda.lista_corta(["a", "b"]), "a, b")

@@ -44,7 +44,7 @@ Ante la duda, elige el nivel más alto. Nunca bajes un nivel para ahorrar reviso
    - un solo nivel de riesgo marcado;
    - los AC de la entrega en formato `SPEC-XXX-NNN/AC-NN` (la CI los contrasta con la spec de `main` y con los tests);
    - en "Plan y progreso", una lista de pasos verificables, proporcional al cambio. Cada paso dice qué AC cubre o qué comprueba.
-4. **Cambios R0:** el plan puede ser una línea. También se abren en borrador; con la CI en verde, `gh pr ready N` lo quita.
+4. **Cambios R0:** el plan puede ser una línea. También se abren en borrador; con la CI en verde, `gh pr ready N` lo quita. Si no hubo `sdd-review`, el hook pregunta a la persona antes de quitarlo, porque no encuentra la línea «Métricas G4»: es lo esperado.
 
 ## Lo que no haces
 

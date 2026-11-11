@@ -92,7 +92,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-40 | No leer, copiar ni escribir secretos | A:62 | Mecánica | Probada: N6 y C20. Hueco: `~/.config/gh`, con el token del agente, no está en `deny` (obs. 10) | **Hook** (guarda de `.env`, X-02; el hueco de `gh` se propone en ajustes gestionados) |
 | REG-41 | No tocar `.github/workflows/`, ajustes de seguridad ni secretos | implement:73 | Mecánica | Probada: N5 | **Eliminar** (lo impone el token, que no tiene `workflow`) |
 | REG-42 | El estado de la entrega vive en la issue | A:66 | Criterio | No consta | **Instrucción** (`AGENTS.md`, mapa) |
-| REG-43 | PR en borrador desde el principio en R1 y R2 | A:67; plan:41 | Mecánica | Sí: wf#6 y #8 (R2), y wf#13 y #16 (R1), sin evento `ready_for_review` | **Hook** (`gh pr create` exige `--draft`) |
+| REG-43 | PR en borrador desde el principio en R1 y R2 | A:67; plan:41 | Mecánica | Sí: wf#6 y #8 (R2), y wf#13 y #16 (R1), sin evento `ready_for_review` | **Hook** (`gh pr create` exige `--draft`, también en R0, porque el hook no sabe el riesgo; decisión 6) |
 | REG-44 | Plan en el PR, con pasos verificables que se van marcando | A:67; plan:46; implement:48 | Criterio | No consta | **Instrucción** (`plan` y `implement`) |
 | REG-45 | Si la sesión se interrumpe, guardar el estado en `.tareas/<ID>.md` | A:68; implement:54 | Criterio | No consta | **Instrucción** (`implement`) |
 | REG-46 | Borrar `.tareas/<ID>.md` al cerrar la tarea | A:68; implement:68 | Mecánica | Sí: `.tareas/VIC-12.md` seguía con VIC-12 en Done (recorrido-1, C18) | **Instrucción** (`implement`, hasta `sdd-status`, M41; detectarlo exige leer Linear) |
@@ -142,7 +142,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-90 | En R2, valorar property-based, fuzz y mutación | implement:39-42 | Criterio | No consta | **Instrucción** (`implement`; bloque 3, M26) |
 | REG-91 | En R2, evidencia de los NFR y plan de vuelta atrás | implement:58 | Criterio | No consta | **Instrucción** (`implement`) |
 | REG-92 | Publicar la línea `Métricas mutación` | implement:59 | Mecánica | No determinable: wf#16 no la tiene y sin la sesión no se sabe si usó la skill. `sdd-metricas` marca "⚠ sin línea" | **Instrucción** (`implement`; el control ya está en `sdd-metricas`) |
-| REG-93 | Nunca meter el cuerpo del comentario en la orden de Bash, en un heredoc sin comillas ni en `--body "…"` | implement:59; review:69 | Mecánica | No consta | **Hook** (`gh pr comment` y `gh pr edit` solo con `--body-file`) |
+| REG-93 | Nunca meter el cuerpo del comentario en la orden de Bash, en un heredoc sin comillas ni en `--body "…"` | implement:59; review:69 | Mecánica | No consta | **Hook** (`gh pr comment` y `gh pr edit` solo con `--body-file`; también `create`, `review`, `merge` y `close` de `pr` e `issue`, y `-f body=` en `gh api`) |
 | REG-94 | Modelo del revisor: Sonnet; en R2, el de seguridad con Opus | review:20 | Mecánica | No consta | **Instrucción** (`review`; sin la justificación histórica) |
 | REG-95 | Lista única de lo que recibe cada revisor | review:26-32 | Criterio | Probada: N8 | **Instrucción** (`review`) |
 | REG-96 | Pedir al revisor que busque tests debilitados | review:34 | Criterio | Probada: lo cazó en calc#5 | **Instrucción** (mejor en `agents/reviewer.md`; bloque 4) |
@@ -151,7 +151,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-99 | Hasta 3 rondas | review:49 | Mecánica | No consta. `sdd-metricas` ya cuenta las rondas | **Instrucción** (`review`) |
 | REG-100 | Lista exacta de lo que cambia tras la última ronda | review:50 | Mecánica | Sí: calc#16, 10 cambios sin lista (obs. 6, M8) | **CI** (nuevo: aviso; bloque 4) |
 | REG-101 | Publicar la línea `Métricas G4` en cada ronda | review:53-71 | Mecánica | No consta desde que existe (wf#15 y #16 la llevan) | **Instrucción** (`review`; el control ya está en `sdd-metricas`) |
-| REG-102 | Quitar el borrador solo sin hallazgos y con la CI en verde | review:75 | Mecánica | Sí: `checks-sdd` quedó cancelado y el agente no lo vio (calc#19, obs. 2; avisos en VIC-12) | **Hook** (`gh pr ready` comprueba los checks, M5) |
+| REG-102 | Quitar el borrador solo sin hallazgos y con la CI en verde | review:75 | Mecánica | Sí: `checks-sdd` quedó cancelado y el agente no lo vio (calc#19, obs. 2; avisos en VIC-12) | **Hook** (`gh pr ready` comprueba los checks, M5, y además conflictos y que la rama local esté subida; sin línea «Métricas G4», pregunta) |
 | REG-103 | Los PR que abre Claude desde el navegador (workflows, `managed-settings`) pasan `sdd-review` por el agente antes de que Víctor los fusione | Regla nueva (2026-11-08); aún sin texto en `review` | Mecánica | Antes de la regla: los PR de REG-52 | **Instrucción** (`review`, por ahora) |
 
 ## Controles previstos que no tienen regla escrita
@@ -178,6 +178,8 @@ Aparecen en VIC-17 o en las retrospectivas, pero no en `AGENTS.md`, `CLAUDE.md` 
 3. **M16:** se exige `--no-track` al crear ramas desde `origin/…` con `git switch -c` y `git checkout -b`, y de `git config` se bloquean solo las formas que escriben (X-01).
 4. **CI de M11:** admite `Fixes`, `Part of` y `Refs` (REG-33).
 5. **Controles de este bloque, además de la lista de VIC-17:** REG-43, REG-83, REG-93, REG-102 (M5), REG-49 y REG-34 (en `checks.py`), y REG-04 por la decisión 1. El resto de lo propuesto (REG-21, REG-29, REG-35, REG-39, REG-48 y REG-65) se queda como instrucción por ahora.
+
+6. **REG-43 también en R0** (2026-11-11, PR de la segunda tanda de hooks): el hook no sabe el riesgo, así que todo PR se abre en borrador y se quita con `gh pr ready`. Cambian `sdd-plan`, `AGENTS.md` y la plantilla de PR. Pendiente de la aprobación de Víctor en ese PR.
 
 ## Regla nueva (2026-11-08)
 

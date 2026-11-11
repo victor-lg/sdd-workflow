@@ -20,6 +20,7 @@ import posixpath
 import re
 import subprocess
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -35,8 +36,12 @@ CORTAS_CON_VALOR = {
     ("pr", "create"): "aBbFHlmprtTR", ("pr", "new"): "aBbFHlmprtTR",
     ("pr", "comment"): "bFR", ("pr", "edit"): "BbFtR", ("pr", "review"): "bFR", ("pr", "merge"): "bFtAR",
     ("issue", "create"): "abFlmptTR", ("issue", "new"): "abFlmptTR", ("issue", "comment"): "bFR",
-    ("issue", "edit"): "bFtR",
+    ("issue", "edit"): "bFtR", ("pr", "close"): "cR", ("issue", "close"): "cR",
 }
+# Opciones que llevan el cuerpo en la propia orden; en close, el comentario.
+OPCIONES_CUERPO = {"b", "body"}
+OPCIONES_CUERPO_CLOSE = {"c", "comment"}
+VARIABLES_GH = re.compile(r"GH_(REPO|HOST|ENTERPRISE_TOKEN|TOKEN|CONFIG_DIR)=")
 LARGAS_CON_VALOR = dict.fromkeys(
     ("assignee", "base", "body", "body-file", "head", "label", "milestone", "project", "reviewer", "title",
      "template", "repo", "recover", "add-assignee", "remove-assignee", "add-label", "remove-label",
@@ -46,15 +51,28 @@ CORTAS_API = "fFHXqtp"
 LARGAS_API = dict.fromkeys(("field", "raw-field", "header", "method", "jq", "template", "input", "preview",
                             "hostname", "cache"), True)
 MUTACION_READY = "markPullRequestReadyForReview"
+# El hook corre fuera del sandbox y fuera de su lista de red: solo se pasa a gh un PR y
+# un repo de github.com con forma conocida (G4 del PR #26).
+SELECTOR = re.compile(r"^(\d+|https://github\.com/[\w.-]+/[\w.-]+/pull/\d+|[\w][\w./-]*)$")
+REPO = re.compile(r"^((https://)?github\.com/)?[\w.-]+/[\w.-]+$")
+GIT_SEGURO = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "--no-optional-locks")
+NOMBRE_SEGURO = re.compile(r"[^\w .:/()-]")
 
 
 class NoPuedoMirar(Exception):
     """gh no ha podido decir cómo está el PR."""
 
 
-def _gh(cwd, *args, conf):
+def _quedan(limite):
+    return limite - time.monotonic()
+
+
+def _gh(cwd, *args, conf, limite):
+    if _quedan(limite) < 1:
+        raise NoPuedoMirar("sin tiempo")
     try:
-        r = subprocess.run(["gh", *args], cwd=cwd, capture_output=True, text=True, timeout=conf["segundos_gh"])
+        r = subprocess.run(["gh", *args], cwd=cwd, capture_output=True, text=True,
+                           timeout=min(conf["segundos_gh"], _quedan(limite)))
     except (OSError, subprocess.SubprocessError) as e:
         raise NoPuedoMirar(str(e))
     if r.returncode != 0:
@@ -65,7 +83,7 @@ def _gh(cwd, *args, conf):
 def _git(cwd, *args):
     """La salida de git, o None si no se puede saber (fuera de un repo, cabeza suelta…)."""
     try:
-        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=3)
+        r = subprocess.run(["git", *GIT_SEGURO, "-C", cwd, *args], capture_output=True, text=True, timeout=3)
     except (OSError, subprocess.SubprocessError):
         return None
     return r.stdout.strip() if r.returncode == 0 else None
@@ -82,10 +100,10 @@ def regla_create(grupo, accion, args):
 
 def regla_cuerpo(grupo, accion, args, analisis, ordenes_previas):
     encontradas, _ = opciones(args, CORTAS_CON_VALOR[(grupo, accion)], LARGAS_CON_VALOR, abreviadas=False)
-    if nombres(encontradas) & {"b", "body"}:
+    if nombres(encontradas) & (OPCIONES_CUERPO_CLOSE if accion == "close" else OPCIONES_CUERPO):
         return "cuerpo-en-la-orden"
     desde_entrada = any(n in ("F", "body-file") and v == "-" for n, v in encontradas)
-    if desde_entrada and (analisis.heredocs_expandidos or ordenes_previas & {"echo", "printf"}):
+    if desde_entrada and (analisis.heredocs_expandidos or analisis.cadenas or ordenes_previas & {"echo", "printf"}):
         return "cuerpo-en-la-orden"
     return None
 
@@ -103,7 +121,8 @@ def regla_api(args):
 
 
 def _nombre_check(check):
-    return check.get("name") or check.get("context") or "?"
+    """El nombre llega al modelo en el mensaje: corto y sin caracteres raros."""
+    return NOMBRE_SEGURO.sub("", str(check.get("name") or check.get("context") or "?"))[:60] or "?"
 
 
 def _ultimos(checks):
@@ -119,17 +138,20 @@ def _ultimos(checks):
     return [check for _, check in ultimos.values()]
 
 
-def regla_ready(args, cwd, conf):
+def regla_ready(args, cwd, conf, limite, entorno_gh=False):
     """Devuelve (regla, checks implicados) o (None, None)."""
     encontradas, posicionales = opciones(args, "R", {"repo": True, "undo": False}, abreviadas=False)
     if "undo" in nombres(encontradas):
         return None, None
-    if "$" in cwd:
+    repos = [v for n, v in encontradas if n in ("R", "repo")]
+    if entorno_gh or "$" in cwd or len(posicionales) > 1 or not all(map(SELECTOR.match, posicionales)) or \
+            len(repos) > 1 or not all(map(REPO.match, repos)) or nombres(encontradas) - {"R", "repo"}:
         return "ready-sin-mirar", None
-    repo = [a for n, v in encontradas if n in ("R", "repo") for a in ("--repo", v)]
+    repo = ["--repo", repos[0]] if repos else []
     campos = "isDraft,headRefName,headRefOid,mergeable,statusCheckRollup,comments"
     try:
-        pr = json.loads(_gh(cwd, "pr", "view", *posicionales[:1], *repo, "--json", campos, conf=conf))
+        pr = json.loads(_gh(cwd, "pr", "view", *repo, "--json", campos, "--", *posicionales,
+                            conf=conf, limite=limite))
     except (NoPuedoMirar, ValueError):
         return "ready-sin-mirar", None
     if not pr.get("isDraft"):
@@ -158,7 +180,7 @@ def regla_ready(args, cwd, conf):
             return regla, sorted(set(lista))
     if pr.get("mergeable") == "CONFLICTING":
         return "ready-conflictos", None
-    if not posicionales and not repo:  # El PR de la rama actual: la rama local tiene que estar subida.
+    if not repo:  # Si el PR es el de la rama actual, la rama local tiene que estar subida.
         if _git(cwd, "symbolic-ref", "--short", "-q", "HEAD") == pr.get("headRefName") and \
                 _git(cwd, "rev-parse", "HEAD") != pr.get("headRefOid"):
             return "ready-sin-push", None
@@ -177,7 +199,10 @@ def decidir(comando, cwd, conf):
     except NoAnalizable:
         return ("sin-analizar" if "gh" in comando else None), None
     candidata, previas = (None, None), set()
+    limite = time.monotonic() + conf["max_segundos_analisis"]
     for palabras in analisis.ordenes:
+        if _quedan(limite) < 0:  # Antes de que el timeout del hook deje pasar la orden.
+            return "sin-analizar", None
         efectiva = orden_efectiva(palabras)
         primera = posixpath.basename(efectiva[0]) if efectiva else ""
         if primera in ("pushd", "popd"):
@@ -189,10 +214,14 @@ def decidir(comando, cwd, conf):
         elif primera in ("gh", "gh.exe") and len(efectiva) >= 2:
             grupo, accion, args = efectiva[1], (efectiva[2:3] or [""])[0], efectiva[3:]
             resultado = (None, None)
-            if grupo == "api":
+            # GH_REPO y compañía cambian a qué repo o host pregunta gh: la consulta no sería la del PR.
+            entorno_gh = any(VARIABLES_GH.match(p) for p in palabras[:len(palabras) - len(efectiva)])
+            if {"-h", "--help"} & set(efectiva):
+                pass
+            elif grupo == "api":
                 resultado = (regla_api(efectiva[2:]), None)
             elif grupo == "pr" and accion == "ready":
-                resultado = regla_ready(args, cwd, conf)
+                resultado = regla_ready(args, cwd, conf, limite, entorno_gh)
             elif (grupo, accion) in CORTAS_CON_VALOR:
                 regla = regla_cuerpo(grupo, accion, args, analisis, previas)
                 if not regla and grupo == "pr" and accion in ("create", "new"):

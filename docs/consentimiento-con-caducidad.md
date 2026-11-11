@@ -19,19 +19,20 @@ La idea sale de baseline (`historial/analisis-herramientas-1.md` §16): un hook 
 1. **La persona escribe** `/permitir <acción> <objetivo>` como único contenido de un mensaje. Por ejemplo: `/permitir fusionar 54` o `/permitir mover VIC-55 Done`. Las acciones posibles están en `reglas-consentimiento.json`.
 2. **Un hook `UserPromptSubmit`** (`consentimiento.py`) lee el mensaje antes que el modelo:
    - comprueba que el mensaje es solo esa línea;
-   - comprueba que la acción existe;
+   - comprueba que la acción existe y que el objetivo tiene la forma esperada (`^\d+$`, `^VIC-\d+$`) antes de usarlo en el nombre de la marca: nada de `../`;
    - para `fusionar`, consulta con `gh` el SHA de la cabeza del PR;
    - escribe la marca y responde con un `systemMessage` que dice qué se ha permitido y hasta cuándo.
    
    Si algo falla, no escribe nada y lo dice.
 3. **La marca** es un fichero JSON en `~/.claude/sdd-consentimientos/<id del repo>/<acción>-<objetivo>.json`. Lleva acción, objetivo, repo (raíz y URL de `origin`), `session_id`, hora de creación y caducidad, usos restantes (1) y, para `fusionar`, el SHA de la cabeza del PR.
 4. **El hook que guarda la acción** (por ejemplo, `guarda-gh.py` ante `gh pr merge 54`) busca una marca válida:
-   - mismo repo, acción y objetivo;
+   - mismo repo, acción y objetivo, resueltos igual que en la marca: si la orden lleva `-R`, una URL o no lleva número, se resuelve a repo y PR antes de comparar, o se bloquea;
+   - la misma sesión (`session_id`): un permiso no sirve en otra sesión, tampoco en otro worktree;
    - sin caducar;
    - con usos restantes;
    - para `fusionar`, la cabeza del PR sigue en el SHA de la marca.
    
-   Si la encuentra, la consume con un `rename` atómico a `.usada` y deja pasar la orden. Si no, bloquea: "pide a la persona `/permitir fusionar 54`".
+   Si la encuentra, la consume con un `rename` atómico a `.usada` y deja pasar la orden. Si no, bloquea: "pide a la persona `/permitir fusionar 54`". Para `fusionar`, la orden tiene que llevar `--match-head-commit <SHA de la marca>`: si alguien empuja entre la comprobación y la fusión, GitHub la rechaza.
 5. **Caducidad por defecto:** 10 minutos y un solo uso. Se puede acortar en el JSON; alargarla no se ofrece en el mensaje.
 
 ## Cómo podría falsificarlo el agente, y qué lo impide
@@ -39,7 +40,9 @@ La idea sale de baseline (`historial/analisis-herramientas-1.md` §16): un hook 
 | Vía | Defensa |
 | --- | --- |
 | Escribir la marca con Bash | `~/.claude/` no está en la lista de escritura del sandbox. Además, la guarda de ficheros bloquea cualquier mención a `sdd-consentimientos` en Bash (segunda capa) |
-| Escribirla con Write o Edit, que no pasan por el sandbox | Se propone `deny` de `Write(~/.claude/sdd-consentimientos/**)` y `Edit(~/.claude/sdd-consentimientos/**)` en los ajustes gestionados (lo aplica Víctor), más una regla de `guarda-ficheros.py` |
+| Escribirla con Write, Edit, MultiEdit o NotebookEdit, que no pasan por el sandbox | Se propone `deny` de las cuatro sobre `~/.claude/sdd-consentimientos/**` en los ajustes gestionados (lo aplica Víctor), más una regla de `guarda-ficheros.py` que compara la ruta ya resuelta (`realpath`): un enlace dentro del proyecto a `~/.claude` no la esquiva |
+| Un servidor MCP local que escribe ficheros, que también corre fuera del sandbox | Ninguno aprobado hoy (`docs/herramientas.md`). Si se aprueba uno, su entrada dice si puede escribir en `~/.claude/` |
+| Que el modelo lance `/permitir` con su propia herramienta de órdenes, o se lo encargue a un subagente | `commands/permitir.md` con `disable-model-invocation: true`. **Por comprobar antes de activar:** que esa vía y los encargos a subagentes no disparan `UserPromptSubmit` |
 | Generar un mensaje que parezca de la persona: `ScheduleWakeup`, `CronCreate`, `/loop`, `RemoteTrigger`, mensajes de otras sesiones | **Por comprobar antes de activar:** si la entrada de `UserPromptSubmit` distingue un mensaje escrito por la persona de uno programado. Si no lo distingue, esas herramientas van a `deny` en los ajustes gestionados mientras X-10 esté activo. Si tampoco se puede, X-10 no se activa |
 | Que la persona pegue un texto ajeno (una issue, un comentario) que contiene `/permitir …` | Solo vale si el mensaje es únicamente esa línea. Un texto pegado con más contenido no da permiso |
 | Usar un permiso para otra cosa | La marca nombra la acción y el objetivo. Para `fusionar` lleva el SHA: un push posterior al permiso lo invalida |
@@ -58,7 +61,10 @@ Si cualquier comprobación no puede hacerse (marca ilegible, `gh` sin red, JSON 
 - **Tests:**
   - falsificar la marca por Write, Edit y Bash;
   - una marca caducada, una ya usada, otra acción, otro objetivo u otro repo;
-  - un SHA distinto;
+  - un SHA distinto, y la orden sin `--match-head-commit`;
+  - otra sesión;
+  - un objetivo con `../` o `-R` hacia otro repo;
+  - un enlace del proyecto a `~/.claude`;
   - un mensaje con más texto;
   - dos consumos a la vez;
   - `gh` sin red.

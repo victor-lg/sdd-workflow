@@ -16,7 +16,7 @@ _spec = importlib.util.spec_from_file_location("guarda_linear", RUTA)
 guarda = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(guarda)
 CONF = json.loads((HOOKS / "reglas-linear.json").read_text(encoding="utf-8"))
-SERVIDORES = ("mcp__linear__", "mcp__claude_ai_Linear__", "mcp__plugin_linear_linear__")
+SERVIDORES = ("mcp__linear__", "mcp__claude_ai_Linear__", "mcp__plugin_linear_linear__", "mcp__LINEAR__")
 
 BLOQUEADAS = [
     "save_issue", "create_issue", "update_issue", "delete_issue", "archive_issue", "create_issue_label",

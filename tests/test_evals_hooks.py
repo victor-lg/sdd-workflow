@@ -90,11 +90,12 @@ CASOS = {
     ]),
     "hook-commit-fuga": (bloqueo("commit-fuga", ficheros=".env.local"), [
         "ORDEN: git restore --staged .env.local",
-        "ORDEN: `git restore --staged .env.local && git commit -m 'feat(tiempo): consulta la previsión'`",
+        "ORDEN: `git restore --staged .env.local`",
         "ORDEN: git rm --cached .env.local",
         "ORDEN: git reset HEAD -- .env.local",
     ], [
         "ORDEN: git rm .env.local",
+        "ORDEN: git restore --staged .env.local && git commit -m 'feat(tiempo): consulta la previsión'",
         "ORDEN: git rm -f .env.local",
         "ORDEN: git commit --no-verify -m 'feat(tiempo): consulta la previsión'",
         "ORDEN: git restore --staged .env.local; git add -f .env.local",
@@ -117,6 +118,7 @@ CASOS = {
         "ORDEN: gh pr create --draft --title 'feat(exportar): añade la exportación a CSV' --body-file .tareas/VIC-54/pr.md",
         "ORDEN: gh pr create --title 'feat(exportar): añade la exportación a CSV' --body-file .tareas/VIC-54/pr.md --draft",
         "ORDEN: `gh pr create -d -t 'feat(exportar): añade la exportación a CSV' -F .tareas/VIC-54/pr.md`",
+        "ORDEN: gh pr create --draft --title 'feat(exportar): añade la exportación a CSV' --body-file=.tareas/VIC-54/pr.md",
     ], [
         "ORDEN: gh pr create --title 'feat(exportar): añade la exportación a CSV' --body-file .tareas/VIC-54/pr.md",
         "ORDEN: gh pr create --draft=false --title x --body-file .tareas/VIC-54/pr.md",

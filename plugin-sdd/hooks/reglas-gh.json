@@ -1,6 +1,7 @@
 {
   "max_caracteres_orden": 200000,
   "segundos_gh": 10,
+  "max_segundos_analisis": 20,
   "conclusiones_buenas": ["SUCCESS", "SKIPPED", "NEUTRAL"],
   "linea_g4": "^[ \\t]*Métricas G4: PR #\\d+ · ronda \\d+ ·",
   "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, gh api, scripts). Si crees que aquí no aplica, díselo a la persona.",

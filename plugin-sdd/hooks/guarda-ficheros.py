@@ -3,7 +3,7 @@
 
 - X-02: no escribir, copiar, mover ni borrar ficheros .env*, salvo plantillas
   (.env.example…), ni con Write, Edit o NotebookEdit ni por Bash.
-- REG-40: leerlos con Read o mencionarlos en otra orden de Bash pregunta a la persona.
+- REG-40: leerlos con Read o Grep o mencionarlos en otra orden de Bash pregunta a la persona.
 - X-06 (M12): capturas y ficheros de trabajo dentro del repo, nunca en /tmp ni en
   $TMPDIR. Write, Edit y NotebookEdit no escriben ahí, y Bash no los menciona.
 
@@ -47,15 +47,21 @@ def es_temporal(ruta, cwd, conf):
     if "$" in ruta:
         return False
     completa = juntar(cwd, ruta)
-    if completa == cwd or completa.startswith(cwd.rstrip("/") + "/"):
+    if cwd != "/" and (completa == cwd or completa.startswith(cwd + "/")):
         return False
     return any(completa == c or completa.startswith(c + "/") for c in temporales["carpetas"])
 
 
 def _candidatas(palabra):
-    """La palabra y, si lleva =, lo que va detrás (--path=/tmp/x, of=/tmp/x)."""
+    """La palabra; si lleva =, lo que va detrás (--path=/tmp/x, of=/tmp/x); y si es una
+    opción corta con el valor pegado, el valor (-o/tmp/x)."""
+    candidatas = [palabra]
     _, igual, valor = palabra.partition("=")
-    return [palabra, valor] if igual and valor else [palabra]
+    if igual and valor:
+        candidatas.append(valor)
+    if len(palabra) > 2 and palabra[0] == "-" and palabra[1] != "-":
+        candidatas.append(palabra[2:])
+    return candidatas
 
 
 def decidir_bash(comando, cwd, conf):
@@ -94,6 +100,12 @@ def decidir_bash(comando, cwd, conf):
 
 
 def decidir_fichero(herramienta, entrada, cwd, conf):
+    if herramienta == "Grep":  # Con output_mode content, Grep devuelve el contenido.
+        for clave in ("path", "glob"):
+            valor = entrada.get(clave)
+            if isinstance(valor, str) and es_env(valor, conf):
+                return "env-lee", valor
+        return None, None
     ruta = entrada.get("notebook_path") if herramienta == "NotebookEdit" else entrada.get("file_path")
     if not isinstance(ruta, str) or not ruta:
         raise ValueError("sin ruta")
