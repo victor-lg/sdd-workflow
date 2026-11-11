@@ -24,7 +24,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from lector_bash import NoAnalizable, analizar_todo, juntar, nombres, opciones, orden_efectiva
+    from lector_bash import NoAnalizable, analizar_todo, cambia_de_carpeta, juntar, nombres, opciones, orden_efectiva
     ERROR_DE_CARGA = None
 except Exception as e:  # Sin el lector, main() falla cerrado.
     ERROR_DE_CARGA = e
@@ -41,7 +41,13 @@ CORTAS_CON_VALOR = {
 # Opciones que llevan el cuerpo en la propia orden; en close, el comentario.
 OPCIONES_CUERPO = {"b", "body"}
 OPCIONES_CUERPO_CLOSE = {"c", "comment"}
-VARIABLES_GH = re.compile(r"(GH_(REPO|HOST|CONFIG_DIR)|GITHUB_REPOSITORY)(=|$)")
+VARIABLES_GH = re.compile(
+    r"(GH_(REPO|HOST|CONFIG_DIR)|GITHUB_REPOSITORY|GIT_(DIR|WORK_TREE|COMMON_DIR|CEILING_DIRECTORIES|CONFIG\w*))(=|$)")
+AYUDA = {"h", "help"}
+
+
+def _falso(valor):
+    return valor.lower() in ("false", "0", "f")
 LARGAS_CON_VALOR = dict.fromkeys(
     ("assignee", "base", "body", "body-file", "head", "label", "milestone", "project", "reviewer", "title",
      "template", "repo", "recover", "add-assignee", "remove-assignee", "add-label", "remove-label",
@@ -95,31 +101,43 @@ def _git(cwd, *args):
 
 def regla_create(grupo, accion, args):
     encontradas, _ = opciones(args, CORTAS_CON_VALOR[(grupo, accion)], LARGAS_CON_VALOR, abreviadas=False)
+    if nombres(encontradas) & AYUDA:  # Como opción, no como valor de otra: la ayuda no crea nada.
+        return None
     borrador = False
     for nombre, valor in encontradas:
         if nombre in ("d", "draft"):
-            borrador = valor.lower() not in ("false", "0", "f")
+            borrador = not _falso(valor)
     return None if borrador else "pr-sin-borrador"
 
 
 def regla_cuerpo(grupo, accion, args, analisis, ordenes_previas):
     encontradas, _ = opciones(args, CORTAS_CON_VALOR[(grupo, accion)], LARGAS_CON_VALOR, abreviadas=False)
+    if nombres(encontradas) & AYUDA:
+        return None
     if nombres(encontradas) & (OPCIONES_CUERPO_CLOSE if accion == "close" else OPCIONES_CUERPO):
         return "cuerpo-en-la-orden"
     desde_entrada = any(n in ("F", "body-file") and v == "-" for n, v in encontradas)
-    if desde_entrada and (analisis.heredocs_expandidos or analisis.cadenas or ordenes_previas & {"echo", "printf"}):
+    if desde_entrada and _cuerpo_por_la_entrada(analisis, ordenes_previas):
         return "cuerpo-en-la-orden"
     return None
 
 
-def regla_api(args):
+def _cuerpo_por_la_entrada(analisis, ordenes_previas):
+    return analisis.heredocs_expandidos or analisis.cadenas or ordenes_previas & {"echo", "printf"}
+
+
+def regla_api(args, analisis, ordenes_previas):
+    encontradas, _ = opciones(args, CORTAS_API, LARGAS_API, abreviadas=False)
     if any(MUTACION_READY in a for a in args):
         return "ready-por-api"
-    encontradas, _ = opciones(args, CORTAS_API, LARGAS_API, abreviadas=False)
+    if nombres(encontradas) & AYUDA:
+        return None
     for nombre, valor in encontradas:
         clave, _, contenido = valor.partition("=")
         if nombre in ("f", "F", "field", "raw-field") and clave == "body":
             if not (nombre in ("F", "field") and contenido.startswith("@")):
+                return "cuerpo-en-la-orden"
+            if contenido == "@-" and _cuerpo_por_la_entrada(analisis, ordenes_previas):
                 return "cuerpo-en-la-orden"
     return None
 
@@ -145,8 +163,9 @@ def _ultimos(checks):
 def regla_ready(args, cwd, conf, limite, entorno_gh=False):
     """Devuelve (regla, checks implicados) o (None, None)."""
     encontradas, posicionales = opciones(args, "R", {"repo": True, "undo": False}, abreviadas=False)
-    if "undo" in nombres(encontradas):
+    if nombres(encontradas) & AYUDA or any(n == "undo" and not _falso(v) for n, v in encontradas):
         return None, None
+    encontradas = [(n, v) for n, v in encontradas if n != "undo"]  # --undo=false es quitar el borrador.
     repos = [v for n, v in encontradas if n in ("R", "repo")]
     if entorno_gh or "$" in cwd or len(posicionales) > 1 or not all(map(SELECTOR.match, posicionales)) or \
             len(repos) > 1 or not all(map(REPO.match, repos)) or nombres(encontradas) - {"R", "repo"}:
@@ -215,17 +234,22 @@ def decidir(comando, cwd, conf):
             destinos = [a for a in efectiva[1:] if not a.startswith("-")]
             cwd = juntar(cwd, destinos[0]) if len(destinos) == 1 and destinos[0] != "-" else "$"
         elif primera in ("gh", "gh.exe") and len(efectiva) >= 2:
-            grupo, accion, args = efectiva[1], (efectiva[2:3] or [""])[0], efectiva[3:]
+            grupo, i, previas_accion = efectiva[1], 2, []
+            # Opciones entre el grupo y la acción (gh pr -R o/r ready 54): cobra las admite.
+            while grupo in ("pr", "issue") and i < len(efectiva) and efectiva[i].startswith("-"):
+                salto = 2 if efectiva[i] in ("-R", "--repo") else 1
+                previas_accion += efectiva[i:i + salto]
+                i += salto
+            accion, args = (efectiva[i:i + 1] or [""])[0], efectiva[i + 1:] + previas_accion
             resultado = (None, None)
+            orden_cwd = "$" if cambia_de_carpeta(palabras) else cwd
             # GH_REPO y compañía, en cualquier parte de la orden (también con export), cambian
             # a qué repo o host pregunta gh: la consulta no sería la del PR.
             entorno_gh = any(VARIABLES_GH.match(p) for orden in analisis.ordenes for p in orden)
-            if {"-h", "--help"} & set(efectiva):
-                pass
-            elif grupo == "api":
-                resultado = (regla_api(efectiva[2:]), None)
+            if grupo == "api":
+                resultado = (regla_api(efectiva[2:], analisis, previas), None)
             elif grupo == "pr" and accion == "ready":
-                resultado = regla_ready(args, cwd, conf, limite, entorno_gh)
+                resultado = regla_ready(args, orden_cwd, conf, limite, entorno_gh)
             elif (grupo, accion) in CORTAS_CON_VALOR:
                 regla = regla_cuerpo(grupo, accion, args, analisis, previas)
                 if not regla and grupo == "pr" and accion in ("create", "new"):

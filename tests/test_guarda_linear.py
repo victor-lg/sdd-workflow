@@ -22,7 +22,8 @@ BLOQUEADAS = [
     "save_issue", "create_issue", "update_issue", "delete_issue", "archive_issue", "create_issue_label",
     "save_project", "update_project", "create_attachment", "delete_attachment", "delete_comment",
     "save_document", "create_document", "update_document", "save_milestone", "create_issue_relation",
-    "set_issue_status", "assign_issue", "herramienta_nueva", "getter_que_escribe",
+    "set_issue_status", "assign_issue", "herramienta_nueva", "getter_que_escribe", "get_or_create_issue",
+    "list_and_update_issues", "get_issue_set_status",
 ]
 PERMITIDAS = [
     "get_issue", "list_issues", "list_comments", "get_issue_status", "list_issue_statuses", "search_documentation",
@@ -43,6 +44,20 @@ class Guarda(unittest.TestCase):
             for herramienta in PERMITIDAS:
                 with self.subTest(nombre=servidor + herramienta):
                     self.assertIsNone(guarda.decidir(servidor + herramienta, {"issueId": "VIC-1", "body": "x"}, CONF))
+
+    def test_las_lecturas_del_mcp_actual_pasan(self):
+        """Las herramientas de lectura que expone hoy el MCP de Linear (2026-11-12)."""
+        for herramienta in ("extract_images", "get_agent_skill", "get_attachment", "get_diff", "get_diff_threads",
+                            "get_document", "get_issue", "get_issue_status", "get_milestone", "get_notifications",
+                            "get_project", "get_release", "get_release_note", "get_status_updates", "get_team",
+                            "get_template", "get_triage_responsibility", "get_user", "get_workspace",
+                            "list_agent_skills", "list_comments", "list_custom_views", "list_cycles", "list_diffs",
+                            "list_documents", "list_issue_labels", "list_issue_statuses", "list_issues",
+                            "list_milestones", "list_project_labels", "list_projects", "list_release_notes",
+                            "list_release_pipelines", "list_releases", "list_teams", "list_templates", "list_users",
+                            "search_documentation"):
+            with self.subTest(herramienta=herramienta):
+                self.assertIsNone(guarda.decidir("mcp__linear__" + herramienta, {"id": "x"}, CONF))
 
     def test_editar_un_comentario_existente_no_es_comentar(self):
         self.assertEqual(guarda.decidir("mcp__linear__save_comment", {"id": "abc", "body": "x"}, CONF),
@@ -84,6 +99,16 @@ class Principal(unittest.TestCase):
         self.assertEqual(salida["permissionDecision"], "deny")
         self.assertIn("En su lugar:", salida["permissionDecisionReason"])
         self.assertIn("(mcp__linear__save_issue)", salida["permissionDecisionReason"])
+
+    def test_respeta_el_nivel(self):
+        with tempfile.TemporaryDirectory() as d:
+            copia = pathlib.Path(d) / "guarda-linear.py"
+            copia.write_text(RUTA.read_text(encoding="utf-8"), encoding="utf-8")
+            conf = json.loads(json.dumps(CONF))
+            conf["reglas"]["solo-comentar"]["nivel"] = "preguntar"
+            (pathlib.Path(d) / "reglas-linear.json").write_text(json.dumps(conf), encoding="utf-8")
+            salida = json.loads(self.ejecuta(json.dumps({"tool_name": "mcp__linear__save_issue"}), copia))
+        self.assertEqual(salida["hookSpecificOutput"]["permissionDecision"], "ask")
 
     def test_entrada_rota_o_sin_reglas_falla_cerrado(self):
         for entrada in ("", "{}", "[]"):

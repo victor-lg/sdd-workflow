@@ -25,7 +25,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from lector_bash import NoAnalizable, analizar, juntar, opciones, orden_efectiva
+    from lector_bash import NoAnalizable, analizar, cambia_de_carpeta, juntar, opciones, orden_efectiva
     from lector_bash import nombres as _nombres
     ERROR_DE_CARGA = None
 except Exception as e:  # Sin el lector, main() falla cerrado.
@@ -305,7 +305,7 @@ def anadidos_por_add(args, cwd):
     return [(juntar(cwd, ruta), forzado) for ruta in posicionales]
 
 
-def regla_commit(args, cwd, anadidos, conf):
+def regla_commit(args, cwd, anadidos, conf, sesion=None):
     """X-04. Devuelve ("commit-fuga", rutas) si el commit llevaría algo que .gitignore
     excluye o que nunca debe subirse. anadidos son las rutas absolutas de los git add
     anteriores de la misma orden, que aún no están preparadas cuando corre el hook."""
@@ -313,6 +313,14 @@ def regla_commit(args, cwd, anadidos, conf):
         raise NoPuedoMirar("ruta dinámica")
     encontradas, posicionales = opciones(args, "mFCct", LARGAS_COMMIT)
     raiz = _git(cwd, "rev-parse", "--show-toplevel")
+    if anadidos and sesion:
+        # Solo los git add dentro del repo de la sesión (no solo de su carpeta: puede estar en
+        # una subcarpeta): fuera, un repo preparado haría listar nombres de ficheros ajenos.
+        try:
+            propio = _git(sesion, "rev-parse", "--show-toplevel")
+        except NoPuedoMirar:
+            propio = sesion
+        anadidos = [a for a in anadidos if _dentro(a[0], propio)]
     rutas = _rutas(_git_entrada(cwd, None, "diff", "--cached", "--no-relative", "--no-ext-diff", "--no-textconv",
                                 "--name-only", "-z", "--diff-filter=d"))
     preparadas = set(rutas)
@@ -350,7 +358,7 @@ def regla_commit(args, cwd, anadidos, conf):
     return ("commit-fuga" if set(fugas) & preparadas else "commit-fuga-todo", fugas)
 
 
-def _regla_de(sub, args, ajustes, cwd, previas, conf, anadidos=(), otro_repo=False):
+def _regla_de(sub, args, ajustes, cwd, previas, conf, anadidos=(), otro_repo=False, sesion=None):
     if sub == "push":
         return regla_push(args, ajustes)
     if sub in ("fetch", "pull"):
@@ -367,7 +375,7 @@ def _regla_de(sub, args, ajustes, cwd, previas, conf, anadidos=(), otro_repo=Fal
         try:
             if otro_repo:
                 raise NoPuedoMirar("otro repo u otro índice")
-            return regla_commit(args, cwd, anadidos, conf)
+            return regla_commit(args, cwd, anadidos, conf, sesion)
         except NoPuedoMirar:
             return "commit-sin-mirar"
     return None
@@ -407,11 +415,11 @@ def decidir_con_detalle(comando, cwd, conf):
         if separado is None:
             continue
         sub, args, directorios, ajustes = separado
-        cwd_git = cwd
+        cwd_git = "$" if cambia_de_carpeta(palabras) else cwd
         for directorio in directorios:
             cwd_git = juntar(cwd_git, directorio)
         try:
-            regla = _regla_de(sub, args, ajustes, cwd_git, previas, conf, anadidos, otro_repo)
+            regla = _regla_de(sub, args, ajustes, cwd_git, previas, conf, anadidos, otro_repo, sesion)
         except NoPuedoMirar:
             regla = "sin-mirar"
         regla, detalle = regla if isinstance(regla, tuple) else (regla, None)
@@ -421,8 +429,7 @@ def decidir_con_detalle(comando, cwd, conf):
         if sub in ("fetch", "pull") and _trae_main(args, conf):
             previas.add((sub, cwd_git))
         if sub in ("add", "stage"):
-            # Solo dentro de la carpeta de la sesión: fuera, el hook listaría nombres de ficheros ajenos.
-            anadidos += [a for a in anadidos_por_add(args, cwd_git) if _dentro(a[0], sesion)]
+            anadidos += anadidos_por_add(args, cwd_git)
     return candidata, None
 
 

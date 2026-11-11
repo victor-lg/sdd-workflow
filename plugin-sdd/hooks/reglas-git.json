@@ -8,7 +8,7 @@
   "rutas_que_abarcan_todo": ["*", "**", "**/*", ".*", "./*", "./**", ":", ":/", ":/.", ":/*", ":/**", ":(top)", ":(top).", ":(top)*", ":(glob)**", ":(glob)*", ":(top,glob)**", ":(top,glob)*"],
   "patron_pathspec_exclusion": "^:(!|\\^|\\([^)]*exclude)",
   "fugas": {
-    "nunca": [".env", ".env.*", ".envrc", "*.pem", "*.key", "*.p12", "*.pfx", "*.keystore", "*.jks", "id_rsa", "id_rsa.*", "id_dsa", "id_ecdsa", "id_ecdsa.*", "id_ed25519", "id_ed25519.*", ".npmrc", ".pypirc", ".netrc", ".git-credentials", ".tareas/*", ".claude/settings.local.json", ".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile", ".gitconfig", ".ripgreprc"],
+    "nunca": [".env", ".env.*", ".env-*", ".env_*", ".envrc", ".envrc.*", "*.pem", "*.key", "*.p12", "*.pfx", "*.keystore", "*.jks", "id_rsa", "id_rsa.*", "id_dsa", "id_ecdsa", "id_ecdsa.*", "id_ed25519", "id_ed25519.*", ".npmrc", ".pypirc", ".netrc", ".git-credentials", ".tareas/*", ".claude/settings.local.json", ".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile", ".gitconfig", ".ripgreprc"],
     "excepciones": "\\.(example|sample|template|dist|tpl|pub)$"
   },
   "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, scripts). Si crees que aquí no aplica, díselo a la persona.",
@@ -51,7 +51,7 @@
     },
     "commit-sin-mirar": {
       "nivel": "bloquear",
-      "mensaje": "X-04: no he podido comprobar qué lleva este commit. En su lugar: ejecútalo desde una carpeta del repo, con la ruta escrita tal cual, y si sigue fallando, díselo a la persona."
+      "mensaje": "X-04: no he podido comprobar qué lleva este commit: la carpeta no es un repo, la orden cambia de repo o de índice (--git-dir, GIT_DIR, env -C, cd sin destino claro) o el repo es demasiado grande para mirarlo a tiempo con -a. En su lugar: ejecútalo desde una carpeta del repo, con la ruta escrita tal cual, preparando por nombre y sin -a; si sigue fallando, díselo a la persona."
     },
     "sin-analizar": {
       "nivel": "bloquear",

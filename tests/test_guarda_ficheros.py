@@ -3,11 +3,13 @@ Write, Edit, NotebookEdit y Read y su pareja en Bash. Formas que se bloquean, qu
 preguntan, que pasan y lo que el hook no pretende detectar."""
 import importlib.util
 import json
+import os
 import pathlib
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 HOOKS = RAIZ / "plugin-sdd" / "hooks"
@@ -91,6 +93,13 @@ BASH = {
         "ls /private/var/folders/ab/T/",
         "cat x | tee /tmp/copia",
         "curl -o/tmp/descarga.zip https://x",
+        "mktemp",
+        "mktemp -d",
+        "D=$(mktemp -d) && cp a $D",
+        "mktemp -t captura.XXXX",
+        "mktemp --tmpdir captura.XXXX",
+        "mktemp -p /tmp captura.XXXX",
+        "mktemp --tmpdir=/tmp captura.XXXX",
         "tar -C/tmp -xf a.tar",
     ],
 }
@@ -129,6 +138,9 @@ LEGITIMAS = [
     "cat <<'FIN'\ncp .env.example .env\necho x > /tmp/x\nFIN",
     "TMPDIR=/tmp/x npm test",
     "pytest -q",
+    "mktemp .tareas/VIC-1/captura.XXXX",
+    "mktemp -d -p .tareas trabajo.XXXX",
+    "mktemp --tmpdir=.tareas captura.XXXX",
 ]
 
 # Segunda capa, no seguridad: estas formas pasan y se documenta que pasan.
@@ -188,9 +200,30 @@ class GuardaBash(unittest.TestCase):
 
 
 class GuardaHerramientas(unittest.TestCase):
-    def decide(self, herramienta, ruta, cwd=CWD):
+    def decide(self, herramienta, ruta, cwd=CWD, proyecto=None):
         clave = "notebook_path" if herramienta == "NotebookEdit" else "file_path"
-        return guarda.decidir({"tool_name": herramienta, "tool_input": {clave: ruta}, "cwd": cwd}, CONF)[0]
+        entorno = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+        if proyecto:
+            entorno["CLAUDE_PROJECT_DIR"] = proyecto
+        with mock.patch.dict(os.environ, entorno, clear=True):
+            return guarda.decidir({"tool_name": herramienta, "tool_input": {clave: ruta}, "cwd": cwd}, CONF)[0]
+
+    def test_enlaces_del_proyecto(self):
+        """G4 del PR #26, ronda 3: un enlace a .env o a /tmp no esquiva la guarda."""
+        with tempfile.TemporaryDirectory() as d:
+            proyecto = os.path.join(d, "proyecto")
+            os.makedirs(proyecto)
+            os.symlink(os.path.join(proyecto, ".env"), os.path.join(proyecto, "config.txt"))
+            os.symlink("/tmp", os.path.join(proyecto, "salida"))
+            self.assertEqual(self.decide("Write", os.path.join(proyecto, "config.txt"), proyecto), "env-escribe")
+            self.assertEqual(self.decide("Read", "config.txt", proyecto), "env-lee")
+            self.assertEqual(self.decide("Write", "salida/captura.png", proyecto), "temporal")
+            self.assertIsNone(self.decide("Write", "notas.md", proyecto))
+
+    def test_la_carpeta_del_proyecto_manda(self):
+        """Si la sesión se ha movido a /tmp con cd, /tmp sigue fuera del proyecto."""
+        self.assertEqual(self.decide("Write", "/tmp/trabajo/a.md", "/tmp/trabajo", proyecto=CWD), "temporal")
+        self.assertIsNone(self.decide("Write", "/tmp/trabajo/a.md", "/tmp/trabajo"))
 
     def test_escribir_env(self):
         for herramienta in ("Write", "Edit", "MultiEdit", "NotebookEdit"):

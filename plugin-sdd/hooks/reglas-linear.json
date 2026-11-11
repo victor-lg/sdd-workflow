@@ -1,6 +1,6 @@
 {
   "servidor": "linear",
-  "permitidas": "^(get|list|search|extract)_|^(create|save)_comment$",
+  "permitidas": "^(get|list|search|extract)_(?!(.*_)?(create|save|update|delete|set|archive|move|assign|add|remove)(_|$))|^(create|save)_comment$",
   "reglas": {
     "solo-comentar": {
       "nivel": "bloquear",

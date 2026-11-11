@@ -278,6 +278,23 @@ def orden_efectiva(palabras):
     return palabras[i:]
 
 
+def cambia_de_carpeta(palabras):
+    """Si una envoltura cambia la carpeta de la orden (env -C, env --chdir, sudo -D):
+    las guardas no saben entonces dónde corre."""
+    for i, palabra in enumerate(palabras):
+        nombre = posixpath.basename(palabra)
+        if nombre in ("env", "sudo"):
+            con_valor, j = ENVOLTURAS[nombre][0], i + 1
+            while j < len(palabras) and palabras[j].startswith("-") and palabras[j] != "-":
+                opcion = palabras[j]
+                if opcion.startswith(("--chdir", "-C", "-D")):
+                    return True
+                j += 2 if opcion in con_valor else 1
+        elif nombre not in ENVOLTURAS and not ASIGNACION.match(palabra) and palabra not in RESERVADAS:
+            return False
+    return False
+
+
 def _resolver(nombre, largas):
     if nombre in largas:
         return nombre

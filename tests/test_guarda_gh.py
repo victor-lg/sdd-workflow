@@ -30,6 +30,9 @@ BLOQUEADAS = {
         "git push origin x && gh pr create --fill",
         "cd sub && gh pr create --fill",
         "echo $(gh pr create --fill)",
+        "gh pr create -t --help --fill",
+        "gh pr --repo o/r create --fill",
+        "gh pr -R o/r new --fill",
     ],
     "cuerpo-en-la-orden": [
         "gh pr create --draft --title x --body 'hola'",
@@ -59,10 +62,16 @@ BLOQUEADAS = {
         "gh api repos/a/b/issues/3/comments --raw-field body=hola",
         "gh api repos/a/b/issues/3/comments --field=body=hola",
         "gh api -X PATCH repos/a/b/pulls/3 -f body=x",
+        "gh pr create --title --help --body x",
+        "gh pr -R o/r create --draft --body x",
+        "gh issue --repo o/r comment 3 --body x",
+        "echo hola | gh api repos/a/b/issues/3/comments -F body=@-",
+        "gh api repos/a/b/issues/3/comments -F body=@- <<FIN\n$(date)\nFIN",
     ],
     "ready-por-api": [
         "gh api graphql -f query='mutation { markPullRequestReadyForReview(input: {pullRequestId: \"X\"}) { clientMutationId } }'",
         "gh api graphql -F query=@x.graphql -f q=markPullRequestReadyForReview",
+        "gh api graphql -f query='mutation { markPullRequestReadyForReview(input: {}) { clientMutationId } }' --jq --help",
     ],
 }
 
@@ -88,6 +97,9 @@ LEGITIMAS = [
     "gh pr comment -h",
     "gh pr close 3",
     "gh pr review 3 -c -F revision.md",
+    "gh pr -R o/r view 3",
+    "gh api repos/a/b/issues/3/comments -F body=@- < c.md",
+    "gh api --help",
     "gh issue view 3",
     "gh api repos/a/b/pulls/3",
     "gh api repos/a/b/issues/3/comments -F body=@c.md",
@@ -244,7 +256,10 @@ class Ready(unittest.TestCase):
                         "gh pr ready -R a/b -R c/d 3", "gh pr ready --repo 'a/b c' 3", "gh pr ready 3 --web",
                         "GH_REPO=a/b gh pr ready 3", "GH_HOST=atacante.example gh pr ready 3",
                         "env GH_REPO=a/b gh pr ready 3", "export GH_REPO=a/b; gh pr ready 3",
-                        "GH_REPO=a/b; export GH_REPO; gh pr ready 3", "cd; gh pr ready 3", "cd - && gh pr ready 3"):
+                        "GH_REPO=a/b; export GH_REPO; gh pr ready 3", "cd; gh pr ready 3", "cd - && gh pr ready 3",
+                        "GIT_DIR=../otro/.git gh pr ready 3", "export GIT_CONFIG_GLOBAL=x; gh pr ready 3",
+                        "env -C ../otro gh pr ready 3", "env --chdir=../otro gh pr ready 3",
+                        "sudo -D /x gh pr ready 3"):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(pr(VERDE), comando), ("ready-sin-mirar", None))
                 self.assertIsNone(self.llamada)
@@ -252,6 +267,17 @@ class Ready(unittest.TestCase):
                         "gh pr ready -R a/b 3", "gh pr ready --repo github.com/a/b 3"):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(pr(VERDE), comando), (None, None))
+
+    def test_opciones_antes_de_la_accion_y_undo_false(self):
+        """G4 del PR #26, ronda 3."""
+        self.decide(pr(VERDE), "gh pr -R a/b ready 3")
+        self.assertEqual(self.llamada.args[1:5], ("pr", "view", "--repo", "a/b"))
+        self.assertEqual(self.decide(pr([run("checks-sdd", "CANCELLED")]), "gh pr ready 3 --undo=false")[0],
+                         "ready-check-cancelado")
+        self.assertEqual(self.decide(pr([run("checks-sdd", "CANCELLED")]), "gh pr ready 3 --undo"), (None, None))
+        self.assertEqual(self.decide(pr([run("checks-sdd", "CANCELLED")]), "gh pr ready --help"), (None, None))
+        self.assertEqual(self.decide(pr([run("checks-sdd", "CANCELLED")]), "gh pr ready -R --help 3")[0],
+                         "ready-sin-mirar")
 
     def test_plazo_total(self):
         with mock.patch.object(guarda.time, "monotonic", side_effect=[0, 0, 100, 100, 100]):

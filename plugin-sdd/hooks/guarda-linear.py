@@ -44,7 +44,9 @@ def main():
         regla = decidir(nombre, datos.get("tool_input") or {}, conf)
         if regla is None:
             return
-        salida = respuesta("deny", conf["reglas"][regla]["mensaje"].replace("{herramienta}", nombre))
+        info = conf["reglas"][regla]
+        decision = "ask" if info["nivel"] == "preguntar" else "deny"
+        salida = respuesta(decision, info["mensaje"].replace("{herramienta}", nombre))
     except Exception as e:  # Si no puede mirar, falla cerrado (criterio 5 del inventario).
         salida = respuesta("deny", f"La guarda de Linear no ha podido comprobar esta llamada ({type(e).__name__}). "
                                    "Avisa a la persona; no la esquives.")

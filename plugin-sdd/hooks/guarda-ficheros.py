@@ -24,7 +24,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from lector_bash import NoAnalizable, analizar_todo, juntar, orden_efectiva
+    from lector_bash import NoAnalizable, analizar_todo, juntar, opciones, orden_efectiva
     ERROR_DE_CARGA = None
 except Exception as e:  # Sin el lector, main() falla cerrado.
     ERROR_DE_CARGA = e
@@ -38,16 +38,17 @@ def es_env(ruta, conf):
     return bool(re.match(conf["env"]["patron"], nombre)) and not re.search(conf["env"]["excepciones"], nombre)
 
 
-def es_temporal(ruta, cwd, conf):
-    """Si la ruta cae en una carpeta temporal fuera del proyecto. Las rutas con otra
-    variable no se pueden resolver y no cuentan."""
+def es_temporal(ruta, cwd, conf, proyecto=None):
+    """Si la ruta cae en una carpeta temporal fuera del proyecto (por defecto, cwd). Las
+    rutas con otra variable no se pueden resolver y no cuentan."""
+    proyecto = proyecto or cwd
     temporales = conf["temporales"]
     if re.match(temporales["variables"], ruta):
         return True
     if "$" in ruta:
         return False
     completa = juntar(cwd, ruta)
-    if cwd != "/" and (completa == cwd or completa.startswith(cwd + "/")):
+    if proyecto != "/" and (completa == proyecto or completa.startswith(proyecto + "/")):
         return False
     return any(completa == c or completa.startswith(c + "/") for c in temporales["carpetas"])
 
@@ -79,7 +80,15 @@ def _escribe(nombre, efectiva, conf):
     return nombre in env["escritores"]
 
 
-def decidir_bash(comando, cwd, conf):
+def _mktemp_en_temporal(args):
+    """mktemp sin plantilla, con -t o con --tmpdir sin carpeta crea en $TMPDIR o /tmp sin
+    nombrarlos. Con -p o --tmpdir=<carpeta>, la carpeta la mira la regla general."""
+    encontradas, posicionales = opciones(args, "p", {"tmpdir": False, "suffix": True}, abreviadas=False)
+    carpeta = any(n == "p" or (n == "tmpdir" and v) for n, v in encontradas)
+    return not carpeta and (not posicionales or any(n in ("t", "tmpdir") for n, _ in encontradas))
+
+
+def decidir_bash(comando, cwd, conf, proyecto=None):
     """Devuelve (regla, fichero) de la regla más grave, o (None, None)."""
     if len(comando) > conf["max_caracteres_orden"]:
         return "sin-analizar", "la orden"
@@ -97,8 +106,10 @@ def decidir_bash(comando, cwd, conf):
         efectiva = orden_efectiva(analisis.ordenes[indice]) if indice < len(analisis.ordenes) else []
         nombre = posixpath.basename(efectiva[0]) if efectiva else ""
         escribe = bool(efectiva) and _escribe(nombre, efectiva, conf)
+        if nombre == "mktemp" and _mktemp_en_temporal(efectiva[1:]):
+            return "temporal", "mktemp"
         for operador, destino in redirecciones.get(indice, []):
-            if es_temporal(destino, cwd, conf):
+            if es_temporal(destino, cwd, conf, proyecto):
                 return "temporal", destino
             if es_env(destino, conf):
                 if ">" in operador:
@@ -106,7 +117,7 @@ def decidir_bash(comando, cwd, conf):
                 candidata = candidata if candidata[0] else ("env-lee", destino)
         for palabra in efectiva[1:]:
             for ruta in _candidatas(palabra):
-                if nombre not in conf["temporales"]["solo_citan"] and es_temporal(ruta, cwd, conf):
+                if nombre not in conf["temporales"]["solo_citan"] and es_temporal(ruta, cwd, conf, proyecto):
                     return "temporal", ruta
                 if es_env(ruta, conf):
                     if escribe:
@@ -116,7 +127,7 @@ def decidir_bash(comando, cwd, conf):
     return candidata
 
 
-def decidir_fichero(herramienta, entrada, cwd, conf):
+def decidir_fichero(herramienta, entrada, cwd, conf, proyecto=None):
     if herramienta == "Grep":  # Con output_mode content, Grep devuelve el contenido.
         for clave in ("path", "glob"):
             valor = entrada.get(clave)
@@ -126,12 +137,14 @@ def decidir_fichero(herramienta, entrada, cwd, conf):
     ruta = entrada.get("notebook_path") if herramienta == "NotebookEdit" else entrada.get("file_path")
     if not isinstance(ruta, str) or not ruta:
         raise ValueError("sin ruta")
+    # Con la ruta resuelta también: un enlace del proyecto a .env o a /tmp no lo esquiva.
+    real = os.path.realpath(juntar(cwd, ruta))
     if herramienta in ESCRITURA:
-        if es_env(ruta, conf):
+        if es_env(ruta, conf) or es_env(real, conf):
             return "env-escribe", ruta
-        if es_temporal(ruta, cwd, conf):
+        if es_temporal(ruta, cwd, conf, proyecto) or es_temporal(real, cwd, conf, proyecto and os.path.realpath(proyecto)):
             return "temporal", ruta
-    elif herramienta == "Read" and es_env(ruta, conf):
+    elif herramienta == "Read" and (es_env(ruta, conf) or es_env(real, conf)):
         return "env-lee", ruta
     return None, None
 
@@ -139,9 +152,11 @@ def decidir_fichero(herramienta, entrada, cwd, conf):
 def decidir(datos, conf):
     herramienta, entrada = datos["tool_name"], datos["tool_input"]
     cwd = os.path.normpath(datos.get("cwd") or os.getcwd())
+    # La carpeta del proyecto, aunque la sesión se haya movido a otra con cd.
+    proyecto = os.path.normpath(os.environ.get("CLAUDE_PROJECT_DIR") or cwd)
     if herramienta == "Bash":
-        return decidir_bash(entrada["command"], cwd, conf)
-    return decidir_fichero(herramienta, entrada, cwd, conf)
+        return decidir_bash(entrada["command"], cwd, conf, proyecto)
+    return decidir_fichero(herramienta, entrada, cwd, conf, proyecto)
 
 
 def respuesta(decision, motivo):

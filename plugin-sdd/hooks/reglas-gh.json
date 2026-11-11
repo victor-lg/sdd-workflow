@@ -36,7 +36,7 @@
     },
     "ready-sin-push": {
       "nivel": "bloquear",
-      "mensaje": "REG-102: tu rama local no coincide con la del PR, así que la CI que ves no es la de tu último commit. En su lugar: git push origin <rama>, espera a la CI y vuelve a probar gh pr ready (en otra orden)."
+      "mensaje": "REG-102: tu rama local no coincide con la del PR, así que la CI que ves no es la de tu último commit, o en GitHub hay commits que no tienes. En su lugar: si vas por delante, git push origin <rama>; si vas por detrás, git fetch origin y revisa qué ha llegado. Espera a la CI y vuelve a probar gh pr ready, en otra orden."
     },
     "ready-conflictos": {
       "nivel": "bloquear",

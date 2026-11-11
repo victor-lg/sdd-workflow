@@ -666,10 +666,31 @@ class Fugas(unittest.TestCase):
         self.escribe(".env", "SECRETO=1\n")
         self.assertEqual(self.decide("git add .env && git commit -m x", enlace), ("commit-fuga", [".env"]))
 
+    def test_sesion_en_una_subcarpeta(self):
+        """G4 del PR #26, ronda 3: el git add de la raíz del repo cuenta aunque la sesión
+        esté en una subcarpeta; el de otro repo, no."""
+        self.escribe(".env", "SECRETO=1\n")
+        subcarpeta = os.path.join(self.repo, "src")
+        self.assertEqual(self.decide("git add ../.env && git commit -m x", subcarpeta), ("commit-fuga", [".env"]))
+        otro = os.path.join(self.dir.name, "otro")
+        subprocess.run(["git", "init", "-q", "-b", "main", otro], check=True)
+        with open(os.path.join(otro, ".env"), "w", encoding="utf-8") as f:
+            f.write("X=1\n")
+        self.assertEqual(self.decide(f"git -C {otro} add .env && git -C {otro} commit -m x"), (None, None))
+
+    def test_variantes_de_env(self):
+        for ruta in (".env-local", ".env_prod", ".envrc.local"):
+            with self.subTest(ruta=ruta):
+                self.escribe(ruta, "X=1\n")
+                self.git("add", "-f", ruta)
+                self.assertEqual(self.decide("git commit -m x"), ("commit-fuga", [ruta]))
+                self.git("rm", "-q", "--cached", ruta)
+
     def test_otro_repo_u_otro_indice_falla_cerrado(self):
         for comando in ("git --git-dir=.git commit -m x", "git --work-tree . commit -m x",
                         "GIT_INDEX_FILE=/x/index git commit -m x", "export GIT_DIR=/x; git commit -m x",
-                        "cd; git commit -m x", "cd -; git commit -m x", "cd a b; git commit -m x"):
+                        "cd; git commit -m x", "cd -; git commit -m x", "cd a b; git commit -m x",
+                        "env -C ../otro git commit -am x", "env --chdir=../otro git commit -am x"):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(comando)[0], "commit-sin-mirar")
 
