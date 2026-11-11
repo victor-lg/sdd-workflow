@@ -1,0 +1,33 @@
+{
+  "max_caracteres_orden": 200000,
+  "env": {
+    "patron": "^\\.env(rc)?([._*-].*)?$",
+    "excepciones": "\\.(example|sample|template|dist|tpl)$",
+    "escritores": ["cp", "mv", "tee", "touch", "ln", "install", "rsync", "dd", "truncate", "rm", "shred", "sed", "perl", "chmod", "chown"],
+    "solo_citan": ["echo", "printf", "git"]
+  },
+  "temporales": {
+    "carpetas": ["/tmp", "/var/tmp", "/private/tmp", "/private/var/folders", "/var/folders", "/dev/shm"],
+    "variables": "^\\$\\{?(TMPDIR|TMP|TEMP|TEMPDIR)([^A-Za-z0-9_]|$)",
+    "solo_citan": ["echo", "printf", "grep", "egrep", "fgrep", "rg", "git"]
+  },
+  "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, scripts). Si crees que aquí no aplica, díselo a la persona.",
+  "reglas": {
+    "env-escribe": {
+      "nivel": "bloquear",
+      "mensaje": "X-02: no se escriben, copian, mueven ni borran ficheros .env* ({fichero}): guardan los secretos de la persona. En su lugar: si hace falta una variable nueva, añádela sin valor a .env.example y pide a la persona que la ponga en su .env."
+    },
+    "env-lee": {
+      "nivel": "preguntar",
+      "mensaje": "REG-40: el agente quiere leer o usar {fichero}, que puede guardar secretos. Si solo necesita los nombres de las variables, le basta .env.example. ¿Lo permites?"
+    },
+    "temporal": {
+      "nivel": "bloquear",
+      "mensaje": "X-06 (M12): las capturas y los ficheros de trabajo van dentro del repo, nunca en /tmp ni en $TMPDIR ({fichero}): fuera del proyecto, leerlos pide permiso a la persona. En su lugar: usa .tareas/<ID>/ (por ejemplo .tareas/VIC-12/captura-movil.png), que Git ignora. Si la persona te ha dejado un fichero en /tmp, pídele que lo copie al repo."
+    },
+    "sin-analizar": {
+      "nivel": "bloquear",
+      "mensaje": "No he podido analizar esta orden: tiene comillas, una sustitución o un heredoc sin cerrar, o es demasiado larga, y menciona un .env o una carpeta temporal. En su lugar: corrígela o sepárala en órdenes más simples."
+    }
+  }
+}

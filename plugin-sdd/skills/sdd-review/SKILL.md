@@ -57,10 +57,10 @@ Con las respuestas de todos los revisores:
    - `R` es el número de la ronda (1 a 3); `X`, los hallazgos de esa ronda que confirmaste; `Y`, los que descartaste; `Z`, cuántos de esos `X` están corregidos hasta ahora.
    - Si corriges después de la última ronda, publica otro comentario con la línea de esa ronda y el `Z` nuevo: cuenta la última.
    - Una ronda sin hallazgos también se anota, con ceros.
-   - **Cómo:** escribe el cuerpo con Write en un fichero, **sin** la línea. Publícalo con una sola orden que añade la línea en un heredoc entrecomillado:
+   - **Cómo:** escribe el cuerpo con Write en `.tareas/VIC-N/g4-ronda-R.md`, **sin** la línea (nunca en `/tmp` ni en `$TMPDIR`: el hook lo bloquea, X-06). Publícalo con una sola orden que añade la línea en un heredoc entrecomillado:
 
      ```bash
-     { cat "$TMPDIR/g4-ronda-R.md"; cat <<'METRICAS_SDD'
+     { cat .tareas/VIC-N/g4-ronda-R.md; cat <<'METRICAS_SDD'
      Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z
      METRICAS_SDD
      } | gh pr comment N --body-file -
@@ -72,4 +72,4 @@ Con las respuestas de todos los revisores:
 
 ## 4. Cerrar
 
-Cuando no quede nada que deba corregirse y la CI esté en verde, comprueba que el título sigue `docs/convenciones.md` del workflow (Conventional Commits, alcance como zona y no como ID) y que la "Guía para el revisor humano" está completa, y quita el estado de borrador del PR. La aprobación y el merge son de la persona (G6).
+Cuando no quede nada que deba corregirse y la CI esté en verde, comprueba que el título sigue `docs/convenciones.md` del workflow (Conventional Commits, alcance como zona y no como ID) y que la "Guía para el revisor humano" está completa, y quita el estado de borrador con `gh pr ready N`. El hook comprueba antes que todos los checks del último commit estén en verde, sin ninguno cancelado (M5), y si no lo están lo bloquea: no lo quites por otra vía. La aprobación y el merge son de la persona (G6).

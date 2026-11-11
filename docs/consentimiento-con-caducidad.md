@@ -1,0 +1,74 @@
+# Consentimiento con caducidad (X-10)
+
+**Estado:** PROPUESTA (VIC-17, bloque 2). Es solo diseño: no hay código ni hook registrado. Se activa en el bloque 5, con el ADR-0008 y la escalera de confianza (M24), si se aprueba.
+
+## Qué resuelve
+
+En la escalera de confianza (M24, `docs/plan-v1.1.md`, bloque 5) el agente hará cosas que hoy solo hace la persona, como fusionar un PR no sensible o mover una issue a *Done*. Para algunas de ellas la persona querrá dar permiso **una vez, para un objetivo concreto y por poco tiempo**, sin tocar los ajustes ni el ruleset.
+
+El permiso tiene que cumplir tres cosas:
+
+- **Lo da la persona, y solo ella.** El agente no lo puede escribir, generar ni reutilizar.
+- **Es concreto:** una acción, un objetivo (`#54`, `VIC-55`) y, si aplica, el estado exacto del objetivo cuando se dio.
+- **Caduca:** por tiempo y por uso.
+
+La idea sale de baseline (`historial/analisis-herramientas-1.md` §16): un hook `UserPromptSubmit` registra el permiso antes de que el modelo vea el mensaje, y otro hook bloquea que el agente escriba la marca.
+
+## Cómo funciona
+
+1. **La persona escribe** `/permitir <acción> <objetivo>` como único contenido de un mensaje. Por ejemplo: `/permitir fusionar 54` o `/permitir mover VIC-55 Done`. Las acciones posibles están en `reglas-consentimiento.json`.
+2. **Un hook `UserPromptSubmit`** (`consentimiento.py`) lee el mensaje antes que el modelo:
+   - comprueba que el mensaje es solo esa línea;
+   - comprueba que la acción existe;
+   - para `fusionar`, consulta con `gh` el SHA de la cabeza del PR;
+   - escribe la marca y responde con un `systemMessage` que dice qué se ha permitido y hasta cuándo.
+   
+   Si algo falla, no escribe nada y lo dice.
+3. **La marca** es un fichero JSON en `~/.claude/sdd-consentimientos/<id del repo>/<acción>-<objetivo>.json`. Lleva acción, objetivo, repo (raíz y URL de `origin`), `session_id`, hora de creación y caducidad, usos restantes (1) y, para `fusionar`, el SHA de la cabeza del PR.
+4. **El hook que guarda la acción** (por ejemplo, `guarda-gh.py` ante `gh pr merge 54`) busca una marca válida:
+   - mismo repo, acción y objetivo;
+   - sin caducar;
+   - con usos restantes;
+   - para `fusionar`, la cabeza del PR sigue en el SHA de la marca.
+   
+   Si la encuentra, la consume con un `rename` atómico a `.usada` y deja pasar la orden. Si no, bloquea: "pide a la persona `/permitir fusionar 54`".
+5. **Caducidad por defecto:** 10 minutos y un solo uso. Se puede acortar en el JSON; alargarla no se ofrece en el mensaje.
+
+## Cómo podría falsificarlo el agente, y qué lo impide
+
+| Vía | Defensa |
+| --- | --- |
+| Escribir la marca con Bash | `~/.claude/` no está en la lista de escritura del sandbox. Además, la guarda de ficheros bloquea cualquier mención a `sdd-consentimientos` en Bash (segunda capa) |
+| Escribirla con Write o Edit, que no pasan por el sandbox | Se propone `deny` de `Write(~/.claude/sdd-consentimientos/**)` y `Edit(~/.claude/sdd-consentimientos/**)` en los ajustes gestionados (lo aplica Víctor), más una regla de `guarda-ficheros.py` |
+| Generar un mensaje que parezca de la persona: `ScheduleWakeup`, `CronCreate`, `/loop`, `RemoteTrigger`, mensajes de otras sesiones | **Por comprobar antes de activar:** si la entrada de `UserPromptSubmit` distingue un mensaje escrito por la persona de uno programado. Si no lo distingue, esas herramientas van a `deny` en los ajustes gestionados mientras X-10 esté activo. Si tampoco se puede, X-10 no se activa |
+| Que la persona pegue un texto ajeno (una issue, un comentario) que contiene `/permitir …` | Solo vale si el mensaje es únicamente esa línea. Un texto pegado con más contenido no da permiso |
+| Usar un permiso para otra cosa | La marca nombra la acción y el objetivo. Para `fusionar` lleva el SHA: un push posterior al permiso lo invalida |
+| Reutilizarlo | Un solo uso y consumo atómico. Dos órdenes a la vez: solo una consigue el `rename` |
+| Alargarlo cambiando la hora | La hora es la del sistema, fuera del sandbox. La caducidad se calcula al crear la marca, no al leerla |
+| Esquivar la guarda de la acción (`bash -c`, `gh api`) | No lo impide: es una segunda capa, como las demás guardas. La barrera real sigue siendo el ruleset y CODEOWNERS (G6). X-10 decide cuándo el agente puede intentar la acción, no si GitHub la acepta |
+
+Si cualquier comprobación no puede hacerse (marca ilegible, `gh` sin red, JSON roto), la acción se bloquea. Es el criterio 5 del inventario: falla cerrado.
+
+## Qué se hace al activarlo (bloque 5)
+
+- `plugin-sdd/hooks/consentimiento.py` (`UserPromptSubmit`) y `reglas-consentimiento.json`, con las acciones, su caducidad y qué consulta cada una.
+- La comprobación de la marca, en la guarda de cada acción. `gh pr merge` va en `guarda-gh.py` y los cambios de estado en Linear en `guarda-linear.py`, que hoy los bloquea siempre (REG-04).
+- `/permitir` como orden del plugin (`commands/permitir.md`), para que Claude Code no la rechace como desconocida. Hay que comprobar qué texto exacto recibe `UserPromptSubmit` (`/permitir` o `/sdd:permitir`).
+- Una regla nueva en `guarda-ficheros.py` para `sdd-consentimientos`, y el `deny` en los ajustes gestionados.
+- **Tests:**
+  - falsificar la marca por Write, Edit y Bash;
+  - una marca caducada, una ya usada, otra acción, otro objetivo u otro repo;
+  - un SHA distinto;
+  - un mensaje con más texto;
+  - dos consumos a la vez;
+  - `gh` sin red.
+- **Evaluaciones:**
+  - sin marca, el agente pide `/permitir` y no lo intenta por otra vía;
+  - ante un mensaje pegado con `/permitir` dentro, no lo da por permiso.
+- Anotarlo en `docs/herramientas.md`: escribe fuera del sandbox, en `~/.claude/sdd-consentimientos/`, y usa la red con `gh`.
+
+## Decisiones pendientes
+
+1. **Qué acciones entran:** en principio `fusionar` (R0 y R1 no sensibles, primer peldaño de M24) y `mover` (*Ready* y *Done* en Linear, si el ADR-0008 lo deja al agente).
+2. **Caducidad:** 10 minutos y un uso, o varios usos dentro de la ventana.
+3. **Qué hacer con las herramientas que generan mensajes:** depende de la comprobación de arriba.

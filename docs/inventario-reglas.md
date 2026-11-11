@@ -1,6 +1,6 @@
 # Inventario de reglas del workflow (M25)
 
-**Estado:** decisiones tomadas el 2026-11-08 (VIC-17, bloque 2 de `docs/plan-v1.1.md`). De lo que aquí se decide, está aplicada la frase sobre la issue en `plantilla-proyecto/AGENTS.md` y, en el plugin 1.2.0, los hooks de X-01, X-03, REG-83 y REG-49.
+**Estado:** decisiones tomadas el 2026-11-08 (VIC-17, bloque 2 de `docs/plan-v1.1.md`). De lo que aquí se decide, está aplicada la frase sobre la issue en `plantilla-proyecto/AGENTS.md` y, en el plugin 1.2.0, los hooks de X-01, X-03, REG-83 y REG-49. En el 1.3.0, los de X-02, X-04, X-06, REG-04, REG-40 (pregunta antes de leer un `.env`), REG-43, REG-93 y REG-102. X-10 está diseñado, sin activar, en `docs/consentimiento-con-caducidad.md`.
 
 Cada regla de `plantilla-proyecto/AGENTS.md`, `plantilla-proyecto/CLAUDE.md` y las seis skills de `plugin-sdd/skills/`, con su tipo, si se ha incumplido y su destino. Las líneas citadas son las del commit `0402725`.
 

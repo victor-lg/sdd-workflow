@@ -7,6 +7,10 @@
   "prefijos_ramas_remotas": ["origin/", "remotes/origin/", "refs/remotes/origin/"],
   "rutas_que_abarcan_todo": ["*", "**", "**/*", ".*", "./*", "./**", ":", ":/", ":/.", ":/*", ":/**", ":(top)", ":(top).", ":(top)*", ":(glob)**", ":(glob)*", ":(top,glob)**", ":(top,glob)*"],
   "patron_pathspec_exclusion": "^:(!|\\^|\\([^)]*exclude)",
+  "fugas": {
+    "nunca": [".env", ".env.*", ".envrc", "*.pem", "*.key", "*.p12", "*.pfx", "*.keystore", "*.jks", "id_rsa", "id_rsa.*", "id_dsa", "id_ecdsa", "id_ecdsa.*", "id_ed25519", "id_ed25519.*", ".npmrc", ".pypirc", ".netrc", ".git-credentials", ".tareas/*", ".claude/settings.local.json", ".bashrc", ".bash_profile", ".profile", ".zshrc", ".zprofile", ".gitconfig", ".ripgreprc"],
+    "excepciones": "\\.(example|sample|template|dist|tpl|pub)$"
+  },
   "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, scripts). Si crees que aquí no aplica, díselo a la persona.",
   "reglas": {
     "push-seguimiento": {
@@ -36,6 +40,14 @@
     "base-no-main": {
       "nivel": "preguntar",
       "mensaje": "REG-83: esta rama no sale de main. Lo normal es git fetch origin && git switch --no-track -c <rama> origin/main. ¿Hay un motivo para usar esta base?"
+    },
+    "commit-fuga": {
+      "nivel": "bloquear",
+      "mensaje": "X-04: el commit llevaría {ficheros}, que .gitignore excluye o que nunca deben subirse (secretos, .tareas/, ficheros del sandbox). En su lugar: sácalos con git restore --staged <fichero> (o git rm --cached <fichero> si ya estaban en el repo) y repite el commit. Si alguno tiene que subir de verdad, díselo a la persona."
+    },
+    "commit-sin-mirar": {
+      "nivel": "bloquear",
+      "mensaje": "X-04: no he podido comprobar qué lleva este commit. En su lugar: ejecútalo desde una carpeta del repo, con la ruta escrita tal cual, y si sigue fallando, díselo a la persona."
     },
     "sin-analizar": {
       "nivel": "bloquear",

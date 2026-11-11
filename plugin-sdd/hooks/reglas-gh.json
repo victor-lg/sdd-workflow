@@ -1,0 +1,57 @@
+{
+  "max_caracteres_orden": 200000,
+  "segundos_gh": 10,
+  "conclusiones_buenas": ["SUCCESS", "SKIPPED", "NEUTRAL"],
+  "linea_g4": "^[ \\t]*Métricas G4: PR #\\d+ · ronda \\d+ ·",
+  "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, gh api, scripts). Si crees que aquí no aplica, díselo a la persona.",
+  "reglas": {
+    "pr-sin-borrador": {
+      "nivel": "bloquear",
+      "mensaje": "REG-43: el PR se abre como borrador desde el principio, también en R0. En su lugar: repite la orden con --draft; cuando la CI esté en verde y la revisión hecha, gh pr ready lo quita."
+    },
+    "cuerpo-en-la-orden": {
+      "nivel": "bloquear",
+      "mensaje": "REG-93: el cuerpo de un PR, un comentario o una revisión no va en la orden de Bash (--body, -b, -f body=, echo o un heredoc sin comillas): lleva texto que no controlas y se ejecutaría como shell. En su lugar: escríbelo con Write en un fichero de .tareas/<ID>/ y pásalo con --body-file <fichero>. Para añadir una línea fija, usa un heredoc entrecomillado: { cat <fichero>; cat <<'FIN' … FIN } | gh pr comment N --body-file -."
+    },
+    "ready-por-api": {
+      "nivel": "bloquear",
+      "mensaje": "REG-102: el borrador se quita con gh pr ready, que comprueba antes la CI; no con gh api. En su lugar: gh pr ready <N>."
+    },
+    "ready-check-cancelado": {
+      "nivel": "bloquear",
+      "mensaje": "M5 (REG-102): hay checks cancelados ({checks}). Pasa cuando una edición de la descripción relanza checks-sdd y la ejecución nueva cancela la anterior: el check obligatorio queda cancelado y bloquea la fusión. En su lugar: relánzalo con gh run rerun <id> (el id sale en gh pr checks <N>) o pídeselo a la persona, espera al verde y vuelve a probar gh pr ready."
+    },
+    "ready-ci-roja": {
+      "nivel": "bloquear",
+      "mensaje": "REG-102: la CI no está en verde ({checks}). En su lugar: mira gh pr checks <N>, corrige el fallo o, si no es tuyo, díselo a la persona. El borrador se quita con todo en verde."
+    },
+    "ready-ci-pendiente": {
+      "nivel": "bloquear",
+      "mensaje": "REG-102: la CI aún no ha terminado ({checks}). En su lugar: espera a que termine (gh pr checks <N> --watch) y vuelve a probar gh pr ready."
+    },
+    "ready-sin-checks": {
+      "nivel": "bloquear",
+      "mensaje": "REG-102: el PR no tiene ningún check, así que no consta que la CI esté en verde. En su lugar: comprueba con gh pr checks <N> que la CI se ha lanzado; si no se lanza, díselo a la persona."
+    },
+    "ready-sin-push": {
+      "nivel": "bloquear",
+      "mensaje": "REG-102: tu rama local no coincide con la del PR, así que la CI que ves no es la de tu último commit. En su lugar: git push origin <rama>, espera a la CI y vuelve a probar gh pr ready (en otra orden)."
+    },
+    "ready-conflictos": {
+      "nivel": "bloquear",
+      "mensaje": "REG-102: el PR tiene conflictos con la rama base. En su lugar: actualiza la rama con main, resuelve los conflictos, espera a la CI y vuelve a probar gh pr ready."
+    },
+    "ready-sin-g4": {
+      "nivel": "preguntar",
+      "mensaje": "REG-102: el PR no tiene ningún comentario con la línea «Métricas G4», así que no consta la revisión independiente (sdd-review). En R0 de código puede no hacer falta. ¿Quitas el borrador igualmente?"
+    },
+    "ready-sin-mirar": {
+      "nivel": "bloquear",
+      "mensaje": "REG-102: no he podido consultar el PR en GitHub, así que no sé si la CI está en verde. En su lugar: comprueba que gh funciona (gh pr view <N>) desde una carpeta del repo y, si sigue fallando, díselo a la persona."
+    },
+    "sin-analizar": {
+      "nivel": "bloquear",
+      "mensaje": "No he podido analizar esta orden: tiene comillas, una sustitución o un heredoc sin cerrar, o es demasiado larga. En su lugar: corrígela o sepárala en órdenes más simples."
+    }
+  }
+}

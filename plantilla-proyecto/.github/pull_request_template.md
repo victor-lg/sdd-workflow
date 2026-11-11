@@ -11,7 +11,7 @@ Fixes VIC-<N> <!-- Sustituye <N> por el número de la issue. "Part of VIC-<N>" s
 
 ## Plan y progreso
 
-<!-- En R1 y R2 el PR se abre como borrador desde el principio. El agente mantiene aquí el plan y marca los pasos. -->
+<!-- El PR se abre como borrador desde el principio, también en R0. El agente mantiene aquí el plan y marca los pasos. -->
 
 - [ ] 
 

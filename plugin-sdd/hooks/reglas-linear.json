@@ -1,0 +1,10 @@
+{
+  "servidor": "linear",
+  "permitidas": "^(get|list|search|extract)_|^(create|save)_comment$",
+  "reglas": {
+    "solo-comentar": {
+      "nivel": "bloquear",
+      "mensaje": "REG-04 (decisión 1): en Linear el agente lee y comenta; las issues las crea, las mueve, las etiqueta y las edita la persona ({herramienta}). En su lugar: deja un comentario en la issue con lo que propones cambiar y díselo a la persona. Si crees que aquí no aplica, díselo a la persona; no lo esquives."
+    }
+  }
+}
