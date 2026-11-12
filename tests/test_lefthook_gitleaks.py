@@ -8,6 +8,7 @@ están (la CI de este repo no los tiene), se salta. En local:
 El secreto señuelo se genera al ejecutar, para que ningún escáner lo encuentre en el repo."""
 import os
 import pathlib
+import re
 import secrets
 import shutil
 import string
@@ -79,10 +80,17 @@ class CommitConSecreto(unittest.TestCase):
         r = self.commit("feat(config): añade el token")
         print(f"\n  commit con secreto: {time.monotonic() - inicio:.2f} s", end=" ")
         self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("gitleaks", r.stdout + r.stderr)
+        # gitleaks escribe «leaks found: N» (y «no leaks found» si no hay): hace falta el número.
+        self.assertRegex(r.stdout + r.stderr, re.compile(r"leaks found: [1-9]"))
         self.assertNotIn(token, r.stdout + r.stderr)
         self.assertNotIn("feat(config)", subprocess.run(["git", "log", "--format=%s"], cwd=self.repo,
                                                         capture_output=True, text=True, env=ENTORNO).stdout)
+
+    def test_el_comentario_gitleaks_allow_no_lo_salta(self):
+        """G4 del PR #30, ronda 3: sin --ignore-gitleaks-allow, el comentario dejaba pasar el commit."""
+        self.preparar("config.py", f'TOKEN = "{senuelo()}"  # gitleaks:allow\n')
+        r = self.commit("feat(config): añade el token")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_sin_secreto_pasa(self):
         self.preparar("config.py", 'TOKEN = os.environ["TOKEN"]\n')

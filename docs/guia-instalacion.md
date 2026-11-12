@@ -296,7 +296,9 @@ sudo install -m 755 lefthook_2.2.2_Linux_x86_64 /usr/local/bin/lefthook
 sudo install -m 755 gitleaks /usr/local/bin/gitleaks
 ```
 
-**Comprobación:** `lefthook version` da `2.2.2` y `gitleaks version`, `8.30.1`. No los muevas después. El hook busca lefthook en este orden: `LEFTHOOK_BIN`, el `PATH`, la ruta guardada al instalar y, si nada funciona, binarios del árbol de trabajo (`node_modules/`) y gestores como `yarn`, `uv run` o `mise`, que leen configuración del repo. gitleaks lo busca por el `PATH`. Por eso ninguna carpeta del `PATH` anterior a `/usr/local/bin` puede ser una que el agente escriba (`which -a lefthook gitleaks` da solo `/usr/local/bin`).
+**Comprobación:** `lefthook version` da `2.2.2` y `gitleaks version`, `8.30.1`. No los muevas después. El hook busca lefthook en este orden: `LEFTHOOK_BIN`, el `PATH`, la ruta guardada al instalar y, si nada funciona, binarios del árbol de trabajo (`node_modules/`) y gestores como `yarn`, `uv run` o `mise`, que leen configuración del repo. gitleaks lo busca por el `PATH`. Por eso ninguna carpeta del `PATH` anterior a `/usr/local/bin` puede ser una que el agente escriba. En WSL con nvm suelen ir antes `~/.local/bin` y la carpeta de nvm: desde Bash el sandbox no deja escribirlas, y escribir fuera del proyecto con Write pide permiso; además, `guarda-saltos.py` bloquea escribir ficheros llamados `lefthook` o `gitleaks` y los perfiles de shell. Comprueba con `which -a lefthook gitleaks` que solo salen los de `/usr/local/bin`, y con `ls ~/.local/bin` que ahí no hay ninguno.
+
+**Si cambia `lefthook.json` en `main`** (por ejemplo, el PR 3 añade `commit-msg`), repite la instalación en un clon nuevo: con `no_auto_install`, lefthook no reinstala los hooks solo.
 
 **En cada proyecto,** también fuera de Claude Code y siempre en un clon nuevo de `main`:
 

@@ -44,7 +44,12 @@
     "echo",
     "printf",
     "test",
-    "["
+    "[",
+    "jq",
+    "nl",
+    "sha256sum",
+    "md5sum",
+    "cmp"
   ],
   "git_escritores": [
     "checkout",
@@ -71,15 +76,15 @@
     },
     "ocultar-cambios": {
       "nivel": "bloquear",
-      "mensaje": "ADR-0008: no ocultes cambios a Git ({forma}): skip-worktree, assume-unchanged y .git/info/exclude esconden ficheros a git status y a la revisión. En su lugar: añade a .gitignore, en la rama, lo que no deba versionarse; si es algo local tuyo, díselo a la persona."
+      "mensaje": "ADR-0008: no ocultes cambios a Git ni a gitleaks ({forma}): skip-worktree, assume-unchanged y .git/info/exclude esconden ficheros a git status y a la revisión, y un atributo binary en .git/info/attributes esconde su contenido a gitleaks. En su lugar: añade a .gitignore o a .gitattributes, en la rama, lo que haga falta; si es algo local tuyo, díselo a la persona."
     },
     "ajustes-del-agente": {
       "nivel": "bloquear",
-      "mensaje": "ADR-0008: no escribas los ajustes de Claude Code ({forma}): pueden fijar variables como LEFTHOOK=0 o hooks para todas las sesiones, y settings.local.json no lo ve Git. En su lugar: si hace falta cambiar un ajuste, pídeselo a la persona."
+      "mensaje": "ADR-0008: no escribas los ajustes de Claude Code, los perfiles de shell ni ficheros llamados lefthook o gitleaks ({forma}): pueden fijar variables como LEFTHOOK=0 para todas las sesiones o poner otro binario antes en el PATH. En su lugar: si hace falta cambiar un ajuste o el entorno, pídeselo a la persona."
     },
     "config-de-controles": {
       "nivel": "preguntar",
-      "mensaje": "ADR-0008: el agente quiere cambiar {forma} en el árbol de trabajo. lefthook y gitleaks lo leen de ahí antes de cada commit, aunque el cambio no se prepare, así que puede apagar gitleaks sin que lo vea la CI ni la revisión. ¿Lo permites?"
+      "mensaje": "ADR-0008: el agente quiere cambiar {forma} en el árbol de trabajo. lefthook y gitleaks lo leen de ahí antes de cada commit, aunque el cambio no se prepare (y .gitattributes puede marcar un fichero como binario, que gitleaks no mira), así que puede apagar gitleaks sin que lo vea la CI ni la revisión. ¿Lo permites?"
     },
     "commit-sin-hooks": {
       "nivel": "bloquear",
@@ -91,5 +96,7 @@
     }
   },
   "ajustes_del_agente": "(^|/)\\.claude/settings(\\.local)?\\.json$",
-  "config_de_controles": "(^|/)(lefthook\\.json|\\.gitleaks\\.toml|\\.gitleaksignore)$"
+  "config_de_controles": "(^|/)(lefthook\\.json|\\.gitleaks\\.toml|\\.gitleaksignore|\\.gitattributes)$",
+  "ocultar_a_gitleaks": "(^|/)\\.git/(.+/)?info/attributes$",
+  "entorno_del_agente": "(?-i:(^|/)\\.(bashrc|bash_profile|bash_login|profile|zshrc|zprofile|zshenv)$|(^|/)(lefthook|gitleaks)(\\.exe)?$)"
 }

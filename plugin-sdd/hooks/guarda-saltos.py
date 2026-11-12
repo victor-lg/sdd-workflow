@@ -14,6 +14,9 @@ de Git que instala lefthook (docs/herramientas.md, "Formas de saltarlo"):
   lefthook.json, .gitleaks.toml o .gitleaksignore en el árbol de trabajo, porque lefthook
   y gitleaks los leen de ahí aunque el cambio no llegue a un commit;
 - ocultar cambios con update-index o .git/info/exclude;
+- escribir .git/info/attributes, perfiles de shell o ficheros llamados lefthook o gitleaks
+  (un atributo binary deja ciego a gitleaks; un perfil o un binario antes en el PATH
+  sustituyen a los de verdad); y preguntar antes de cambiar .gitattributes;
 - crear commits sin pasar por pre-commit: am, commit-tree, fast-import, un clon local,
   otro directorio de Git o gh api.
 
@@ -91,8 +94,14 @@ def asignaciones(palabras):
 
 
 def separar_git(palabras):
-    """(subcomando, argumentos, opciones globales) o None si no es git."""
-    if not palabras or posixpath.basename(palabras[0]) not in ("git", "git.exe"):
+    """(subcomando, argumentos, opciones globales) o None si no es git. También la forma
+    con guion (/usr/lib/git-core/git-commit), que Git despacha por el nombre."""
+    if not palabras:
+        return None
+    nombre = posixpath.basename(palabras[0])
+    if nombre.startswith("git-") and len(nombre) > 4:
+        return nombre[4:], palabras[1:], []
+    if nombre not in ("git", "git.exe"):
         return None
     i, globales = 1, []
     while i < len(palabras) and palabras[i].startswith("-"):
@@ -158,12 +167,12 @@ def _regla_git(sub, args, globales, palabras, conf):
         forma = _no_verify(args, CORTAS_CON_VALOR_COMMIT, LARGAS_COMMIT_CON_VALOR, con_n=True)
         if forma:
             return "sin-verificar", f"git commit {forma}"
-    if sub == "merge":
+    if sub in ("merge", "pull"):
         # -S lleva su valor pegado (-S<clave>): no se come la palabra siguiente.
         forma = _no_verify(args, "msXF", {"strategy": True, "strategy-option": True, "message": True,
                                            "file": True, "gpg-sign": False}, con_n=False)
         if forma:
-            return "sin-verificar", f"git merge {forma}"
+            return "sin-verificar", f"git {sub} {forma}"
     if sub == "am" and not set(args) & AM_SIN_COMMIT:
         return "commit-sin-hooks", "git am"
     if sub in ("commit", "merge") and (any(OTRO_REPO.match(p) for p in palabras)
@@ -192,7 +201,10 @@ def _escribe_en(nombre, efectiva, conf):
     y de git, checkout, restore y mv."""
     if nombre in ("git", "git.exe"):
         separado = separar_git(efectiva)
-        return bool(separado) and separado[0] in conf["git_escritores"]
+        if not separado:
+            return False
+        sub, args, _ = separado
+        return sub in conf["git_escritores"] or (sub == "rm" and "--cached" not in args)
     if nombre in ("sed", "perl"):
         args = efectiva[1:]
         return any(a.startswith("--in-place") or (a[:1] == "-" and a[1:2] != "-" and "i" in a[1:]) for a in args)
@@ -210,11 +222,11 @@ def _candidatas(palabra):
 def _fichero_protegido(ruta, conf):
     if _casa("config_local_lefthook", ruta, conf) or _casa("otra_config_lefthook", ruta, conf):
         return "config-local-lefthook"
-    if _casa("exclude_de_git", ruta, conf):
+    if _casa("exclude_de_git", ruta, conf) or _casa("ocultar_a_gitleaks", ruta, conf):
         return "ocultar-cambios"
     if _casa("hooks_y_config_de_git", ruta, conf):
         return "config-de-hooks"
-    if _casa("ajustes_del_agente", ruta, conf):
+    if _casa("ajustes_del_agente", ruta, conf) or _casa("entorno_del_agente", ruta, conf):
         return "ajustes-del-agente"
     if _casa("config_de_controles", ruta, conf):
         return "config-de-controles"
@@ -229,9 +241,20 @@ def _mas_grave(actual, nueva, conf):
     return actual
 
 
-def decidir_bash(comando, conf):
-    """Devuelve (regla, forma) o (None, None)."""
-    relevante = re.search(r"\b(git|gh|lefthook|gitleaks)\b|LEFTHOOK|GITLEAKS|GIT_|\.git/", comando)
+def _protegido_en(ruta, cwd, conf):
+    """Como _fichero_protegido, también con la ruta resuelta contra la carpeta de la orden:
+    tras cd .git, «commondir» es .git/commondir."""
+    regla = _fichero_protegido(ruta, conf)
+    if regla or cwd is None or "$" in ruta:
+        return regla
+    return _fichero_protegido(juntar(cwd, ruta), conf)
+
+
+def decidir_bash(comando, conf, cwd=None):
+    """Devuelve (regla, forma) o (None, None). cwd es la carpeta de la sesión; los cd de
+    la orden la cambian."""
+    relevante = re.search(r"\b(git|gh|lefthook|gitleaks)|LEFTHOOK|GITLEAKS|GIT_|\.git\b|commondir|\.claude/|"
+                          r"attributes|\.bashrc|\.profile|\.zshrc", comando)
     if len(comando) > conf["max_caracteres_orden"]:
         return ("sin-analizar", "la orden") if relevante else (None, None)
     try:
@@ -239,7 +262,7 @@ def decidir_bash(comando, conf):
     except NoAnalizable:
         return ("sin-analizar", "la orden") if relevante else (None, None)
     ordenes = analisis.ordenes
-    con_git = any(posixpath.basename((orden_efectiva(p) or [""])[0]) in ("git", "git.exe") for p in ordenes)
+    con_git = any(separar_git(orden_efectiva(p)) for p in ordenes)
     variables_de_config = re.compile(conf["variables_de_config_git"])
     for palabras in ordenes:
         for variable in asignaciones(palabras):
@@ -250,12 +273,20 @@ def decidir_bash(comando, conf):
             if con_git and variable in conf["variables_con_git"]:
                 return "config-de-hooks", f"{variable} en una orden con git"
     candidata = (None, None)
-    for operador, destino in [(o, d) for _, o, d in analisis.redirecciones]:
+    carpetas = []  # La carpeta en la que corre cada orden, siguiendo los cd.
+    for palabras in ordenes:
+        carpetas.append(cwd)
+        efectiva = orden_efectiva(palabras)
+        if efectiva[:1] == ["cd"]:
+            destinos = [a for a in efectiva[1:] if not a.startswith("-")]
+            sigue = cwd is not None and len(destinos) == 1 and "$" not in destinos[0] and destinos[0] != "-"
+            cwd = juntar(cwd, destinos[0]) if sigue else None
+    for indice, operador, destino in analisis.redirecciones:
         if ">" in operador:
-            regla = _fichero_protegido(destino, conf)
+            regla = _protegido_en(destino, carpetas[indice] if indice < len(carpetas) else cwd, conf)
             if regla:
                 candidata = _mas_grave(candidata, (regla, destino), conf)
-    for palabras in ordenes:
+    for palabras, carpeta in zip(ordenes, carpetas):
         efectiva = orden_efectiva(palabras)
         if not efectiva:
             continue
@@ -272,7 +303,7 @@ def decidir_bash(comando, conf):
         if _escribe_en(nombre, efectiva, conf):
             for palabra in efectiva[1:]:
                 for ruta in _candidatas(palabra):
-                    regla = _fichero_protegido(ruta, conf)
+                    regla = _protegido_en(ruta, carpeta, conf)
                     # Borrar una configuración de lefthook que sobra está bien.
                     if regla and not (nombre == "rm" and regla == "config-local-lefthook"):
                         candidata = _mas_grave(candidata, (regla, ruta), conf)
@@ -297,7 +328,7 @@ def decidir_fichero(herramienta, entrada, cwd, conf):
 def decidir(datos, conf):
     herramienta, entrada = datos["tool_name"], datos["tool_input"]
     if herramienta == "Bash":
-        return decidir_bash(entrada["command"], conf)
+        return decidir_bash(entrada["command"], conf, os.path.normpath(datos.get("cwd") or os.getcwd()))
     return decidir_fichero(herramienta, entrada, os.path.normpath(datos.get("cwd") or os.getcwd()), conf)
 
 

@@ -34,6 +34,10 @@ BASH = {
         "git merge --no-verify main",
         "git merge --no-verif main",
         "git merge -S --no-verify main",
+        # G4 del PR #30, ronda 3: pull hace merge; y la forma con guion de git.
+        "git pull --no-verify origin main",
+        "/usr/lib/git-core/git-commit --no-verify -m x",
+        "git-commit -n -m x",
         "cd app && git commit -n -m x",
         "echo $(git commit --no-verify -m x)",
     ],
@@ -122,6 +126,9 @@ BASH = {
         "printf 'x\\n' > .git/info/exclude",
         "cp mis-excluidos .git/info/exclude",
         "sed -i '$a x' .git/info/exclude",
+        # G4 del PR #30, ronda 3: un atributo binary deja ciego a gitleaks.
+        "echo 'c.py binary' > .git/info/attributes",
+        "echo '* -diff' >> .git/info/attributes",
     ],
     # G4 del PR #30: los hooks y la configuración de Git, también si el sandbox lo permitiera.
     "config-de-hooks-ficheros": [
@@ -142,6 +149,11 @@ BASH = {
     "ajustes-del-agente": [
         "echo '{\"env\": {\"LEFTHOOK\": \"0\"}}' > .claude/settings.local.json",
         "cp x .claude/settings.json",
+        # G4 del PR #30, ronda 3: un perfil o un binario antes en el PATH.
+        "echo 'export LEFTHOOK=0' >> ~/.bashrc",
+        "printf 'x' > /home/u/.profile",
+        "cp falso.sh /home/u/.local/bin/gitleaks",
+        "ln -s /bin/true /home/u/.local/bin/lefthook",
     ],
     # G4 del PR #30, ronda 2: lefthook y gitleaks los leen del árbol de trabajo. Pregunta.
     "config-de-controles": [
@@ -153,6 +165,10 @@ BASH = {
         "printf '[allowlist]' > .gitleaks.toml",
         "git checkout otra -- .gitleaks.toml",
         "sed -i 's/gitleaks/true/' lefthook.json",
+        # G4 del PR #30, ronda 3.
+        "git rm lefthook.json",
+        "git rm -f .gitleaks.toml",
+        "echo 'c.py -diff' >> .gitattributes",
     ],
     # Commits que no pasan por pre-commit.
     "commit-sin-hooks": [
@@ -160,6 +176,8 @@ BASH = {
         "git am 0001.patch",
         "git am --no-verify 0001.patch",
         "git am --continue",
+        "/usr/lib/git-core/git-am 0001.patch",
+        "/usr/lib/git-core/git-commit-tree HEAD^{tree} -m x",
         "git commit-tree HEAD^{tree} -p HEAD -m x",
         "git update-ref refs/heads/x $(git commit-tree HEAD^{tree} -m x)",
         "git fast-import < flujo",
@@ -212,6 +230,12 @@ LEGITIMAS = [
     "grep gitleaks < lefthook-local.yml",
     "cat lefthook.json",
     "git add lefthook.json .gitleaksignore",
+    "git rm --cached lefthook-local.yml",
+    "jq . lefthook.json",
+    "sha256sum .gitleaksignore",
+    "cat .git/info/attributes",
+    "ls ~/.local/bin",
+    "export LEFTHOOK_OUTPUT=summary",
     "git update-index --no-skip-worktree lefthook.json",
     "git update-index --refresh",
     "git update-ref -d refs/heads/vieja",
@@ -293,10 +317,24 @@ class GuardaBash(unittest.TestCase):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(comando), "sin-analizar")
 
+    def test_sigue_la_carpeta(self):
+        """G4 del PR #30, ronda 3: tras cd .git, «commondir» es .git/commondir."""
+        for comando, cwd in (("cd .git && echo /otra/.git > commondir", CWD),
+                             ("echo /otra/.git > commondir", f"{CWD}/.git"),
+                             ("printf x > info/attributes", f"{CWD}/.git"),
+                             ("cd info && echo x > exclude", f"{CWD}/.git")):
+            with self.subTest(comando=comando, cwd=cwd):
+                self.assertIn(guarda.decidir_bash(comando, CONF, cwd)[0], ("config-de-hooks", "ocultar-cambios"))
+        self.assertIsNone(guarda.decidir_bash("echo x > commondir", CONF, CWD)[0])
+        self.assertIsNone(guarda.decidir_bash("cd $D && echo x > commondir", CONF, CWD)[0])
+
     def test_relevante_con_limites_de_palabra(self):
         """G4 del PR #30: «light» o «weight» sin cerrar no son git."""
         self.assertIsNone(self.decide("echo 'light"))
         self.assertEqual(self.decide("echo 'x' > .git/hooks/a 'b"), "sin-analizar")
+        for comando in ("echo 'x' > .gitleaksignore 'b", "echo 'x' > commondir 'b", "echo 'x' >> ~/.bashrc 'b"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando), "sin-analizar")
 
     def test_orden_enorme_falla_cerrado(self):
         self.assertEqual(self.decide("git status # " + "x" * CONF["max_caracteres_orden"]), "sin-analizar")
@@ -333,7 +371,11 @@ class GuardaHerramientas(unittest.TestCase):
                 self.assertEqual(self.decide("Write", ruta), "config-local-lefthook")
 
     def test_ajustes_y_controles(self):
-        for ruta, regla in ((f"{CWD}/.claude/settings.local.json", "ajustes-del-agente"),
+        for ruta, regla in ((f"{CWD}/.git/info/attributes", "ocultar-cambios"),
+                            (f"{CWD}/.gitattributes", "config-de-controles"),
+                            ("/home/u/.bashrc", "ajustes-del-agente"),
+                            ("/home/u/.local/bin/gitleaks", "ajustes-del-agente"),
+(f"{CWD}/.claude/settings.local.json", "ajustes-del-agente"),
                             (f"{CWD}/.claude/settings.json", "ajustes-del-agente"),
                             (f"{CWD}/lefthook.json", "config-de-controles"),
                             (f"{CWD}/.gitleaks.toml", "config-de-controles"),

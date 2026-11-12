@@ -440,6 +440,18 @@ class TestLefthook(unittest.TestCase):
             with self.subTest(ruta=ruta):
                 self.assertTrue(self.comprobar(versionados={"lefthook.json": "100644", ruta: "100644"}))
 
+    def test_sin_gitleaks_avisa(self):
+        """G4 del PR #30, ronda 3: la lista blanca acepta quitar gitleaks; al menos, que se vea."""
+        conf = json.loads(LEFTHOOK_PLANTILLA)
+        conf["pre-commit"]["jobs"] = [{"name": "nada", "run": "true"}]
+        inf = ejecutar(checks.check_lefthook, {"lefthook.json": "100644"}, json.dumps(conf), True)
+        self.assertEqual(inf.errores, [])
+        self.assertIn("gitleaks", " ".join(inf.avisos))
+        self.assertEqual(ejecutar(checks.check_lefthook, {"lefthook.json": "100644"}, LEFTHOOK_PLANTILLA, True).avisos, [])
+
+    def test_la_plantilla_ignora_gitleaks_allow(self):
+        self.assertIn("--ignore-gitleaks-allow", LEFTHOOK_PLANTILLA)
+
     def test_otros_nombres_parecidos_pasan(self):
         self.assertEqual(self.comprobar(versionados={"lefthook.json": "100644", "docs/lefthook.md": "100644",
                                                       "lefthook.json.example": "100644"}), [])

@@ -113,6 +113,7 @@ LEFTHOOK_OBLIGATORIAS = ("assert_lefthook_installed", "no_auto_install")
 LEFTHOOK_HOOKS = {"pre-commit", "commit-msg"}
 LEFTHOOK_CLAVES_HOOK = {"parallel", "piped", "jobs"}
 LEFTHOOK_CLAVES_JOB = {"name", "run", "glob", "exclude", "file_types", "fail_text"}
+RE_GITLEAKS_ANTES = re.compile(r'"run"\s*:\s*"gitleaks git --pre-commit')
 
 RE_TITULO_HISTORIAL = re.compile(r"^#+\s*(?:\d+\.\s*)?(historial|registro de cambios|cambios|changelog)\b", re.I | re.M)
 
@@ -637,8 +638,11 @@ def check_lefthook(inf: Informe, versionados: dict[str, str] | None, texto: str 
     if versionados[LEFTHOOK_CONFIG] != "100644":
         inf.error("lefthook", f"`{LEFTHOOK_CONFIG}` tiene que ser un fichero normal, no un enlace ni un ejecutable.")
         return
-    for e in errores_lefthook(texto or ""):
+    errores = errores_lefthook(texto or "")
+    for e in errores:
         inf.error("lefthook", f"`{LEFTHOOK_CONFIG}`: {e} Solo valen las claves que no amplían lo que se ejecuta (ADR-0008, `docs/herramientas.md`).")
+    if not errores and not RE_GITLEAKS_ANTES.search(texto or ""):
+        inf.aviso("lefthook", f"⚠️ `{LEFTHOOK_CONFIG}` ya no lanza `gitleaks git --pre-commit`: sin él, nada busca secretos antes del commit. Comprueba que el cambio es a propósito.")
 
 
 def ficheros_versionados() -> dict[str, str] | None:
