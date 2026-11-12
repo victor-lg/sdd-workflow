@@ -54,7 +54,7 @@ Modelo GitHub Flow: `main` siempre desplegable, una rama corta por cambio, squas
 - Si la entrega va en varios PR: `feat/vic-12-logica`, `feat/vic-12-interfaz`.
 - **Siempre con el ID** (M11), también las de spec, ADR, CI y mantenimiento. Si no hay issue, se crea antes.
 
-Ejemplos: `feat/vic-16-materiales`, `fix/vic-17-redondeo-peso`, `spec/vic-18-calc-004-historial`, `adr/vic-19-0009-modelos`, `ci/vic-20-shards`.
+Ejemplos: `feat/vic-16-materiales`, `fix/vic-17-redondeo-peso`, `spec/vic-18-calc-004-historial`, `adr/vic-19-0010-modelos`, `ci/vic-20-shards`.
 
 ## 4. Commits (Conventional Commits 1.0)
 

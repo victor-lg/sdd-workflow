@@ -12,7 +12,7 @@ referencias:
   - "VIC-18"
   - "docs/plan-v1.1.md (bloque 3: M33, M38 y piloto de AgentShield; el ADR de autonomía pasa a ADR-0009 y el de modelos a ADR-0010)"
   - "docs/herramientas.md"
-  - "historial/analisis-herramientas-1.md (criterios, reglas comunes 1 a 4 y §8 a §12)"
+  - "historial/analisis-herramientas-1.md (criterios, reglas comunes 1 a 4, §6, §8, §9 y §12)"
   - "docs/adr/0007-autoria-y-convenciones.md"
   - "docs/inventario-reglas.md (REG-31 y REG-32)"
 ---
@@ -59,32 +59,33 @@ Se elevan a norma estos criterios para cualquier herramienta de terceros:
    - para un riesgo en el PC fuera del sandbox, la configuración queda fuera del alcance de escritura del agente. Si no se puede, la única otra vía es una regla para la persona nombrada como límite aceptado en un ADR, como hace este con lefthook.
 
    Solo vetan tres cosas: (V1) una trifecta letal que no se puede romper; (V2) que la herramienta reescriba nuestras instrucciones o configuración sin revisión; (V3) que vea credenciales en tránsito sin necesitarlas.
-3. **Hooks de terceros:** un hook de terceros, de Claude Code o de Git, solo se acepta si se ha leído su código en la versión fijada, al menos lo que decide qué se ejecuta, qué escribe y qué sale por red. Al subir de versión, se relee lo que cambió en esas partes. Es una condición necesaria, no suficiente. Para los hooks de Claude Code sigue además la regla común 3 del análisis: solo se aceptan los que informan, nunca los que deciden, cambian órdenes o añaden lo que ve el modelo.
+3. **Hooks de terceros:** un hook de terceros, de Claude Code o de Git, solo se acepta si se ha leído su código en la versión fijada, al menos lo que decide qué se ejecuta, qué escribe y qué sale por red. Al subir de versión, se relee lo que cambió en esas partes. Es una condición necesaria, no suficiente. Para los hooks de Claude Code sigue además la regla común 3 del análisis: solo se aceptan los que informan, nunca los que deciden, cambian órdenes o añaden lo que ve el modelo. Para los hooks de Git, en cambio, esa regla se relaja: un hook de Git de terceros que decide (por ejemplo, que bloquea un commit) se acepta con su código leído y las condiciones de su entrada del registro.
 4. **Registro:** `docs/herramientas.md` registra también las herramientas que ejecutan la plantilla de proyecto y sus hooks de Git. Cada una dice qué hace, qué toca y qué lee, versión y digest o suma (o por qué no hay, y lo pendiente marcado como tal), el tiempo que añade, si necesita red, la alternativa y su riesgo de ejecutar código ajeno fuera del sandbox. Añadir, quitar o subir de versión una es R2.
 
-**Se adopta la opción C.** Que los fallos salgan en segundos y que los commits de la rama se comprueben antes del squash compensan el coste, porque el riesgo de C se acota con una regla para la persona y controles sobre el agente. A no añade riesgo, pero tampoco da ese beneficio. B deja el riesgo de las herramientas que lanza, que es el mismo de C sin la superficie propia de lefthook, y obliga a mantener un gestor propio. Las condiciones de lefthook (el detalle está en `docs/herramientas.md` y se puede cambiar por PR R2 sin otro ADR):
+**Se adopta la opción C.** Que los fallos salgan en segundos y que los commits de la rama se comprueben antes del squash compensan el coste, porque el riesgo de C se acota con una regla para la persona y controles sobre el agente. A no añade riesgo, pero tampoco da ese beneficio. B deja el riesgo de las herramientas que lanza, que es el mismo de C sin la superficie propia de lefthook, y obliga a mantener un gestor propio. Las condiciones de lefthook son las de abajo. Su detalle está en `docs/herramientas.md`: endurecerlo es un PR R2, pero relajar o quitar una condición necesita otro ADR.
 
-- **Fuera del sandbox no corren hooks de la copia del agente:** toda orden de Git que la persona lance en esa copia va con `LEFTHOOK=0`, que corta antes de ejecutar nada; los commits de la persona, mejor desde la web. La CI repite todos los controles y es la que decide.
-- **La configuración de lefthook no amplía lo que se ejecuta ni toca la configuración del agente:** nada de configuración remota, heredada o de un fichero de entorno, ni hooks de agentes, ni volver a preparar ficheros. La CI lo comprueba.
-- **La instalación** se hace en un clon nuevo de `main`, con un binario fijado por suma, y la persona revisa después que `.claude/` no ha cambiado. En la copia del agente no basta revisar con `git status`: el agente puede ocultar cambios en el índice.
+- **La persona no lanza órdenes de Git en la copia del agente,** ni abre ahí un editor con Git. Sus cambios van desde la web o desde una copia propia. Si alguna vez tiene que hacerlo, va con `LEFTHOOK=0`, que corta lefthook pero no otras vías del resto de `.git` (sección 6). La CI repite los controles de seguridad y es la que decide; el formato de los commits lo añade a la CI el PR 3.
+- **La configuración de lefthook no amplía lo que se ejecuta ni toca la configuración del agente:** nada de configuración remota, heredada o de un fichero de entorno, ni hooks de agentes, ni volver a preparar ficheros. Lo comprueba la CI desde el mismo PR que instala lefthook, y la persona lo revisa en la configuración de `main` antes de instalar.
+- **La instalación** se hace en un clon nuevo de `main`, con un binario fijado por suma en una ruta que el agente no puede escribir, y la persona revisa después que `.claude/` no ha cambiado, incluidos los ficheros ignorados. En la copia del agente no basta revisar con `git status`: el agente puede ocultar cambios en el índice.
 - **Saltos:** un hook del plugin bloquea en las órdenes del agente las formas conocidas de saltar o desviar los hooks de Git, y que el agente escriba la configuración local de lefthook. Es una segunda capa, como los demás hooks del plugin; la autoridad es la CI.
 - **Los hooks del plugin,** que corren fuera del sandbox, nunca lanzan órdenes de Git que disparen hooks (commit, checkout, merge, worktree): solo órdenes de consulta.
 
 ## 4. Consecuencias
 
-- **Beneficios:** gitleaks, el escáner del lenguaje y el formato de los commits fallan en segundos en vez de en la CI. Los criterios dejan de vivir solo en el historial.
-- **Costes:** una instalación por clon; un hook más en el plugin; la persona no ejecuta hooks en la copia del agente.
-- **Límite que se acepta:** "`LEFTHOOK=0` en la copia del agente" es una regla, no un control. Si la persona la olvida, ejecuta fuera del sandbox lo que haya en el árbol de trabajo de esa copia. Lefthook puede además dejar instalados hooks nuevos que corran en órdenes posteriores, y descargar configuración remota. También disparan hooks las órdenes que la persona no teclea: el cliente de Git de un editor abierto en esa copia, `gh pr checkout` o `git worktree add`. CODEOWNERS no ayuda aquí: protege lo que llega a `main`, no el árbol de trabajo. Se acepta porque la persona casi nunca lanza órdenes de Git en esa copia ni la abre en un editor; si lo hace, pasa a la copia propia de la sección 6.
+- **Beneficios:** gitleaks, el escáner del lenguaje y el formato de los commits fallan en segundos en vez de en la CI.
+- **Dependencia del sandbox:** el diseño se apoya en que el sandbox deja `.git/hooks` y `.git/config` en solo lectura, que hoy es un comportamiento de Claude Code y no está en los ajustes gestionados. Si cambia, el agente podría reescribir los hooks instalados. Los criterios dejan de vivir solo en el historial.
+- **Costes:** una instalación por clon; un hook más en el plugin; la persona no usa Git en la copia del agente.
+- **Límite que se acepta:** "sin órdenes de Git de la persona en la copia del agente" es una regla, no un control. Si la persona la olvida, ejecuta fuera del sandbox lo que haya en el árbol de trabajo de esa copia. Lefthook puede además dejar instalados hooks nuevos que corran en órdenes posteriores, y descargar configuración remota. También disparan hooks las órdenes que la persona no teclea: el cliente de Git de un editor abierto en esa copia, `gh pr checkout` o `git worktree add`. CODEOWNERS no ayuda aquí: protege lo que llega a `main`, no el árbol de trabajo. Se acepta porque la persona no necesita Git en esa copia: aprueba y fusiona en GitHub.
 - **Numeración:** el plan reservaba ADR-0008 al de autonomía (bloque 5) y ADR-0009 al de modelos (bloque 7). Pasan a ADR-0009 y ADR-0010. ADR-0007, ya aceptado, sigue citando los números anteriores.
 
 ## 5. Validación
 
-- PR 2 de VIC-18: un test del hook del plugin con cada forma de salto de la lista de `docs/herramientas.md`; un commit del agente con un secreto señuelo se bloquea en local.
-- PR 3: la CI rechaza una configuración de lefthook que incumpla las condiciones de la sección 3 y marca como sensible un cambio en la configuración de los escáneres.
+- PR 2 de VIC-18: un test del hook del plugin con cada forma de salto de la lista de `docs/herramientas.md`; un commit del agente con un secreto señuelo se bloquea en local; la CI rechaza una configuración de lefthook que incumpla las condiciones de la sección 3; y una comprobación repetible (evaluación o test) confirma que `.git/hooks` y `.git/config` siguen en solo lectura para el agente.
+- PR 3: la CI marca como sensible un cambio en cualquiera de los ficheros de la lista de `docs/herramientas.md` y comprueba el formato de los commits de la rama.
 - El tiempo que añade cada herramienta al commit y a la CI, medido en los PR 2 y 3 y anotado en `docs/herramientas.md` en lugar de la estimación.
 
 ## 6. Seguimiento
 
-- Si la persona necesita lanzar órdenes de Git o abrir un editor en el repo a menudo, la regla pasa a ser estructural: una copia propia del repo, separada de la del agente.
+- Fijar en los ajustes gestionados la denegación de escritura de `.git/hooks` y `.git/config`, si el sandbox lo permite (lo decide la persona: `entorno/managed-settings.json`).
 - Comprobar si el resto de `.git` escribible (por ejemplo `.git/modules/<sub>/config` o sus hooks) permite ejecutar código en una orden de Git de la persona, con o sin lefthook. Es un riesgo previo a este ADR; si se confirma, se trata en su propia issue.
 - Si lefthook añade otra vía de configuración o de salto, se trata como subida de versión: se lee y se actualizan el registro y el hook del plugin.
