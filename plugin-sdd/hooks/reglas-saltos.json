@@ -1,0 +1,102 @@
+{
+  "max_caracteres_orden": 200000,
+  "variables_de_hooks": [
+    "LEFTHOOK",
+    "LEFTHOOK_EXCLUDE",
+    "LEFTHOOK_CONFIG",
+    "LEFTHOOK_BIN",
+    "GITLEAKS_CONFIG",
+    "GITLEAKS_CONFIG_TOML"
+  ],
+  "variables_de_config_git": "^GIT_CONFIG_(COUNT|KEY_\\d+|VALUE_\\d+|PARAMETERS)$",
+  "variables_con_git": [
+    "PATH",
+    "HOME",
+    "XDG_CONFIG_HOME",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY"
+  ],
+  "claves_de_hooks": "^(core\\.hookspath|include\\..*|includeif\\..*|alias\\..*)$",
+  "config_local_lefthook": "(^|/)(\\.?lefthook-local|\\.config/lefthook-local)\\.(yml|yaml|json|jsonc|toml)$|(^|/)\\.lefthook-local(/|$)",
+  "otra_config_lefthook": "(^|/)(\\.config/lefthook|\\.lefthook)\\.(yml|yaml|json|jsonc|toml)$|(^|/)lefthook\\.(yml|yaml|jsonc|toml)$|(^|/)\\.lefthook(/|$)",
+  "hooks_y_config_de_git": "(^|/)\\.git(/(.+/)?(hooks(/.*)?|config(\\.worktree)?|commondir))?$|(^|/)\\.gitconfig$|(^|/)\\.config/git/config$",
+  "exclude_de_git": "(^|/)\\.git/info/exclude$",
+  "solo_leen": [
+    "cat",
+    "less",
+    "more",
+    "head",
+    "tail",
+    "ls",
+    "stat",
+    "file",
+    "wc",
+    "diff",
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "echo",
+    "printf",
+    "test",
+    "[",
+    "jq",
+    "nl",
+    "sha256sum",
+    "md5sum",
+    "cmp"
+  ],
+  "git_escritores": [
+    "checkout",
+    "restore",
+    "mv"
+  ],
+  "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, scripts). Si crees que aquí no aplica, díselo a la persona.",
+  "reglas": {
+    "sin-verificar": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no saltes los hooks de Git ({forma}). Comprueban lo que va en el commit (por ejemplo, secretos con gitleaks) antes de que llegue a la CI, que lo repite. En su lugar: corrige lo que señala el hook y repite la orden sin esa opción; si crees que el hook se equivoca, díselo a la persona."
+    },
+    "variables-de-hooks": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no cambies las variables que apagan o desvían lefthook o gitleaks ({forma}). En su lugar: lanza la orden sin esa variable; si un hook falla, corrige la causa o díselo a la persona."
+    },
+    "config-de-hooks": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no cambies la configuración de Git que decide qué hooks corren o qué ejecuta una orden ({forma}): .git/hooks, .git/config, .git/commondir, un fichero .git, la configuración global, core.hooksPath, include o alias con git -c, GIT_CONFIG_*, o PATH, HOME, XDG_CONFIG_HOME o GIT_DIR y similares en una orden con git. En su lugar: lanza la orden de git sin cambiar eso; si necesitas otra configuración, pídesela a la persona."
+    },
+    "config-local-lefthook": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no escribas configuración de lefthook fuera de lefthook.json ({forma}): la local se fusiona con la principal y otro nombre la sustituye, así que pueden quitar o cambiar sus órdenes. En su lugar: si hace falta cambiar un hook, cambia lefthook.json en la rama, que revisa la persona; si el fichero ya existe, díselo."
+    },
+    "ocultar-cambios": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no ocultes cambios a Git ni a gitleaks ({forma}): skip-worktree, assume-unchanged y .git/info/exclude esconden ficheros a git status y a la revisión, y un atributo binary en .git/info/attributes esconde su contenido a gitleaks. En su lugar: añade a .gitignore o a .gitattributes, en la rama, lo que haga falta; si es algo local tuyo, díselo a la persona."
+    },
+    "ajustes-del-agente": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no escribas los ajustes de Claude Code, los perfiles de shell ni ficheros llamados lefthook o gitleaks ({forma}): pueden fijar variables como LEFTHOOK=0 para todas las sesiones o poner otro binario antes en el PATH. En su lugar: si hace falta cambiar un ajuste o el entorno, pídeselo a la persona."
+    },
+    "config-de-controles": {
+      "nivel": "preguntar",
+      "mensaje": "ADR-0008: el agente quiere cambiar {forma} en el árbol de trabajo. lefthook y gitleaks lo leen de ahí antes de cada commit, aunque el cambio no se prepare (y .gitattributes puede marcar un fichero como binario, que gitleaks no mira), así que puede apagar gitleaks sin que lo vea la CI ni la revisión. ¿Lo permites?"
+    },
+    "commit-sin-hooks": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no crees commits por una vía que no pasa por los hooks de Git ({forma}): git am, commit-tree, fast-import, un clon local, otro directorio de Git o la API de GitHub. En su lugar: git commit en esta copia del repo, con los hooks; si necesitas otra vía, díselo a la persona."
+    },
+    "sin-analizar": {
+      "nivel": "bloquear",
+      "mensaje": "No he podido analizar esta orden: tiene comillas, una sustitución o un heredoc sin cerrar, o es demasiado larga, y menciona git, gh, lefthook, gitleaks o .git/. En su lugar: corrígela o sepárala en órdenes más simples."
+    }
+  },
+  "ajustes_del_agente": "(^|/)\\.claude/settings(\\.local)?\\.json$",
+  "config_de_controles": "(^|/)(lefthook\\.json|\\.gitleaks\\.toml|\\.gitleaksignore|\\.gitattributes)$",
+  "ocultar_a_gitleaks": "(^|/)\\.git/(.+/)?info/attributes$",
+  "entorno_del_agente": "(?-i:(^|/)\\.(bashrc|bash_profile|bash_login|profile|zshrc|zprofile|zshenv)$|(^|/)(lefthook|gitleaks)(\\.exe)?$)"
+}

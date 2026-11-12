@@ -1,0 +1,15 @@
+{
+  "min_version": "2.2.2",
+  "assert_lefthook_installed": true,
+  "no_auto_install": true,
+  "pre-commit": {
+    "parallel": true,
+    "jobs": [
+      {
+        "name": "gitleaks",
+        "run": "gitleaks git --pre-commit --staged --redact --no-banner --ignore-gitleaks-allow",
+        "fail_text": "gitleaks ha encontrado un posible secreto en lo preparado. Sácalo del commit (git restore --staged <fichero>) y quítalo del fichero; si es un falso positivo, díselo a la persona."
+      }
+    ]
+  }
+}

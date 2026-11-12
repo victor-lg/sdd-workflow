@@ -17,6 +17,16 @@
         ]
       },
       {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guarda-saltos.py\" || exit 2",
+            "timeout": 20
+          }
+        ]
+      },
+      {
         "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep",
         "hooks": [
           {

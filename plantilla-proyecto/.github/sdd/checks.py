@@ -22,6 +22,8 @@ Comprueba:
   historial     M39: avisa si una spec que cambia lleva historial en la cabecera.
   adr           M7: las listas de la cabecera YAML de los ADR que cambian van
                 entre comillas (un `#` sin comillas se lee como comentario).
+  lefthook      ADR-0008: la única configuración de lefthook es `lefthook.json`, solo con
+                las claves que no amplían lo que se ejecuta, y no se quita si `main` la tiene.
 
 Uso local:
   PR_BODY="$(cat cuerpo.md)" PR_TITLE="feat(calculo): …" PR_BRANCH="feat/vic-12-calculo" \
@@ -33,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import json
 import os
 import re
 import subprocess
@@ -98,6 +101,20 @@ SENALES_HISTORIAL = [
     (re.compile(r"\bPR\s*#\d+"), "referencias a PR"),
     (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), "fechas"),
 ]
+# Configuración de lefthook (ADR-0008). Lista blanca: se rechaza cualquier otra clave,
+# también la misma en otras mayúsculas. JSON y no YAML, para leerlo sin dependencias y sin
+# anclas ni claves de fusión que escondan claves.
+LEFTHOOK_CONFIG = "lefthook.json"
+RE_LEFTHOOK_OTRA = re.compile(r"(^|/)(\.config/)?\.?lefthook(-local)?\.(yml|yaml|json|jsonc|toml)$"
+                              r"|(^|/)\.lefthook(-local)?/", re.I)
+LEFTHOOK_CLAVES = {"min_version", "assert_lefthook_installed", "no_auto_install", "no_tty",
+                   "pre-commit", "commit-msg"}
+LEFTHOOK_OBLIGATORIAS = ("assert_lefthook_installed", "no_auto_install")
+LEFTHOOK_HOOKS = {"pre-commit", "commit-msg"}
+LEFTHOOK_CLAVES_HOOK = {"parallel", "piped", "jobs"}
+LEFTHOOK_CLAVES_JOB = {"name", "run", "glob", "exclude", "file_types", "fail_text"}
+RE_GITLEAKS_ANTES = re.compile(r'"run"\s*:\s*"gitleaks git --pre-commit')
+
 RE_TITULO_HISTORIAL = re.compile(r"^#+\s*(?:\d+\.\s*)?(historial|registro de cambios|cambios|changelog)\b", re.I | re.M)
 
 
@@ -551,6 +568,95 @@ def check_adr(inf: Informe, ficheros: dict[str, str]) -> None:
             inf.error("adr", f"`{ruta}`: en la cabecera YAML, las referencias van entre comillas (M7): {', '.join(f'`{v}`' for v in malas)}.")
 
 
+# --- Configuración de lefthook (ADR-0008) ---------------------------------
+
+def _sin_duplicadas(pares: list[tuple[str, object]]) -> dict:
+    claves = [c for c, _ in pares]
+    repetidas = sorted({c for c in claves if claves.count(c) > 1})
+    if repetidas:
+        raise ValueError(f"claves repetidas: {', '.join(repetidas)}")
+    return dict(pares)
+
+
+def _texto_o_lista(valor: object) -> bool:
+    return isinstance(valor, str) or (isinstance(valor, list) and all(isinstance(v, str) for v in valor))
+
+
+def errores_lefthook(texto: str) -> list[str]:
+    """Lo que incumple la lista blanca en el texto de `lefthook.json`."""
+    try:
+        conf = json.loads(texto, object_pairs_hook=_sin_duplicadas)
+    except ValueError as e:
+        return [f"no es JSON válido ({e})."]
+    if not isinstance(conf, dict):
+        return ["no es un objeto JSON."]
+    errores = [f"la clave `{c}` no está permitida." for c in sorted(set(conf) - LEFTHOOK_CLAVES)]
+    errores += [f"falta `\"{c}\": true`." for c in LEFTHOOK_OBLIGATORIAS if conf.get(c) is not True]
+    for hook in sorted(LEFTHOOK_HOOKS & set(conf)):
+        cuerpo = conf[hook]
+        if not isinstance(cuerpo, dict):
+            errores.append(f"`{hook}` no es un objeto.")
+            continue
+        errores += [f"`{hook}.{c}` no está permitida." for c in sorted(set(cuerpo) - LEFTHOOK_CLAVES_HOOK)]
+        errores += [f"`{hook}.{c}` no es true ni false." for c in ("parallel", "piped")
+                    if c in cuerpo and not isinstance(cuerpo[c], bool)]
+        trabajos = cuerpo.get("jobs", [])
+        if not isinstance(trabajos, list):
+            errores.append(f"`{hook}.jobs` no es una lista.")
+            continue
+        for i, trabajo in enumerate(trabajos):
+            sitio = f"`{hook}.jobs[{i}]`"
+            if not isinstance(trabajo, dict):
+                errores.append(f"{sitio} no es un objeto.")
+                continue
+            errores += [f"{sitio}.{c} no está permitida." for c in sorted(set(trabajo) - LEFTHOOK_CLAVES_JOB)]
+            if not (isinstance(trabajo.get("run"), str) and trabajo["run"].strip()):
+                errores.append(f"{sitio} no tiene `run`.")
+            errores += [f"{sitio}.{c} no es texto." for c in ("name", "fail_text")
+                        if c in trabajo and not isinstance(trabajo[c], str)]
+            errores += [f"{sitio}.{c} no es texto ni lista de textos." for c in ("glob", "exclude", "file_types")
+                        if c in trabajo and not _texto_o_lista(trabajo[c])]
+    if "min_version" in conf and not isinstance(conf["min_version"], str):
+        errores.append("`min_version` no es texto.")
+    return errores
+
+
+def check_lefthook(inf: Informe, versionados: dict[str, str] | None, texto: str | None,
+                   en_base: bool | None) -> None:
+    """versionados: ruta -> modo de los ficheros del PR; texto: el de `lefthook.json`;
+    en_base: si `main` tiene `lefthook.json`. None si Git no ha podido decirlo."""
+    if versionados is None or en_base is None:
+        inf.error("lefthook", "no he podido listar los ficheros del PR o de `main` con Git, así que no sé si la configuración de lefthook cumple el ADR-0008.")
+        return
+    otras = sorted(r for r in versionados if r != LEFTHOOK_CONFIG and RE_LEFTHOOK_OTRA.search(r))
+    if otras:
+        inf.error("lefthook", f"hay configuración de lefthook fuera de `{LEFTHOOK_CONFIG}` ({', '.join(f'`{r}`' for r in otras)}). lefthook la leería antes o además de la principal (ADR-0008).")
+    if LEFTHOOK_CONFIG not in versionados:
+        if en_base:
+            inf.error("lefthook", f"el PR quita `{LEFTHOOK_CONFIG}`, que `main` tiene. Los hooks de Git no se quitan en un PR del agente (ADR-0008).")
+        return
+    if versionados[LEFTHOOK_CONFIG] != "100644":
+        inf.error("lefthook", f"`{LEFTHOOK_CONFIG}` tiene que ser un fichero normal, no un enlace ni un ejecutable.")
+        return
+    errores = errores_lefthook(texto or "")
+    for e in errores:
+        inf.error("lefthook", f"`{LEFTHOOK_CONFIG}`: {e} Solo valen las claves que no amplían lo que se ejecuta (ADR-0008, `docs/herramientas.md`).")
+    if not errores and not RE_GITLEAKS_ANTES.search(texto or ""):
+        inf.aviso("lefthook", f"⚠️ `{LEFTHOOK_CONFIG}` ya no lanza `gitleaks git --pre-commit`: sin él, nada busca secretos antes del commit. Comprueba que el cambio es a propósito.")
+
+
+def ficheros_versionados() -> dict[str, str] | None:
+    salida = git("ls-files", "-s", "-z")
+    if salida is None:
+        return None
+    versionados = {}
+    for entrada in salida.split("\0"):
+        cabecera, _, ruta = entrada.partition("\t")
+        if ruta:
+            versionados[ruta] = cabecera.split(" ", 1)[0]
+    return versionados
+
+
 # --- Programa -------------------------------------------------------------
 
 def main() -> int:
@@ -593,6 +699,12 @@ def main() -> int:
     check_historial(inf, {f: specs_head_ficheros[f] for f in cambiados if f in specs_head_ficheros})
     check_adr(inf, {f: (raiz / f).read_text(encoding="utf-8")
                     for f in cambiados if es_adr(f) and (raiz / f).is_file()})
+    # Del índice y solo si es un fichero normal: un enlace no se sigue (check_lefthook lo rechaza).
+    versionados = ficheros_versionados()
+    normal = versionados is not None and versionados.get(LEFTHOOK_CONFIG) == "100644"
+    texto_lefthook = git("show", f":{LEFTHOOK_CONFIG}") if normal else None
+    en_base = git("ls-tree", "--name-only", args.base, "--", LEFTHOOK_CONFIG)
+    check_lefthook(inf, versionados, texto_lefthook, None if en_base is None else bool(en_base.strip()))
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]

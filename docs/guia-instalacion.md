@@ -277,6 +277,41 @@ claude plugin details sdd@sdd-workflow
 
 **Actualizar el plugin:** `claude plugin update sdd@sdd-workflow`. Como el marketplace es tuyo, no se actualiza solo, y así cada versión nueva la decides tú.
 
+### B7. Hooks de Git: lefthook y gitleaks (ADR-0008)
+
+La plantilla trae `lefthook.json`, que lanza gitleaks antes de cada commit. Las condiciones son las del ADR-0008; el detalle, en `docs/herramientas.md`.
+
+**Binarios,** una vez, con tu cuenta y fuera de Claude Code. Van a `/usr/local/bin`, que es de root: el agente no puede cambiarlos. Las sumas son las de `docs/herramientas.md`; si no coinciden, para.
+
+```bash
+cd "$(mktemp -d)"
+curl -fsSLO https://github.com/evilmartians/lefthook/releases/download/v2.2.2/lefthook_2.2.2_Linux_x86_64
+curl -fsSLO https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+sha256sum -c - <<'EOF'
+4fbf89eb7748c6aed84d833ee1a29edac48fae614468ca9a82896ec32f2800b6  lefthook_2.2.2_Linux_x86_64
+551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks_8.30.1_linux_x64.tar.gz
+EOF
+tar xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
+sudo install -m 755 lefthook_2.2.2_Linux_x86_64 /usr/local/bin/lefthook
+sudo install -m 755 gitleaks /usr/local/bin/gitleaks
+```
+
+**Comprobación:** `lefthook version` da `2.2.2` y `gitleaks version`, `8.30.1`. No los muevas después. El hook busca lefthook en este orden: `LEFTHOOK_BIN`, el `PATH`, la ruta guardada al instalar y, si nada funciona, binarios del árbol de trabajo (`node_modules/`) y gestores como `yarn`, `uv run` o `mise`, que leen configuración del repo. gitleaks lo busca por el `PATH`. Por eso ninguna carpeta del `PATH` anterior a `/usr/local/bin` puede ser una que el agente escriba. En WSL con nvm suelen ir antes `~/.local/bin` y la carpeta de nvm: desde Bash el sandbox no deja escribirlas, y escribir fuera del proyecto con Write pide permiso; además, `guarda-saltos.py` bloquea escribir ficheros llamados `lefthook` o `gitleaks` y los perfiles de shell. Comprueba con `which -a lefthook gitleaks` que solo salen los de `/usr/local/bin`, y con `ls ~/.local/bin` que ahí no hay ninguno.
+
+**Si cambia `lefthook.json` en `main`** (por ejemplo, el PR 3 añade `commit-msg`), repite la instalación en un clon nuevo: con `no_auto_install`, lefthook no reinstala los hooks solo.
+
+**En cada proyecto,** también fuera de Claude Code y siempre en un clon nuevo de `main`:
+
+1. Mira en github.com que `lefthook.json` de `main` es el de la plantilla o que sus cambios pasaron por un PR que aprobaste.
+2. `gh repo clone tu-usuario/<proyecto> ~/proyectos/<proyecto>` y `cd` a esa carpeta.
+3. `lefthook install`.
+4. `git status --ignored .claude/` no muestra nada nuevo.
+5. Desde esa carpeta trabaja el agente.
+
+**Después, no lances órdenes de Git en la copia del agente** (tampoco `gh pr checkout`, `git worktree add` ni un editor con Git abierto ahí): ejecutarían fuera del sandbox lo que el agente haya escrito en el árbol de trabajo. Aprueba y fusiona en GitHub; tus cambios, desde la web o desde una copia tuya. Si alguna vez no hay más remedio, con `LEFTHOOK=0` delante, en un alias tuyo y nunca en el perfil de shell que hereda el agente.
+
+**Comprobación,** con el agente, en el proyecto: pídele que ejecute `git commit --no-verify -m x` y el hook del plugin lo bloquea (`guarda-saltos.py`). Desde el repo del workflow, `python3 -m unittest tests.test_sandbox_git -v` dentro de una sesión del agente confirma que `.git/hooks` y `.git/config` siguen en solo lectura.
+
 ---
 
 ## Bloque C — Prueba de punta a punta del PR
