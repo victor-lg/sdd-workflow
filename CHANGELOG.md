@@ -4,6 +4,10 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Herramientas del bloque 3 (ADR-0008, VIC-18, PR 1 de 4):**
+  - ADR-0008 (propuesto): los criterios para herramientas de terceros pasan a norma (la licencia solo cuenta si se copia código; un riesgo configurable es un coste, no un veto; un hook de terceros solo con su código leído) y lefthook entra en la plantilla con condiciones, porque mueve a ficheros que el agente puede escribir el código que corre en cada commit.
+  - `docs/herramientas.md` registra también las herramientas de la plantilla: gitleaks, osv-scanner, Semgrep (solo en la CI), ESLint con `eslint-plugin-no-unsanitized` como escáner de JS/TS, lefthook, Dependabot y el piloto de AgentShield, cada una con qué hace, qué toca y lee, versión y suma, tiempo estimado, red, alternativa y riesgo fuera del sandbox. Renovate y trufflehog, evaluadas y no aprobadas.
+  - La §9 de la línea base remite al ADR-0008. El ADR de autonomía pasa a ADR-0009 y el de modelos a ADR-0010 (`docs/plan-v1.1.md`, `docs/consentimiento-con-caducidad.md`).
 - **Autoría y convenciones (ADR-0007, VIC-16):**
   - `entorno/user-settings.json` lleva `"attribution": {"commit": "", "pr": "", "sessionUrl": false}`: ni commits ni PR mencionan a Claude.
   - `docs/convenciones.md` pasa a ser norma. La §7 de la línea base remite a ella y deja la "Autoría transparente" por commits a nombre de la cuenta de máquina sin menciones a Claude.

@@ -1,6 +1,6 @@
 # Consentimiento con caducidad (X-10)
 
-**Estado:** PROPUESTA (VIC-17, bloque 2). Es solo diseño: no hay código ni hook registrado. Se activa en el bloque 5, con el ADR-0008 y la escalera de confianza (M24), si se aprueba.
+**Estado:** PROPUESTA (VIC-17, bloque 2). Es solo diseño: no hay código ni hook registrado. Se activa en el bloque 5, con el ADR-0009 y la escalera de confianza (M24), si se aprueba.
 
 ## Qué resuelve
 
@@ -57,7 +57,7 @@ La idea sale de baseline (`historial/analisis-herramientas-1.md` §16): un hook 
 | Alargarlo cambiando la hora | La hora es la del sistema, fuera del sandbox. La caducidad se calcula al crear la marca, no al leerla |
 | Esquivar la guarda de la acción (`bash -c`, `gh api`) | No lo impide: es una segunda capa, como las demás guardas. La barrera real sigue siendo el ruleset y CODEOWNERS (G6). X-10 decide cuándo el agente puede intentar la acción, no si GitHub la acepta |
 
-**Riesgo que hay que aceptar o resolver en el ADR-0008:** si el token del agente puede fusionar los PR no sensibles (M24), el ruleset ya no distingue un PR permitido de otro, y para esos PR la única barrera es una guarda que lee el texto de la orden: `bash -c` o `gh api -X PUT …/merge` la esquivan. La alternativa es sacar la fusión del alcance del agente, por ejemplo un workflow o un entorno de GitHub que exija una marca puesta por la persona en GitHub.
+**Riesgo que hay que aceptar o resolver en el ADR-0009:** si el token del agente puede fusionar los PR no sensibles (M24), el ruleset ya no distingue un PR permitido de otro, y para esos PR la única barrera es una guarda que lee el texto de la orden: `bash -c` o `gh api -X PUT …/merge` la esquivan. La alternativa es sacar la fusión del alcance del agente, por ejemplo un workflow o un entorno de GitHub que exija una marca puesta por la persona en GitHub.
 
 **El permiso se gasta al intentarlo:** se consume en `PreToolUse`, antes de ejecutar la orden. Si otra guarda bloquea en paralelo o la orden falla, se pierde y hay que pedirlo de nuevo. Es aceptable porque falla cerrado.
 
@@ -86,7 +86,7 @@ Si cualquier comprobación no puede hacerse (marca ilegible, `gh` sin red, JSON 
 
 ## Decisiones pendientes
 
-1. **Qué acciones entran:** en principio `fusionar` (R0 y R1 no sensibles, primer peldaño de M24) y `mover` (*Ready* y *Done* en Linear, si el ADR-0008 lo deja al agente).
+1. **Qué acciones entran:** en principio `fusionar` (R0 y R1 no sensibles, primer peldaño de M24) y `mover` (*Ready* y *Done* en Linear, si el ADR-0009 lo deja al agente).
 2. **Caducidad:** 10 minutos y un uso, o varios usos dentro de la ventana.
 3. **Qué hacer con las herramientas que generan mensajes y con `claude` lanzado desde Bash:** depende de las comprobaciones de arriba.
 4. **Si la fusión queda en manos del agente** con solo esta guarda delante, o pasa por una barrera de GitHub que la persona controla.
