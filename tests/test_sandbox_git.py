@@ -35,6 +35,8 @@ RUTAS = [
     ("objects", True, None),
     ("modules", True, None),
     ("worktrees", True, None),
+    # G4 del PR #30: si se puede crear, desvía config y hooks a otro directorio (ADR-0008, §6).
+    ("commondir", False, None),
     ("", True, None),
 ]
 

@@ -33,6 +33,7 @@ BASH = {
         "git commit --amend --no-edit --no-verify",
         "git merge --no-verify main",
         "git merge --no-verif main",
+        "git merge -S --no-verify main",
         "cd app && git commit -n -m x",
         "echo $(git commit --no-verify -m x)",
     ],
@@ -80,6 +81,11 @@ BASH = {
         "PATH=/home/u/falsos:$PATH git commit -m x",
         "export PATH=/home/u/falsos:$PATH; git commit -m x",
         "env PATH=/home/u/falsos git commit -m x",
+        "GIT_DIR=../otra/.git git commit -m x",
+        "GIT_INDEX_FILE=/home/u/otro git commit -m x",
+        # G4 del PR #30, ronda 2: exportadas antes, en la misma llamada.
+        "export GIT_WORK_TREE=/home/u/vacio && git commit -m x",
+        "export GIT_DIR=/home/u/otra/.git; git commit -m x",
     ],
     # Ficheros: configuración local de lefthook en cualquier nombre y extensión.
     "config-local-lefthook": [
@@ -126,6 +132,27 @@ BASH = {
         "echo x > .git/modules/sub/config",
         "echo x > .git/modules/sub/hooks/pre-commit",
         "echo x > .git/worktrees/w/config.worktree",
+        # G4 del PR #30, ronda 2: commondir desvía config y hooks a otro directorio.
+        "echo /home/u/otra/.git > .git/commondir",
+        "printf 'gitdir: /home/u/otra' > .git",
+        "mv .git .git-viejo",
+        "rm -rf .git",
+        "echo '[core] hooksPath = /x' >> ~/.gitconfig",
+    ],
+    "ajustes-del-agente": [
+        "echo '{\"env\": {\"LEFTHOOK\": \"0\"}}' > .claude/settings.local.json",
+        "cp x .claude/settings.json",
+    ],
+    # G4 del PR #30, ronda 2: lefthook y gitleaks los leen del árbol de trabajo. Pregunta.
+    "config-de-controles": [
+        "echo x > lefthook.json",
+        "cp plantilla.json lefthook.json",
+        "rm lefthook.json",
+        "mv lefthook.json lefthook.json.bak",
+        "echo 'src/tiempo.py' >> .gitleaksignore",
+        "printf '[allowlist]' > .gitleaks.toml",
+        "git checkout otra -- .gitleaks.toml",
+        "sed -i 's/gitleaks/true/' lefthook.json",
     ],
     # Commits que no pasan por pre-commit.
     "commit-sin-hooks": [
@@ -140,10 +167,8 @@ BASH = {
         "git clone /home/u/proyecto ../otra",
         "git clone --no-hardlinks ./ ../otra",
         "git clone file:///home/u/proyecto ../otra",
-        "GIT_DIR=../otra/.git git commit -m x",
         "git --git-dir=../otra/.git commit -m x",
         "git --work-tree=../otra commit -m x",
-        "GIT_INDEX_FILE=/home/u/otro git commit -m x",
         "git --git-dir ../otra/.git merge main",
         "gh api repos/a/b/git/commits -f message=x -f tree=abc",
         "gh api -X PUT repos/a/b/contents/src/x.py -f message=x -f content=eA==",
@@ -185,8 +210,8 @@ LEGITIMAS = [
     "cat .git/info/exclude",
     "wc -l < .git/info/exclude",
     "grep gitleaks < lefthook-local.yml",
-    "echo x > lefthook.json",
-    "cp plantilla.json lefthook.json",
+    "cat lefthook.json",
+    "git add lefthook.json .gitleaksignore",
     "git update-index --no-skip-worktree lefthook.json",
     "git update-index --refresh",
     "git update-ref -d refs/heads/vieja",
@@ -295,7 +320,8 @@ class GuardaHerramientas(unittest.TestCase):
     def test_hooks_y_config_de_git(self):
         """G4 del PR #30: el sandbox no limita Write ni Edit."""
         for ruta in (f"{CWD}/.git/hooks/pre-commit", f"{CWD}/.git/config", ".git/hooks/post-checkout",
-                     f"{CWD}/.git/modules/sub/config", f"{CWD}/.git/worktrees/w/config.worktree"):
+                     f"{CWD}/.git/modules/sub/config", f"{CWD}/.git/worktrees/w/config.worktree",
+                     f"{CWD}/.git/commondir", f"{CWD}/.git", "/home/u/.gitconfig", "/home/u/.config/git/config"):
             for herramienta in ("Write", "Edit"):
                 with self.subTest(herramienta=herramienta, ruta=ruta):
                     self.assertEqual(self.decide(herramienta, ruta), "config-de-hooks")
@@ -305,6 +331,20 @@ class GuardaHerramientas(unittest.TestCase):
                      f"{CWD}/.lefthook/pre-commit/a.sh", f"{CWD}/LEFTHOOK-LOCAL.YML"):
             with self.subTest(ruta=ruta):
                 self.assertEqual(self.decide("Write", ruta), "config-local-lefthook")
+
+    def test_ajustes_y_controles(self):
+        for ruta, regla in ((f"{CWD}/.claude/settings.local.json", "ajustes-del-agente"),
+                            (f"{CWD}/.claude/settings.json", "ajustes-del-agente"),
+                            (f"{CWD}/lefthook.json", "config-de-controles"),
+                            (f"{CWD}/.gitleaks.toml", "config-de-controles"),
+                            (f"{CWD}/.gitleaksignore", "config-de-controles")):
+            with self.subTest(ruta=ruta):
+                self.assertEqual(self.decide("Edit", ruta), regla)
+
+    def test_bloquear_gana_a_preguntar(self):
+        self.assertEqual(guarda.decidir_bash("echo x > lefthook.json; git commit -n -m x", CONF)[0], "sin-verificar")
+        self.assertEqual(guarda.decidir_bash("echo x > .gitleaksignore && echo y > lefthook-local.yml", CONF)[0],
+                         "config-local-lefthook")
 
     def test_exclude(self):
         for ruta in (f"{CWD}/.git/info/exclude", ".git/info/exclude"):
@@ -317,7 +357,7 @@ class GuardaHerramientas(unittest.TestCase):
             self.assertEqual(self.decide("Write", os.path.join(d, "notas.yml"), d), "config-local-lefthook")
 
     def test_pasan(self):
-        for ruta in (f"{CWD}/lefthook.json", f"{CWD}/docs/lefthook.md", f"{CWD}/docs/lefthook-local.md",
+        for ruta in (f"{CWD}/docs/lefthook.md", f"{CWD}/docs/lefthook-local.md",
                      f"{CWD}/.gitignore", f"{CWD}/src/git/config", f"{CWD}/hooks/pre-commit",
                      f"{CWD}/src/exclude", "notas.md"):
             with self.subTest(ruta=ruta):
@@ -372,8 +412,14 @@ class Principal(unittest.TestCase):
     def test_mensajes_dicen_que_hacer(self):
         for regla, info in CONF["reglas"].items():
             with self.subTest(regla=regla):
-                self.assertEqual(info["nivel"], "bloquear")
-                self.assertIn("En su lugar:", info["mensaje"])
+                self.assertIn(info["nivel"], ("bloquear", "preguntar"))
+                if info["nivel"] == "bloquear":
+                    self.assertIn("En su lugar:", info["mensaje"])
+
+    def test_pregunta_sin_cierre(self):
+        salida = self.decision(self.ejecuta(self.entrada("Write", file_path=f"{CWD}/.gitleaksignore", content="x")))
+        self.assertEqual(salida["permissionDecision"], "ask")
+        self.assertNotIn("no la esquives", salida["permissionDecisionReason"])
 
     def test_registro(self):
         registro = json.loads((HOOKS / "hooks.json").read_text(encoding="utf-8"))["hooks"]["PreToolUse"]

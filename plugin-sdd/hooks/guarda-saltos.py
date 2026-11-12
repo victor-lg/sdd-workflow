@@ -8,8 +8,11 @@ de Git que instala lefthook (docs/herramientas.md, "Formas de saltarlo"):
 - las variables que apagan o desvían lefthook o gitleaks;
 - core.hooksPath, include o alias con git -c, --config-env o GIT_CONFIG_*, y PATH, HOME,
   XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL o GIT_CONFIG_SYSTEM en una orden con git;
-- escribir configuración de lefthook fuera de lefthook.json, .git/hooks o .git/config,
-  también con Write, Edit o NotebookEdit;
+- escribir configuración de lefthook fuera de lefthook.json, .git/hooks, .git/config,
+  .git/commondir, un fichero .git, la configuración global de Git o los ajustes de
+  Claude Code, también con Write, Edit o NotebookEdit; y preguntar antes de cambiar
+  lefthook.json, .gitleaks.toml o .gitleaksignore en el árbol de trabajo, porque lefthook
+  y gitleaks los leen de ahí aunque el cambio no llegue a un commit;
 - ocultar cambios con update-index o .git/info/exclude;
 - crear commits sin pasar por pre-commit: am, commit-tree, fast-import, un clon local,
   otro directorio de Git o gh api.
@@ -156,7 +159,8 @@ def _regla_git(sub, args, globales, palabras, conf):
         if forma:
             return "sin-verificar", f"git commit {forma}"
     if sub == "merge":
-        forma = _no_verify(args, "msSXF", {"strategy": True, "strategy-option": True, "message": True,
+        # -S lleva su valor pegado (-S<clave>): no se come la palabra siguiente.
+        forma = _no_verify(args, "msXF", {"strategy": True, "strategy-option": True, "message": True,
                                            "file": True, "gpg-sign": False}, con_n=False)
         if forma:
             return "sin-verificar", f"git merge {forma}"
@@ -184,8 +188,8 @@ def _casa(clave, ruta, conf):
 
 
 def _escribe_en(nombre, efectiva, conf):
-    """Si una orden que nombra el fichero puede escribirlo: todas salvo las que solo leen
-    (y rm), y de git, checkout, restore y mv."""
+    """Si una orden que nombra el fichero puede escribirlo: todas salvo las que solo leen,
+    y de git, checkout, restore y mv."""
     if nombre in ("git", "git.exe"):
         separado = separar_git(efectiva)
         return bool(separado) and separado[0] in conf["git_escritores"]
@@ -210,7 +214,19 @@ def _fichero_protegido(ruta, conf):
         return "ocultar-cambios"
     if _casa("hooks_y_config_de_git", ruta, conf):
         return "config-de-hooks"
+    if _casa("ajustes_del_agente", ruta, conf):
+        return "ajustes-del-agente"
+    if _casa("config_de_controles", ruta, conf):
+        return "config-de-controles"
     return None
+
+
+def _mas_grave(actual, nueva, conf):
+    """La que bloquea gana a la que pregunta; entre iguales, la primera."""
+    if actual[0] is None or (conf["reglas"][actual[0]]["nivel"] == "preguntar"
+                             and conf["reglas"][nueva[0]]["nivel"] != "preguntar"):
+        return nueva
+    return actual
 
 
 def decidir_bash(comando, conf):
@@ -233,11 +249,12 @@ def decidir_bash(comando, conf):
                 return "config-de-hooks", variable
             if con_git and variable in conf["variables_con_git"]:
                 return "config-de-hooks", f"{variable} en una orden con git"
+    candidata = (None, None)
     for operador, destino in [(o, d) for _, o, d in analisis.redirecciones]:
         if ">" in operador:
             regla = _fichero_protegido(destino, conf)
             if regla:
-                return regla, destino
+                candidata = _mas_grave(candidata, (regla, destino), conf)
     for palabras in ordenes:
         efectiva = orden_efectiva(palabras)
         if not efectiva:
@@ -256,9 +273,10 @@ def decidir_bash(comando, conf):
             for palabra in efectiva[1:]:
                 for ruta in _candidatas(palabra):
                     regla = _fichero_protegido(ruta, conf)
-                    if regla:
-                        return regla, ruta
-    return None, None
+                    # Borrar una configuración de lefthook que sobra está bien.
+                    if regla and not (nombre == "rm" and regla == "config-local-lefthook"):
+                        candidata = _mas_grave(candidata, (regla, ruta), conf)
+    return candidata
 
 
 
