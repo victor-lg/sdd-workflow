@@ -1,0 +1,42 @@
+{
+  "max_caracteres_orden": 200000,
+  "variables_de_hooks": ["LEFTHOOK", "LEFTHOOK_EXCLUDE", "LEFTHOOK_CONFIG", "LEFTHOOK_BIN", "GITLEAKS_CONFIG", "GITLEAKS_CONFIG_TOML"],
+  "variables_de_config_git": "^GIT_CONFIG_(COUNT|KEY_\\d+|VALUE_\\d+|PARAMETERS)$",
+  "variables_con_git": ["PATH", "HOME", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"],
+  "claves_de_hooks": "^(core\\.hookspath|include\\..*|includeif\\..*)$",
+  "config_local_lefthook": "(^|/)(\\.?lefthook-local|\\.config/lefthook-local)\\.(yml|yaml|json|jsonc|toml)$|(^|/)\\.lefthook-local(/|$)",
+  "exclude_de_git": "(^|/)\\.git/info/exclude$",
+  "solo_leen": ["cat", "less", "more", "head", "tail", "ls", "stat", "file", "wc", "diff", "grep", "egrep", "fgrep", "rg", "echo", "printf", "rm", "test", "["],
+  "git_escritores": ["checkout", "restore", "mv"],
+  "cierre": "Es una segunda capa contra errores: usa la alternativa y no la esquives (bash -c, variables, scripts). Si crees que aquí no aplica, díselo a la persona.",
+  "reglas": {
+    "sin-verificar": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no saltes los hooks de Git ({forma}). Comprueban lo que va en el commit (por ejemplo, secretos con gitleaks) antes de que llegue a la CI, que lo repite. En su lugar: corrige lo que señala el hook y repite la orden sin esa opción; si crees que el hook se equivoca, díselo a la persona."
+    },
+    "variables-de-hooks": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no cambies las variables que apagan o desvían lefthook o gitleaks ({forma}). En su lugar: lanza la orden sin esa variable; si un hook falla, corrige la causa o díselo a la persona."
+    },
+    "config-de-hooks": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no cambies la configuración de Git que decide qué hooks corren ({forma}): core.hooksPath, include, GIT_CONFIG_*, o PATH, HOME o XDG_CONFIG_HOME en una orden con git. En su lugar: lanza la orden de git sin cambiar eso; si necesitas otra configuración, pídesela a la persona."
+    },
+    "config-local-lefthook": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no escribas configuración local de lefthook ({forma}): se fusiona con la principal y puede quitar o cambiar sus órdenes. En su lugar: si hace falta cambiar un hook, cambia la configuración principal en la rama, que revisa la persona; si el fichero ya existe, díselo."
+    },
+    "ocultar-cambios": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no ocultes cambios a Git ({forma}): skip-worktree, assume-unchanged y .git/info/exclude esconden ficheros a git status y a la revisión. En su lugar: añade a .gitignore, en la rama, lo que no deba versionarse; si es algo local tuyo, díselo a la persona."
+    },
+    "commit-sin-hooks": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0008: no crees commits por una vía que no pasa por los hooks de Git ({forma}): commit-tree, fast-import, un clon local, otro directorio de Git o la API de GitHub. En su lugar: git commit en esta copia del repo, con los hooks; si necesitas otra vía, díselo a la persona."
+    },
+    "sin-analizar": {
+      "nivel": "bloquear",
+      "mensaje": "No he podido analizar esta orden: tiene comillas, una sustitución o un heredoc sin cerrar, o es demasiado larga, y menciona git, gh, lefthook o gitleaks. En su lugar: corrígela o sepárala en órdenes más simples."
+    }
+  }
+}

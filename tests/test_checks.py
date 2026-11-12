@@ -1,8 +1,10 @@
 """Tests de plantilla-proyecto/.github/sdd/checks.py (VIC-17): M11 (rama, título y
 enlace a la issue), REG-34 (sin menciones a Claude), M39 (historial en la cabecera
-de una spec), M7 (comillas en la cabecera de los ADR) y M17 (`.gitignore` de la
-plantilla y de este repo con los ficheros del sandbox). Casos que pasan y que fallan."""
+de una spec), M7 (comillas en la cabecera de los ADR), M17 (`.gitignore` de la
+plantilla y de este repo con los ficheros del sandbox) y la configuración de lefthook
+(ADR-0008). Casos que pasan y que fallan."""
 import importlib.util
+import json
 import os
 import pathlib
 import shutil
@@ -342,6 +344,96 @@ class TestGitignore(unittest.TestCase):
         self.assertEqual(ignorados(RAIZ / ".gitignore", rutas), set())
 
 
+# --- Configuración de lefthook (ADR-0008) ----------------------------------
+
+LEFTHOOK_PLANTILLA = (PLANTILLA / "lefthook.json").read_text(encoding="utf-8")
+
+
+def con_lefthook(**cambios):
+    conf = json.loads(LEFTHOOK_PLANTILLA)
+    conf.update(cambios)
+    return json.dumps(conf)
+
+
+class TestLefthook(unittest.TestCase):
+    def comprobar(self, texto=LEFTHOOK_PLANTILLA, versionados=None, en_base=True):
+        versionados = {"lefthook.json": "100644", "README.md": "100644"} if versionados is None else versionados
+        return ejecutar(checks.check_lefthook, versionados, texto, en_base).errores
+
+    def test_la_plantilla_pasa(self):
+        self.assertEqual(self.comprobar(), [])
+
+    def test_la_plantilla_lanza_gitleaks_antes_del_commit(self):
+        trabajos = json.loads(LEFTHOOK_PLANTILLA)["pre-commit"]["jobs"]
+        self.assertIn("gitleaks git --pre-commit --staged --redact", " ".join(t["run"] for t in trabajos))
+
+    def test_claves_que_amplian_lo_que_se_ejecuta_fallan(self):
+        """Las del ADR-0008 y las que ejecutan órdenes (skip, only, files, setup) o scripts."""
+        for clave, valor in [("remotes", [{"git_url": "https://x"}]), ("extends", ["otro.yml"]), ("rc", ".rc"),
+                             ("templates", {"a": "b"}), ("lefthook", "/x/lefthook"), ("ai", {"claude": True}),
+                             ("source_dir", "x/"), ("source_dir_local", "x/"), ("Remotes", []),
+                             ("install_non_git_hooks", True), ("post-checkout", {"jobs": [{"run": "x"}]})]:
+            with self.subTest(clave=clave):
+                self.assertTrue(self.comprobar(con_lefthook(**{clave: valor})))
+        for hook in [{"jobs": [{"run": "x", "stage_fixed": True}]}, {"jobs": [{"run": "x", "env": {"PATH": "/x"}}]},
+                     {"jobs": [{"run": "x", "skip": [{"run": "true"}]}]}, {"jobs": [{"run": "x", "only": True}]},
+                     {"jobs": [{"script": "a.sh", "runner": "bash"}]}, {"jobs": [{"run": "x", "root": "a/"}]},
+                     {"jobs": [{"group": {"jobs": [{"run": "x"}]}}]}, {"files": "git ls-files", "jobs": []},
+                     {"setup": [{"run": "x"}], "jobs": []}, {"commands": {"a": {"run": "x"}}},
+                     {"scripts": {"a.sh": {"runner": "bash"}}}, {"skip": True, "jobs": []},
+                     {"follow": True, "jobs": []}, {"exclude_tags": ["x"], "jobs": []}]:
+            with self.subTest(hook=hook):
+                self.assertTrue(self.comprobar(con_lefthook(**{"pre-commit": hook})))
+
+    def test_obligatorias(self):
+        for clave in checks.LEFTHOOK_OBLIGATORIAS:
+            for valor in (False, "true", 1):
+                with self.subTest(clave=clave, valor=valor):
+                    self.assertTrue(self.comprobar(con_lefthook(**{clave: valor})))
+            conf = json.loads(LEFTHOOK_PLANTILLA)
+            del conf[clave]
+            self.assertTrue(self.comprobar(json.dumps(conf)))
+
+    def test_json_raro_falla(self):
+        for texto in ("", "{", "[]", '{"pre-commit": []}', '{"pre-commit": {"jobs": {}}}',
+                      '{"pre-commit": {"jobs": [{"run": ""}]}}', '{"pre-commit": {"jobs": [{"run": ["a"]}]}}',
+                      '{"pre-commit": {"jobs": [{"run": "x", "glob": 3}]}}',
+                      '{"pre-commit": {"parallel": "true", "jobs": []}}', '{"min_version": 2}',
+                      LEFTHOOK_PLANTILLA[:-2] + ', "pre-commit": {"jobs": []}}'):
+            with self.subTest(texto=texto):
+                self.assertTrue(self.comprobar(texto))
+
+    def test_claves_repetidas_fallan(self):
+        """La última gana al leerlo: una repetida escondería la primera a quien lo revisa."""
+        texto = LEFTHOOK_PLANTILLA.replace('"no_auto_install": true,', '"no_auto_install": true, "no_auto_install": false,')
+        self.assertIn("repetidas", " ".join(self.comprobar(texto)))
+
+    def test_otra_configuracion_versionada_falla(self):
+        for ruta in ("lefthook.yml", ".lefthook.yaml", ".config/lefthook.toml", "lefthook-local.json",
+                     ".lefthook-local.jsonc", ".config/lefthook-local.yml", ".lefthook/pre-commit/a.sh",
+                     ".lefthook-local/pre-commit/a.sh", "app/lefthook.yml"):
+            with self.subTest(ruta=ruta):
+                errores = self.comprobar(versionados={"lefthook.json": "100644", ruta: "100644"})
+                self.assertTrue(any(ruta in e for e in errores), errores)
+
+    def test_enlace_o_ejecutable_falla(self):
+        for modo in ("120000", "100755"):
+            with self.subTest(modo=modo):
+                self.assertTrue(self.comprobar(versionados={"lefthook.json": modo}))
+
+    def test_otra_configuracion_sin_la_principal_falla(self):
+        """Sin lefthook.json, lefthook cargaría la otra."""
+        self.assertTrue(self.comprobar(texto=None, versionados={".lefthook.yml": "100644"}, en_base=False))
+
+    def test_quitarla_falla_si_main_la_tiene(self):
+        self.assertTrue(self.comprobar(texto=None, versionados={"README.md": "100644"}, en_base=True))
+        self.assertEqual(self.comprobar(texto=None, versionados={"README.md": "100644"}, en_base=False), [])
+
+    def test_otros_nombres_parecidos_pasan(self):
+        self.assertEqual(self.comprobar(versionados={"lefthook.json": "100644", "docs/lefthook.md": "100644",
+                                                      "lefthook.json.example": "100644"}), [])
+
+
 # --- De punta a punta: main() en un repo de verdad -------------------------
 
 class TestPuntaAPunta(unittest.TestCase):
@@ -402,6 +494,25 @@ class TestPuntaAPunta(unittest.TestCase):
         historial = [l for l in r.stdout.splitlines() if "**historial:**" in l]
         self.assertEqual(len(historial), 1, r.stdout)
         self.assertIn("SPEC-CALC-003-x.md", historial[0])
+
+    def test_comprueba_la_configuracion_de_lefthook(self):
+        (self.repo / "lefthook.yml").write_text("pre-commit: {}\n", encoding="utf-8")
+        self.git("add", "lefthook.yml")
+        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("**lefthook:**", r.stdout)
+        self.assertIn("`lefthook.yml`", r.stdout)
+
+    def test_quitar_lefthook_de_main_falla(self):
+        self.git("switch", "-q", "main")
+        (self.repo / "lefthook.json").write_text(LEFTHOOK_PLANTILLA, encoding="utf-8")
+        self.git("add", "lefthook.json")
+        self.git("commit", "-q", "-m", "chore: lefthook")
+        self.git("switch", "-q", "-C", "adr/vic-7-0002-x", "main")
+        self.git("rm", "-q", "lefthook.json")
+        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("el PR quita `lefthook.json`", r.stdout)
 
     def test_sin_rama_ni_titulo_no_comprueba_convenciones(self):
         r = self.correr("adr: decide x", 'referencias: ["PR #12"]', PR_BRANCH="", PR_TITLE="",

@@ -6,7 +6,7 @@ Cada regla de `plantilla-proyecto/AGENTS.md`, `plantilla-proyecto/CLAUDE.md` y l
 
 ## Resumen
 
-- **103 reglas:** 40 mecánicas y 63 de criterio. Además, 10 controles previstos que no tienen regla escrita (X-01 a X-10).
+- **103 reglas:** 40 mecánicas y 63 de criterio. Además, 11 controles previstos que no tienen regla escrita (X-01 a X-11).
 - **Destino:** 75 se quedan como instrucción, 17 van a la CI (10 de ellas ya tienen control), 7 a hooks y 4 se eliminan. La mayoría de las instrucciones se queda en una sola skill, así que `AGENTS.md` puede quedar como mapa corto.
 - **Incumplidas:** 17 con evidencia, 6 con casos anteriores a la regla, 12 probadas y 67 sin constancia. En una no se puede determinar.
 - **Excepciones al criterio de M25:** 15 reglas mecánicas se quedan como instrucción. En REG-38, REG-46, REG-58, REG-78, REG-92, REG-94, REG-99 y REG-101, porque ya las impone otra capa, un control no compensa o la CI no tiene el dato. En REG-21, REG-29, REG-35, REG-39, REG-48, REG-65 y REG-103, por ahora (decisión 5 y regla nueva). De las incumplidas, 8 se quedan como instrucción: REG-10, REG-23 y REG-72 son de criterio, y REG-29, REG-35, REG-46, REG-48 y REG-58 están entre las anteriores.
@@ -170,6 +170,7 @@ Aparecen en VIC-17 o en las retrospectivas, pero no en `AGENTS.md`, `CLAUDE.md` 
 | X-08 | Specs sin historial en la cabecera | M39 | Sí: SPEC-CALC-003 (retro-2) | **CI** (aviso en `checks.py`) |
 | X-09 | Referencias entre comillas en la cabecera YAML de los ADR | M7 | Sí: `#` de "PR #12" en ADR-0002 (obs. 8) | **CI** (`checks.py`) |
 | X-10 | Consentimiento con caducidad que el agente no pueda falsificar | M24 | No aplica todavía | **Hook** (se diseña en el bloque 2 y se activa en el bloque 5) |
+| X-11 | No saltar ni desviar los hooks de Git (`--no-verify`, `LEFTHOOK=0`, `LEFTHOOK_EXCLUDE` y las demás formas de `docs/herramientas.md`) | M33, ADR-0008 | No aplica todavía: los hooks de Git llegan con VIC-18 | **Hook** (`guarda-saltos.py`; la autoridad es la CI, que repite los controles) |
 
 ## Decisiones (2026-11-08)
 

@@ -1,7 +1,7 @@
 ---
 id: ADR-0008
 titulo: Criterios para herramientas de terceros y hooks de Git con lefthook
-estado: Propuesto
+estado: Aceptado
 fecha: 2026-11-12
 sustituye: null
 sustituido_por: null
