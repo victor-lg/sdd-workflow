@@ -3,8 +3,10 @@
   "variables_de_hooks": ["LEFTHOOK", "LEFTHOOK_EXCLUDE", "LEFTHOOK_CONFIG", "LEFTHOOK_BIN", "GITLEAKS_CONFIG", "GITLEAKS_CONFIG_TOML"],
   "variables_de_config_git": "^GIT_CONFIG_(COUNT|KEY_\\d+|VALUE_\\d+|PARAMETERS)$",
   "variables_con_git": ["PATH", "HOME", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"],
-  "claves_de_hooks": "^(core\\.hookspath|include\\..*|includeif\\..*)$",
+  "claves_de_hooks": "^(core\\.hookspath|include\\..*|includeif\\..*|alias\\..*)$",
   "config_local_lefthook": "(^|/)(\\.?lefthook-local|\\.config/lefthook-local)\\.(yml|yaml|json|jsonc|toml)$|(^|/)\\.lefthook-local(/|$)",
+  "otra_config_lefthook": "(^|/)(\\.config/lefthook|\\.lefthook)\\.(yml|yaml|json|jsonc|toml)$|(^|/)lefthook\\.(yml|yaml|jsonc|toml)$|(^|/)\\.lefthook(/|$)",
+  "hooks_y_config_de_git": "(^|/)\\.git/(.+/)?(hooks(/|$)|config(\\.worktree)?$)",
   "exclude_de_git": "(^|/)\\.git/info/exclude$",
   "solo_leen": ["cat", "less", "more", "head", "tail", "ls", "stat", "file", "wc", "diff", "grep", "egrep", "fgrep", "rg", "echo", "printf", "rm", "test", "["],
   "git_escritores": ["checkout", "restore", "mv"],
@@ -20,11 +22,11 @@
     },
     "config-de-hooks": {
       "nivel": "bloquear",
-      "mensaje": "ADR-0008: no cambies la configuración de Git que decide qué hooks corren ({forma}): core.hooksPath, include, GIT_CONFIG_*, o PATH, HOME o XDG_CONFIG_HOME en una orden con git. En su lugar: lanza la orden de git sin cambiar eso; si necesitas otra configuración, pídesela a la persona."
+      "mensaje": "ADR-0008: no cambies la configuración de Git que decide qué hooks corren o qué ejecuta una orden ({forma}): .git/hooks, .git/config, core.hooksPath, include o alias con git -c, GIT_CONFIG_*, o PATH, HOME o XDG_CONFIG_HOME en una orden con git. En su lugar: lanza la orden de git sin cambiar eso; si necesitas otra configuración, pídesela a la persona."
     },
     "config-local-lefthook": {
       "nivel": "bloquear",
-      "mensaje": "ADR-0008: no escribas configuración local de lefthook ({forma}): se fusiona con la principal y puede quitar o cambiar sus órdenes. En su lugar: si hace falta cambiar un hook, cambia la configuración principal en la rama, que revisa la persona; si el fichero ya existe, díselo."
+      "mensaje": "ADR-0008: no escribas configuración de lefthook fuera de lefthook.json ({forma}): la local se fusiona con la principal y otro nombre la sustituye, así que pueden quitar o cambiar sus órdenes. En su lugar: si hace falta cambiar un hook, cambia lefthook.json en la rama, que revisa la persona; si el fichero ya existe, díselo."
     },
     "ocultar-cambios": {
       "nivel": "bloquear",
@@ -32,11 +34,11 @@
     },
     "commit-sin-hooks": {
       "nivel": "bloquear",
-      "mensaje": "ADR-0008: no crees commits por una vía que no pasa por los hooks de Git ({forma}): commit-tree, fast-import, un clon local, otro directorio de Git o la API de GitHub. En su lugar: git commit en esta copia del repo, con los hooks; si necesitas otra vía, díselo a la persona."
+      "mensaje": "ADR-0008: no crees commits por una vía que no pasa por los hooks de Git ({forma}): git am, commit-tree, fast-import, un clon local, otro directorio de Git o la API de GitHub. En su lugar: git commit en esta copia del repo, con los hooks; si necesitas otra vía, díselo a la persona."
     },
     "sin-analizar": {
       "nivel": "bloquear",
-      "mensaje": "No he podido analizar esta orden: tiene comillas, una sustitución o un heredoc sin cerrar, o es demasiado larga, y menciona git, gh, lefthook o gitleaks. En su lugar: corrígela o sepárala en órdenes más simples."
+      "mensaje": "No he podido analizar esta orden: tiene comillas, una sustitución o un heredoc sin cerrar, o es demasiado larga, y menciona git, gh, lefthook, gitleaks o .git/. En su lugar: corrígela o sepárala en órdenes más simples."
     }
   }
 }

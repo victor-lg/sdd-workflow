@@ -4,14 +4,18 @@
 Bloquea, en las órdenes del agente, las formas conocidas de saltar o desviar los hooks
 de Git que instala lefthook (docs/herramientas.md, "Formas de saltarlo"):
 
-- --no-verify (y sus abreviaturas) en commit, merge y am; -n en commit;
+- --no-verify (y sus abreviaturas) en commit y merge; -n en commit;
 - las variables que apagan o desvían lefthook o gitleaks;
-- core.hooksPath o include con git -c, --config-env o GIT_CONFIG_*, y PATH, HOME,
+- core.hooksPath, include o alias con git -c, --config-env o GIT_CONFIG_*, y PATH, HOME,
   XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL o GIT_CONFIG_SYSTEM en una orden con git;
-- escribir configuración local de lefthook, también con Write, Edit o NotebookEdit;
+- escribir configuración de lefthook fuera de lefthook.json, .git/hooks o .git/config,
+  también con Write, Edit o NotebookEdit;
 - ocultar cambios con update-index o .git/info/exclude;
-- crear commits sin pasar por pre-commit: commit-tree, fast-import, un clon local,
+- crear commits sin pasar por pre-commit: am, commit-tree, fast-import, un clon local,
   otro directorio de Git o gh api.
+
+No bloquea merge, cherry-pick, revert ni rebase, que tampoco pasan por pre-commit: crean
+commits con contenido que ya estaba en otro commit, y la CI repite los controles.
 
 Es una segunda capa contra errores del agente, no un control de seguridad: lee el
 texto de la orden, así que bash -c, eval, variables o scripts la esquivan. La autoridad
@@ -53,6 +57,8 @@ LARGAS_CLONE_CON_VALOR = dict.fromkeys(
      "shallow-since", "shallow-exclude", "separate-git-dir", "jobs", "server-option", "filter", "config",
      "bundle-uri"), True)
 URL_REMOTA = re.compile(r"^([a-z][a-z0-9+.-]*://(?!/)|[\w.-]+@[^:/]+:|[\w.-]+\.[\w.-]+:(?!/))", re.I)
+# git am crea commits sin pasar por pre-commit; estas formas no crean ninguno.
+AM_SIN_COMMIT = {"--abort", "--quit", "--skip", "--show-current-patch"}
 GH_API_CON_VALOR = dict.fromkeys(
     ("method", "field", "raw-field", "input", "header", "hostname", "jq", "template", "cache", "preview"), True)
 
@@ -149,13 +155,14 @@ def _regla_git(sub, args, globales, palabras, conf):
         forma = _no_verify(args, CORTAS_CON_VALOR_COMMIT, LARGAS_COMMIT_CON_VALOR, con_n=True)
         if forma:
             return "sin-verificar", f"git commit {forma}"
-    if sub in ("merge", "am"):
-        forma = _no_verify(args, "msSXF" if sub == "merge" else "SC", {"strategy": True, "strategy-option": True,
-                                                                     "message": True, "file": True,
-                                                                     "gpg-sign": False}, con_n=False)
+    if sub == "merge":
+        forma = _no_verify(args, "msSXF", {"strategy": True, "strategy-option": True, "message": True,
+                                           "file": True, "gpg-sign": False}, con_n=False)
         if forma:
-            return "sin-verificar", f"git {sub} {forma}"
-    if sub in ("commit", "merge", "am") and (any(OTRO_REPO.match(p) for p in palabras)
+            return "sin-verificar", f"git merge {forma}"
+    if sub == "am" and not set(args) & AM_SIN_COMMIT:
+        return "commit-sin-hooks", "git am"
+    if sub in ("commit", "merge") and (any(OTRO_REPO.match(p) for p in palabras)
                                             or any(o.startswith(("--git-dir", "--work-tree")) for o, _ in globales)):
         return "commit-sin-hooks", f"git {sub} en otro directorio de Git"
     if sub in ("commit-tree", "fast-import"):
@@ -172,12 +179,8 @@ def _regla_git(sub, args, globales, palabras, conf):
     return None
 
 
-def _es_config_local(ruta, conf):
-    return bool(re.search(conf["config_local_lefthook"], posixpath.normpath(ruta)))
-
-
-def _es_exclude(ruta, conf):
-    return bool(re.search(conf["exclude_de_git"], posixpath.normpath(ruta)))
+def _casa(clave, ruta, conf):
+    return bool(re.search(conf[clave], posixpath.normpath(ruta), re.I))
 
 
 def _escribe_en(nombre, efectiva, conf):
@@ -201,16 +204,18 @@ def _candidatas(palabra):
 
 
 def _fichero_protegido(ruta, conf):
-    if _es_config_local(ruta, conf):
+    if _casa("config_local_lefthook", ruta, conf) or _casa("otra_config_lefthook", ruta, conf):
         return "config-local-lefthook"
-    if _es_exclude(ruta, conf):
+    if _casa("exclude_de_git", ruta, conf):
         return "ocultar-cambios"
+    if _casa("hooks_y_config_de_git", ruta, conf):
+        return "config-de-hooks"
     return None
 
 
 def decidir_bash(comando, conf):
     """Devuelve (regla, forma) o (None, None)."""
-    relevante = re.search(r"git|gh|lefthook|LEFTHOOK|GITLEAKS|GIT_|info/exclude", comando)
+    relevante = re.search(r"\b(git|gh|lefthook|gitleaks)\b|LEFTHOOK|GITLEAKS|GIT_|\.git/", comando)
     if len(comando) > conf["max_caracteres_orden"]:
         return ("sin-analizar", "la orden") if relevante else (None, None)
     try:

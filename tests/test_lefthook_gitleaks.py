@@ -23,8 +23,11 @@ VERSIONES = {"lefthook": "2.2.2", "gitleaks": "8.30.1"}
 ENTORNO = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
            "GIT_COMMITTER_EMAIL": "t@t"}
+# Ni las variables que desvían los hooks ni las que llevarían git a otro repo (si se lanza
+# desde un hook de Git, que las exporta).
 for _variable in ("LEFTHOOK", "LEFTHOOK_EXCLUDE", "LEFTHOOK_CONFIG", "LEFTHOOK_BIN", "GITLEAKS_CONFIG",
-                  "GITLEAKS_CONFIG_TOML"):
+                  "GITLEAKS_CONFIG_TOML", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+                  "GIT_OBJECT_DIRECTORY"):
     ENTORNO.pop(_variable, None)
 
 

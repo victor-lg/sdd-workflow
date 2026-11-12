@@ -296,7 +296,7 @@ sudo install -m 755 lefthook_2.2.2_Linux_x86_64 /usr/local/bin/lefthook
 sudo install -m 755 gitleaks /usr/local/bin/gitleaks
 ```
 
-**Comprobación:** `lefthook version` da `2.2.2` y `gitleaks version`, `8.30.1`. No los muevas después: el hook guarda la ruta del binario al instalarse y, si no lo encuentra, prueba otros del árbol de trabajo.
+**Comprobación:** `lefthook version` da `2.2.2` y `gitleaks version`, `8.30.1`. No los muevas después. El hook busca lefthook en este orden: `LEFTHOOK_BIN`, el `PATH`, la ruta guardada al instalar y, si nada funciona, binarios del árbol de trabajo (`node_modules/`) y gestores como `yarn`, `uv run` o `mise`, que leen configuración del repo. gitleaks lo busca por el `PATH`. Por eso ninguna carpeta del `PATH` anterior a `/usr/local/bin` puede ser una que el agente escriba (`which -a lefthook gitleaks` da solo `/usr/local/bin`).
 
 **En cada proyecto,** también fuera de Claude Code y siempre en un clon nuevo de `main`:
 

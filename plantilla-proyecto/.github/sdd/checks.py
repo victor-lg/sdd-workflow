@@ -106,7 +106,7 @@ SENALES_HISTORIAL = [
 # anclas ni claves de fusión que escondan claves.
 LEFTHOOK_CONFIG = "lefthook.json"
 RE_LEFTHOOK_OTRA = re.compile(r"(^|/)(\.config/)?\.?lefthook(-local)?\.(yml|yaml|json|jsonc|toml)$"
-                              r"|(^|/)\.lefthook(-local)?/")
+                              r"|(^|/)\.lefthook(-local)?/", re.I)
 LEFTHOOK_CLAVES = {"min_version", "assert_lefthook_installed", "no_auto_install", "no_tty",
                    "pre-commit", "commit-msg"}
 LEFTHOOK_OBLIGATORIAS = ("assert_lefthook_installed", "no_auto_install")
@@ -620,9 +620,13 @@ def errores_lefthook(texto: str) -> list[str]:
     return errores
 
 
-def check_lefthook(inf: Informe, versionados: dict[str, str], texto: str | None, en_base: bool) -> None:
+def check_lefthook(inf: Informe, versionados: dict[str, str] | None, texto: str | None,
+                   en_base: bool | None) -> None:
     """versionados: ruta -> modo de los ficheros del PR; texto: el de `lefthook.json`;
-    en_base: si `main` tiene `lefthook.json`."""
+    en_base: si `main` tiene `lefthook.json`. None si Git no ha podido decirlo."""
+    if versionados is None or en_base is None:
+        inf.error("lefthook", "no he podido listar los ficheros del PR o de `main` con Git, así que no sé si la configuración de lefthook cumple el ADR-0008.")
+        return
     otras = sorted(r for r in versionados if r != LEFTHOOK_CONFIG and RE_LEFTHOOK_OTRA.search(r))
     if otras:
         inf.error("lefthook", f"hay configuración de lefthook fuera de `{LEFTHOOK_CONFIG}` ({', '.join(f'`{r}`' for r in otras)}). lefthook la leería antes o además de la principal (ADR-0008).")
@@ -637,8 +641,10 @@ def check_lefthook(inf: Informe, versionados: dict[str, str], texto: str | None,
         inf.error("lefthook", f"`{LEFTHOOK_CONFIG}`: {e} Solo valen las claves que no amplían lo que se ejecuta (ADR-0008, `docs/herramientas.md`).")
 
 
-def ficheros_versionados() -> dict[str, str]:
-    salida = git("ls-files", "-s", "-z") or ""
+def ficheros_versionados() -> dict[str, str] | None:
+    salida = git("ls-files", "-s", "-z")
+    if salida is None:
+        return None
     versionados = {}
     for entrada in salida.split("\0"):
         cabecera, _, ruta = entrada.partition("\t")
@@ -689,10 +695,12 @@ def main() -> int:
     check_historial(inf, {f: specs_head_ficheros[f] for f in cambiados if f in specs_head_ficheros})
     check_adr(inf, {f: (raiz / f).read_text(encoding="utf-8")
                     for f in cambiados if es_adr(f) and (raiz / f).is_file()})
+    # Del índice y solo si es un fichero normal: un enlace no se sigue (check_lefthook lo rechaza).
     versionados = ficheros_versionados()
-    texto_lefthook = (raiz / LEFTHOOK_CONFIG).read_text(encoding="utf-8") if LEFTHOOK_CONFIG in versionados else None
-    check_lefthook(inf, versionados, texto_lefthook,
-                   git("cat-file", "-e", f"{args.base}:{LEFTHOOK_CONFIG}") is not None)
+    normal = versionados is not None and versionados.get(LEFTHOOK_CONFIG) == "100644"
+    texto_lefthook = git("show", f":{LEFTHOOK_CONFIG}") if normal else None
+    en_base = git("ls-tree", "--name-only", args.base, "--", LEFTHOOK_CONFIG)
+    check_lefthook(inf, versionados, texto_lefthook, None if en_base is None else bool(en_base.strip()))
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]

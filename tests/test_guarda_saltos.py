@@ -20,7 +20,7 @@ CONF = json.loads((HOOKS / "reglas-saltos.json").read_text(encoding="utf-8"))
 CWD = "/home/u/proyecto"
 
 BASH = {
-    # Opciones de Git: --no-verify y sus prefijos en commit, merge y am; -n en commit.
+    # Opciones de Git: --no-verify y sus prefijos en commit y merge; -n en commit.
     "sin-verificar": [
         "git commit --no-verify -m 'feat(a): b'",
         "git commit --no-verif -m x",
@@ -33,7 +33,6 @@ BASH = {
         "git commit --amend --no-edit --no-verify",
         "git merge --no-verify main",
         "git merge --no-verif main",
-        "git am --no-verify 0001.patch",
         "cd app && git commit -n -m x",
         "echo $(git commit --no-verify -m x)",
     ],
@@ -66,6 +65,10 @@ BASH = {
         "git --config-env=core.hooksPath=VACIO commit -m x",
         "git --config-env core.hooksPath=VACIO commit -m x",
         "git -c include.path=/home/u/sin-hooks commit -m x",
+        # G4 del PR #30: un alias definido en la orden esconde el subcomando.
+        "git -c alias.c='commit --no-verify' c -m x",
+        "git -c alias.c='!git commit -n' c -m x",
+        "git --config-env=alias.c=ORDEN c -m x",
         "git -c includeIf.gitdir:/home/.path=/x commit -m x",
         "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x",
         "GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='/x'\" git commit -m x",
@@ -96,6 +99,12 @@ BASH = {
         "python3 genera.py --salida=lefthook-local.yml",
         "git checkout otra -- lefthook-local.yml",
         "git restore --source=otra lefthook-local.yml",
+        # G4 del PR #30: otro nombre de la principal gana a lefthook.json; y sin distinguir mayúsculas.
+        "echo 'pre-commit: {}' > lefthook.yml",
+        "cp x .lefthook.json",
+        "touch .config/lefthook.toml",
+        "mkdir -p .lefthook/pre-commit",
+        "echo x > Lefthook-Local.yml",
     ],
     # Ocultar cambios: update-index y .git/info/exclude.
     "ocultar-cambios": [
@@ -108,8 +117,22 @@ BASH = {
         "cp mis-excluidos .git/info/exclude",
         "sed -i '$a x' .git/info/exclude",
     ],
+    # G4 del PR #30: los hooks y la configuración de Git, también si el sandbox lo permitiera.
+    "config-de-hooks-ficheros": [
+        "echo 'exit 0' > .git/hooks/pre-commit",
+        "cp x .git/hooks/post-checkout",
+        "echo '[core] hooksPath = /x' >> .git/config",
+        "sed -i 's/a/b/' .git/config",
+        "echo x > .git/modules/sub/config",
+        "echo x > .git/modules/sub/hooks/pre-commit",
+        "echo x > .git/worktrees/w/config.worktree",
+    ],
     # Commits que no pasan por pre-commit.
     "commit-sin-hooks": [
+        # G4 del PR #30: git am no lanza pre-commit.
+        "git am 0001.patch",
+        "git am --no-verify 0001.patch",
+        "git am --continue",
         "git commit-tree HEAD^{tree} -p HEAD -m x",
         "git update-ref refs/heads/x $(git commit-tree HEAD^{tree} -m x)",
         "git fast-import < flujo",
@@ -168,6 +191,10 @@ LEGITIMAS = [
     "git update-index --refresh",
     "git update-ref -d refs/heads/vieja",
     "git clone https://github.com/victor-lg/calculadora.git",
+    "git am --abort",
+    "cat .git/config",
+    "ls .git/hooks",
+    "echo 'light weight",
     "git clone git@github.com:victor-lg/calculadora.git ../calc",
     "git clone ssh://git@github.com/victor-lg/calculadora.git",
     "git worktree add --no-track -b feat/vic-18-x ../w origin/main",
@@ -190,6 +217,22 @@ SE_ESQUIVA = [
     "python3 -c \"open('lefthook-local.yml','w').write('{}')\"",
     "N=LEFTHOOK; export $N=0; git commit -m x",
     "git -C ../otra-copia-ya-clonada commit -m x",
+    # G4 del PR #30: envolturas y asignaciones que el lector no conoce, y un repo nuevo sin hooks.
+    "setsid git commit --no-verify -m x",
+    "env --split-string='LEFTHOOK=0 git commit -m x'",
+    "printf -v LEFTHOOK 0; export LEFTHOOK; git commit -m x",
+    "git init sub && git -C sub commit --allow-empty -m x",
+    "tar xf config.tar",
+]
+
+# Tampoco pasan por pre-commit, y no se bloquean a propósito: crean commits con contenido
+# que ya estaba en otro (o, en un merge en avance rápido, no crean ninguno). Los cubre la CI.
+NO_SE_BLOQUEAN = [
+    "git merge main",
+    "git stash && git merge stash@{0}",
+    "git cherry-pick abc123",
+    "git revert HEAD",
+    "git rebase origin/main",
 ]
 
 
@@ -201,7 +244,7 @@ class GuardaBash(unittest.TestCase):
         for regla, comandos in BASH.items():
             for comando in comandos:
                 with self.subTest(comando=comando):
-                    self.assertEqual(self.decide(comando), regla)
+                    self.assertEqual(self.decide(comando), regla.removesuffix("-ficheros"))
 
     def test_formas_legitimas(self):
         for comando in LEGITIMAS:
@@ -209,7 +252,7 @@ class GuardaBash(unittest.TestCase):
                 self.assertIsNone(self.decide(comando))
 
     def test_limitacion_conocida_no_se_detecta(self):
-        for comando in SE_ESQUIVA:
+        for comando in SE_ESQUIVA + NO_SE_BLOQUEAN:
             with self.subTest(comando=comando):
                 self.assertIsNone(self.decide(comando))
 
@@ -224,6 +267,11 @@ class GuardaBash(unittest.TestCase):
         for comando in ("git commit -m 'x", "LEFTHOOK=0 echo \"x", "echo x > lefthook-local.yml $(a"):
             with self.subTest(comando=comando):
                 self.assertEqual(self.decide(comando), "sin-analizar")
+
+    def test_relevante_con_limites_de_palabra(self):
+        """G4 del PR #30: «light» o «weight» sin cerrar no son git."""
+        self.assertIsNone(self.decide("echo 'light"))
+        self.assertEqual(self.decide("echo 'x' > .git/hooks/a 'b"), "sin-analizar")
 
     def test_orden_enorme_falla_cerrado(self):
         self.assertEqual(self.decide("git status # " + "x" * CONF["max_caracteres_orden"]), "sin-analizar")
@@ -244,6 +292,20 @@ class GuardaHerramientas(unittest.TestCase):
                 with self.subTest(herramienta=herramienta, ruta=ruta):
                     self.assertEqual(self.decide(herramienta, ruta), "config-local-lefthook")
 
+    def test_hooks_y_config_de_git(self):
+        """G4 del PR #30: el sandbox no limita Write ni Edit."""
+        for ruta in (f"{CWD}/.git/hooks/pre-commit", f"{CWD}/.git/config", ".git/hooks/post-checkout",
+                     f"{CWD}/.git/modules/sub/config", f"{CWD}/.git/worktrees/w/config.worktree"):
+            for herramienta in ("Write", "Edit"):
+                with self.subTest(herramienta=herramienta, ruta=ruta):
+                    self.assertEqual(self.decide(herramienta, ruta), "config-de-hooks")
+
+    def test_otra_config_de_lefthook(self):
+        for ruta in (f"{CWD}/lefthook.yml", f"{CWD}/.lefthook.json", f"{CWD}/.config/lefthook.toml",
+                     f"{CWD}/.lefthook/pre-commit/a.sh", f"{CWD}/LEFTHOOK-LOCAL.YML"):
+            with self.subTest(ruta=ruta):
+                self.assertEqual(self.decide("Write", ruta), "config-local-lefthook")
+
     def test_exclude(self):
         for ruta in (f"{CWD}/.git/info/exclude", ".git/info/exclude"):
             with self.subTest(ruta=ruta):
@@ -255,8 +317,9 @@ class GuardaHerramientas(unittest.TestCase):
             self.assertEqual(self.decide("Write", os.path.join(d, "notas.yml"), d), "config-local-lefthook")
 
     def test_pasan(self):
-        for ruta in (f"{CWD}/lefthook.json", f"{CWD}/.lefthook.yml", f"{CWD}/docs/lefthook-local.md",
-                     f"{CWD}/.gitignore", f"{CWD}/src/exclude", "notas.md"):
+        for ruta in (f"{CWD}/lefthook.json", f"{CWD}/docs/lefthook.md", f"{CWD}/docs/lefthook-local.md",
+                     f"{CWD}/.gitignore", f"{CWD}/src/git/config", f"{CWD}/hooks/pre-commit",
+                     f"{CWD}/src/exclude", "notas.md"):
             with self.subTest(ruta=ruta):
                 self.assertIsNone(self.decide("Write", ruta))
 

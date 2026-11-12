@@ -429,6 +429,17 @@ class TestLefthook(unittest.TestCase):
         self.assertTrue(self.comprobar(texto=None, versionados={"README.md": "100644"}, en_base=True))
         self.assertEqual(self.comprobar(texto=None, versionados={"README.md": "100644"}, en_base=False), [])
 
+    def test_sin_respuesta_de_git_falla(self):
+        """G4 del PR #30: si Git no lista los ficheros, el check no pasa en silencio."""
+        self.assertTrue(ejecutar(checks.check_lefthook, None, None, True).errores)
+        self.assertTrue(ejecutar(checks.check_lefthook, {"lefthook.json": "100644"}, LEFTHOOK_PLANTILLA, None).errores)
+
+    def test_otros_nombres_sin_distinguir_mayusculas(self):
+        """G4 del PR #30: en un sistema de ficheros que no las distingue, lefthook los cargaría."""
+        for ruta in ("Lefthook.yml", ".Lefthook-Local.YML"):
+            with self.subTest(ruta=ruta):
+                self.assertTrue(self.comprobar(versionados={"lefthook.json": "100644", ruta: "100644"}))
+
     def test_otros_nombres_parecidos_pasan(self):
         self.assertEqual(self.comprobar(versionados={"lefthook.json": "100644", "docs/lefthook.md": "100644",
                                                       "lefthook.json.example": "100644"}), [])
@@ -502,6 +513,15 @@ class TestPuntaAPunta(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("**lefthook:**", r.stdout)
         self.assertIn("`lefthook.yml`", r.stdout)
+
+    def test_enlace_no_se_sigue(self):
+        """G4 del PR #30: un enlace en lefthook.json da el error previsto, sin traza."""
+        (self.repo / "lefthook.json").symlink_to("/dev/null")
+        self.git("add", "lefthook.json")
+        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("tiene que ser un fichero normal", r.stdout)
+        self.assertNotIn("Traceback", r.stderr)
 
     def test_quitar_lefthook_de_main_falla(self):
         self.git("switch", "-q", "main")
