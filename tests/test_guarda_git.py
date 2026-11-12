@@ -20,6 +20,7 @@ _spec = importlib.util.spec_from_file_location("guarda_git", RUTA)
 guarda = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(guarda)
 CONF = json.loads((HOOKS / "reglas-git.json").read_text(encoding="utf-8"))
+lector = sys.modules["lector_bash"]
 
 BLOQUEADAS = {
     "push-seguimiento": [
@@ -345,7 +346,8 @@ SE_ESQUIVA = [
 
 class Guarda(unittest.TestCase):
     def decide(self, comando):
-        with mock.patch.object(guarda, "comprobar_base", return_value=None):
+        with mock.patch.object(guarda, "comprobar_base", return_value=None), \
+                mock.patch.object(guarda, "regla_commit", return_value=None):
             return guarda.decidir(comando, "/tmp", CONF)
 
     def test_formas_bloqueadas(self):
@@ -399,6 +401,14 @@ class Guarda(unittest.TestCase):
     def test_el_lector_separa_ordenes_y_quita_comillas(self):
         self.assertEqual(guarda.analizar("a 'b c' \"d\"e; f | g && h\ni"),
                          [["a", "b c", "de"], ["f"], ["g"], ["h"], ["i"]])
+
+    def test_el_lector_guarda_redirecciones_y_heredocs(self):
+        a = lector.analizar_todo("cat < a.txt > 'b c' 2>&1 &> d; e >& f; g <&0 >| h <<< x\ncat <<FIN\n$(i)\nFIN\n"
+                                 "cat <<'X'\nj\nX")
+        self.assertEqual(a.redirecciones, [(0, "<", "a.txt"), (0, ">", "b c"), (0, "&>", "d"), (1, ">&", "f"),
+                                           (2, ">|", "h")])
+        self.assertEqual(a.heredocs_expandidos, 1)
+        self.assertIn(["i"], a.ordenes)
 
     def test_el_lector_ve_la_sustitucion_dentro_de_dobles(self):
         self.assertIn(["git", "status"], guarda.analizar('echo "x $(git status) y"'))
@@ -527,6 +537,211 @@ class BaseDeLaRama(unittest.TestCase):
         self.assertEqual(guarda.decidir('git -C "$D" switch -c x', self.copia, CONF), "sin-mirar")
 
 
+class Fugas(unittest.TestCase):
+    """X-04 con un repo de verdad: lo preparado, lo que añade la misma orden y -a."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.repo = os.path.join(self.dir.name, "repo")
+        subprocess.run(["git", "init", "-q", "-b", "main", self.repo], check=True)
+        self.escribe(".gitignore", ".tareas/\nbuild/\n")
+        self.escribe("src/a.py", "a = 1\n")
+        self.escribe("config.local", "x\n")
+        self.git("add", ".gitignore", "src/a.py", "config.local")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "uno")
+
+    def escribe(self, ruta, texto):
+        completa = os.path.join(self.repo, ruta)
+        os.makedirs(os.path.dirname(completa), exist_ok=True)
+        with open(completa, "w", encoding="utf-8") as f:
+            f.write(texto)
+
+    def git(self, *args):
+        subprocess.run(["git", "-C", self.repo, *args], check=True, capture_output=True)
+
+    def decide(self, comando, cwd=None):
+        return guarda.decidir_con_detalle(comando, cwd or self.repo, CONF)
+
+    def test_commit_normal(self):
+        self.escribe("src/a.py", "a = 2\n")
+        self.git("add", "src/a.py")
+        self.assertEqual(self.decide("git commit -m x"), (None, None))
+
+    def test_preparado_que_nunca_se_sube(self):
+        for ruta in (".env", ".env.local", "conf/.env.production", "certs/servidor.key", ".bashrc", "id_ed25519"):
+            with self.subTest(ruta=ruta):
+                self.escribe(ruta, "SECRETO=1\n")
+                self.git("add", "-f", ruta)
+                self.assertEqual(self.decide("git commit -m x"), ("commit-fuga", [ruta]))
+                self.git("rm", "-q", "--cached", ruta)
+
+    def test_plantillas_y_claves_publicas_pasan(self):
+        for ruta in (".env.example", ".env.sample", "id_ed25519.pub", "docs/entorno.md"):
+            with self.subTest(ruta=ruta):
+                self.escribe(ruta, "X=\n")
+                self.git("add", ruta)
+                self.assertEqual(self.decide("git commit -m x"), (None, None))
+
+    def test_preparado_que_gitignore_excluye(self):
+        self.escribe(".tareas/VIC-1.md", "estado\n")
+        self.escribe("build/salida.js", "x\n")
+        self.git("add", "-f", ".tareas/VIC-1.md", "build/salida.js")
+        regla, rutas = self.decide("git commit -m x")
+        self.assertEqual((regla, sorted(rutas)), ("commit-fuga", [".tareas/VIC-1.md", "build/salida.js"]))
+
+    def test_add_en_la_misma_orden(self):
+        self.escribe(".env", "SECRETO=1\n")
+        self.escribe("build/salida.js", "x\n")
+        for comando in ("git add .env && git commit -m x", "git add -f build/salida.js; git commit -m x",
+                        "cd src && git add ../.env && git commit -m x", "git stage .env && git commit -m x"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando)[0], "commit-fuga")
+
+    def test_add_de_una_carpeta_en_la_misma_orden(self):
+        """G4 del PR #26: git add <carpeta> prepara lo que hay dentro, salvo lo ignorado sin -f."""
+        self.escribe("certs/servidor.key", "CLAVE\n")
+        self.escribe("src/nuevo.py", "b = 1\n")
+        self.escribe("build/salida.js", "x\n")
+        self.assertEqual(self.decide("git add certs && git commit -m x"), ("commit-fuga", ["certs/servidor.key"]))
+        self.assertEqual(self.decide("git add 'certs/*' && git commit -m x"), ("commit-fuga", ["certs/servidor.key"]))
+        self.assertEqual(self.decide("git add src build && git commit -m x"), (None, None))
+        self.assertEqual(self.decide("git add -f build && git commit -m x"), ("commit-fuga", ["build/salida.js"]))
+        self.assertEqual(self.decide("git add ../fuera && git commit -m x"), (None, None))
+
+    def test_add_de_prueba_o_posterior_no_cuenta(self):
+        self.escribe(".env", "SECRETO=1\n")
+        for comando in ("git add -n .env && git commit -m x", "git commit -m x --allow-empty; git add .env"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando), (None, None))
+
+    def test_quitar_un_secreto_no_es_fuga(self):
+        self.escribe(".env", "SECRETO=1\n")
+        self.git("add", "-f", ".env")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "fuga anterior")
+        self.git("rm", "-q", "--cached", ".env")
+        self.assertEqual(self.decide("git commit -m 'quita .env'"), (None, None))
+
+    def test_commit_a_mira_lo_versionado(self):
+        self.escribe(".npmrc", "registry=x\n")
+        self.git("add", ".npmrc")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "fuga anterior")
+        self.escribe(".npmrc", "//registry/:_authToken=SECRETO\n")
+        self.assertEqual(self.decide("git commit -m x"), (None, None))
+        for comando in ("git commit -am x", "git commit --all -m x", "git commit -m x .npmrc",
+                        "git commit -m x -- .npmrc", "cd src && git commit -m x ../.npmrc"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando), ("commit-fuga-todo", [".npmrc"]))
+        self.assertEqual(self.decide("git commit -m x .gitignore"), (None, None))
+        self.assertEqual(self.decide("git add .npmrc && git commit -m x"), ("commit-fuga", [".npmrc"]))
+        self.git("restore", ".npmrc")  # Sin tocarlo, -a también lo llevaría: G4 del PR #26, ronda 2.
+        self.assertEqual(self.decide("git commit -am x"), ("commit-fuga-todo", [".npmrc"]))
+        self.assertEqual(self.decide("git add src/a.py && git commit -m x"), (None, None))
+
+    def test_lo_versionado_que_gitignore_excluye_no_es_fuga(self):
+        """G4 del PR #26: un fichero que ya está en HEAD se versionó a propósito; solo cuenta "fugas"."""
+        self.escribe(".gitignore", ".tareas/\nbuild/\nconfig.local\n")
+        self.git("add", ".gitignore")
+        self.escribe("config.local", "y\n")
+        for comando in ("git commit -am x", "git commit -m x config.local"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando), (None, None))
+        self.escribe("build/nuevo.js", "x\n")
+        self.git("add", "-f", "build/nuevo.js")
+        self.assertEqual(self.decide("git commit -am x"), ("commit-fuga", ["build/nuevo.js"]))
+
+    def test_sigue_cd_y_dash_c(self):
+        self.escribe(".env", "SECRETO=1\n")
+        self.git("add", "-f", ".env")
+        padre, nombre = os.path.split(self.repo)
+        for comando in (f"cd {nombre} && git commit -m x", f"git -C {nombre} commit -m x",
+                        f"git -C {nombre}/src commit -m x"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando, padre), ("commit-fuga", [".env"]))
+
+    def test_cwd_a_traves_de_un_enlace(self):
+        """G4 del PR #26, ronda 2: con rutas sin resolver, el git add previo se perdía."""
+        enlace = os.path.join(self.dir.name, "enlace")
+        os.symlink(self.repo, enlace)
+        self.escribe(".env", "SECRETO=1\n")
+        self.assertEqual(self.decide("git add .env && git commit -m x", enlace), ("commit-fuga", [".env"]))
+
+    def test_sesion_en_una_subcarpeta(self):
+        """G4 del PR #26, ronda 3: el git add de la raíz del repo cuenta aunque la sesión
+        esté en una subcarpeta; el de otro repo, no."""
+        self.escribe(".env", "SECRETO=1\n")
+        subcarpeta = os.path.join(self.repo, "src")
+        self.assertEqual(self.decide("git add ../.env && git commit -m x", subcarpeta), ("commit-fuga", [".env"]))
+        otro = os.path.join(self.dir.name, "otro")
+        subprocess.run(["git", "init", "-q", "-b", "main", otro], check=True)
+        with open(os.path.join(otro, ".env"), "w", encoding="utf-8") as f:
+            f.write("X=1\n")
+        self.assertEqual(self.decide(f"git -C {otro} add .env && git -C {otro} commit -m x"), (None, None))
+
+    def test_variantes_de_env(self):
+        for ruta in (".env-local", ".env_prod", ".envrc.local"):
+            with self.subTest(ruta=ruta):
+                self.escribe(ruta, "X=1\n")
+                self.git("add", "-f", ruta)
+                self.assertEqual(self.decide("git commit -m x"), ("commit-fuga", [ruta]))
+                self.git("rm", "-q", "--cached", ruta)
+
+    def test_otro_repo_u_otro_indice_falla_cerrado(self):
+        for comando in ("git --git-dir=.git commit -m x", "git --work-tree . commit -m x",
+                        "GIT_INDEX_FILE=/x/index git commit -m x", "export GIT_DIR=/x; git commit -m x",
+                        "cd; git commit -m x", "cd -; git commit -m x", "cd a b; git commit -m x",
+                        "env -C ../otro git commit -am x", "env --chdir=../otro git commit -am x"):
+            with self.subTest(comando=comando):
+                self.assertEqual(self.decide(comando)[0], "commit-sin-mirar")
+
+    def test_plazo_dentro_del_commit(self):
+        """G4 del PR #26, ronda 2: el plazo acota cada llamada a git, no solo cada orden."""
+        guarda._LIMITE[0] = time.monotonic() - 1
+        with self.assertRaises(guarda.NoPuedoMirar):
+            guarda._git(self.repo, "status")
+        rutas = " ".join(f"f{i}" for i in range(3000))
+        inicio = time.monotonic()
+        self.assertEqual(self.decide(f"git add {rutas} && git commit -m x"), (None, None))
+        self.assertLess(time.monotonic() - inicio, CONF["max_segundos_analisis"])
+
+    def test_no_puede_mirar_falla_cerrado(self):
+        self.assertEqual(self.decide("git commit -m x", self.dir.name)[0], "commit-sin-mirar")
+        self.assertEqual(self.decide('git -C "$D" commit -m x')[0], "commit-sin-mirar")
+        with mock.patch.object(guarda.subprocess, "run", side_effect=OSError("sin git")):
+            self.assertEqual(self.decide("git commit -m x")[0], "commit-sin-mirar")
+
+    def test_el_mensaje_nombra_los_ficheros(self):
+        self.escribe(".env", "SECRETO=1\n")
+        self.git("add", "-f", ".env")
+        r = subprocess.run([sys.executable, str(RUTA)], capture_output=True, text=True, input=json.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}, "cwd": self.repo}))
+        motivo = json.loads(r.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+        self.assertIn("llevaría .env, que", motivo)
+        self.assertIn("git restore --staged", motivo)
+
+    def test_no_ejecuta_la_configuracion_del_repo(self):
+        """G4 del PR #26: el hook corre fuera del sandbox, y el agente puede preparar un
+        gitdir con core.fsmonitor o un filtro clean. X-04 no debe ejecutarlos."""
+        testigo = os.path.join(self.dir.name, "EJECUTADO")
+        orden = os.path.join(self.dir.name, "orden.sh")
+        with open(orden, "w", encoding="utf-8") as f:
+            f.write(f"#!/bin/sh\ntouch {testigo}\ncat\n")
+        os.chmod(orden, 0o755)
+        with open(os.path.join(self.repo, ".git", "config"), "a", encoding="utf-8") as f:
+            f.write(f"[core]\n\tfsmonitor = {orden}\n[filter \"x\"]\n\tclean = {orden}\n")
+        self.escribe(".gitattributes", "*.py filter=x\n")
+        self.escribe("src/a.py", "a = 3\n")
+        for comando in ("git commit -m x", "git commit -am x", "git commit -m x src/a.py",
+                        "git add src/a.py && git commit -m x"):
+            with self.subTest(comando=comando):
+                self.decide(comando)
+                self.assertFalse(os.path.exists(testigo))
+
+    def test_lista_corta(self):
+        self.assertEqual(guarda.lista_corta(["a", "b"]), "a, b")
+        self.assertEqual(guarda.lista_corta([str(i) for i in range(7)]), "0, 1, 2, 3, 4 y 2 más")
+
+
 class Principal(unittest.TestCase):
     def ejecuta(self, entrada):
         return subprocess.run([sys.executable, str(RUTA)], input=entrada, capture_output=True, text=True)
@@ -562,8 +777,18 @@ class Principal(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             copia = pathlib.Path(d) / "guarda-git.py"
             copia.write_text(RUTA.read_text(encoding="utf-8"), encoding="utf-8")
+            (pathlib.Path(d) / "lector_bash.py").write_text((HOOKS / "lector_bash.py").read_text(encoding="utf-8"),
+                                                           encoding="utf-8")
             r = subprocess.run([sys.executable, str(copia)], input=self.entrada("git status"),
                                capture_output=True, text=True)
+        self.assertEqual(self.decision(r)["permissionDecision"], "deny")
+
+    def test_sin_el_lector_falla_cerrado(self):
+        with tempfile.TemporaryDirectory() as d:
+            for nombre in ("guarda-git.py", "reglas-git.json"):
+                (pathlib.Path(d) / nombre).write_text((HOOKS / nombre).read_text(encoding="utf-8"), encoding="utf-8")
+            r = subprocess.run([sys.executable, str(pathlib.Path(d) / "guarda-git.py")],
+                               input=self.entrada("git status"), capture_output=True, text=True)
         self.assertEqual(self.decision(r)["permissionDecision"], "deny")
 
     def test_pregunta_con_ask(self):

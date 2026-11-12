@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guarda de órdenes de Git para PreToolUse sobre Bash (M16, X-03, REG-83; VIC-17).
+"""Guarda de órdenes de Git para PreToolUse sobre Bash (M16, X-03, REG-83, X-04; VIC-17).
 
 Es una segunda capa contra errores del agente, no un control de seguridad: lee el
 texto de la orden, así que bash -c, eval, variables, alias o scripts la esquivan.
@@ -7,9 +7,14 @@ Lo que protege de verdad es el sandbox, que imponen los ajustes gestionados, y l
 Las reglas Bash(...) de esos ajustes no se pueden anular, pero también leen el texto
 de la orden: un script las esquiva igual.
 
+X-04 mira, sin red, lo que llevaría cada git commit contra .gitignore y contra la
+lista "fugas" de reglas-git.json. No mira git merge, cherry-pick, revert, am ni
+rebase, que crean commits con contenido que ya estaba en otro commit.
+
 Las reglas, sus niveles y sus mensajes están en reglas-git.json. Si no puede mirar,
 falla cerrado.
 """
+import fnmatch
 import json
 import os
 import posixpath
@@ -18,22 +23,16 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from lector_bash import NoAnalizable, analizar, cambia_de_carpeta, juntar, opciones, orden_efectiva
+    from lector_bash import nombres as _nombres
+    ERROR_DE_CARGA = None
+except Exception as e:  # Sin el lector, main() falla cerrado.
+    ERROR_DE_CARGA = e
+
 RUTA_REGLAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reglas-git.json")
 
-ASIGNACION = re.compile(r"[A-Za-z_]\w*\+?=")
-RESERVADAS = {"if", "then", "elif", "else", "while", "until", "do", "!", "{"}
-# Envolturas: opciones que llevan valor aparte y argumentos antes de la orden real.
-ENVOLTURAS = {
-    "env": ({"-u", "--unset", "-C", "--chdir"}, 0),
-    "command": (set(), 0),
-    "time": (set(), 0),
-    "builtin": (set(), 0),
-    "exec": ({"-a"}, 0),
-    "nohup": (set(), 0),
-    "nice": ({"-n", "--adjustment"}, 0),
-    "timeout": ({"-s", "--signal", "-k", "--kill-after"}, 1),
-    "sudo": ({"-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt", "-C", "-D", "-R", "-T", "-U"}, 0),
-}
 OPCIONES_GLOBALES_CON_VALOR = {
     "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env", "--attr-source",
 }
@@ -75,6 +74,33 @@ LARGAS_ADD = dict.fromkeys(
      "no-warn-embedded-repo", "renormalize", "pathspec-file-nul", "no-dry-run"), False)
 LARGAS_ADD.update(dict.fromkeys(("chmod", "pathspec-from-file"), True))
 
+# El hook corre fuera del sandbox y el agente puede preparar el repo que mira (un .git
+# que apunta a otro gitdir): git no debe ejecutar nada de su configuración ni escribir
+# el índice (G4 del PR #26). Ninguna llamada pide al árbol de trabajo que pase filtros.
+GIT_SEGURO = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "--no-optional-locks")
+# Variables y opciones que hacen que git mire otro repo u otro índice que el de la carpeta.
+OTRO_REPO = re.compile(r"(GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|OBJECT_DIRECTORY|CEILING_DIRECTORIES)(=|$)|--(git-dir|work-tree)(=|$))")
+# Plazo de toda la orden: también acota cada llamada a git (G4 del PR #26).
+_LIMITE = [float("inf")]
+
+
+def _plazo():
+    queda = _LIMITE[0] - time.monotonic()
+    if queda < 0.2:
+        raise NoPuedoMirar("sin tiempo")
+    return min(3, queda)
+
+LARGAS_COMMIT = dict.fromkeys(
+    ("all", "patch", "reset-author", "short", "branch", "porcelain", "long", "null", "signoff", "no-signoff",
+     "no-verify", "verify", "allow-empty", "allow-empty-message", "edit", "no-edit", "amend", "no-post-rewrite",
+     "include", "only", "pathspec-file-nul", "untracked-files", "verbose", "quiet", "dry-run", "status",
+     "no-status", "no-gpg-sign", "interactive", "gpg-sign"), False)
+LARGAS_COMMIT.update(dict.fromkeys(
+    ("reuse-message", "reedit-message", "fixup", "squash", "file", "author", "date", "message", "template",
+     "trailer", "cleanup", "pathspec-from-file"), True))
+# Con estas opciones, o con rutas, el commit lleva también cambios sin preparar.
+COMMIT_CON_TRABAJO = {"a", "all", "i", "include", "o", "only", "p", "patch", "interactive", "pathspec-from-file"}
+
 _LARGAS_CAMBIO_RAMA = dict.fromkeys(
     ("track", "no-track", "guess", "no-guess", "detach", "force", "merge", "quiet", "progress", "no-progress",
      "conflict", "recurse-submodules", "no-recurse-submodules", "ignore-other-worktrees", "overwrite-ignore",
@@ -85,241 +111,8 @@ LARGAS_CHECKOUT = {**_LARGAS_CAMBIO_RAMA, "ours": False, "theirs": False, "patch
                    "no-overlay": False, "pathspec-from-file": True, "pathspec-file-nul": False}
 
 
-class NoAnalizable(Exception):
-    """La orden tiene comillas, sustituciones o similares sin cerrar."""
-
-
 class NoPuedoMirar(Exception):
     """Git no ha podido decir cómo está el repo."""
-
-
-class _Lector:
-    """Divide un texto de bash en órdenes simples. Las palabras salen sin comillas;
-    lo que hay dentro de $(...) y de las comillas invertidas se lee como orden, salvo
-    si va dentro de ${...} o de $((...)). El cuerpo de los heredocs y los comentarios
-    no cuentan."""
-
-    def __init__(self, texto, ordenes=None):
-        self.t, self.i = texto, 0
-        self.ordenes = [] if ordenes is None else ordenes
-
-    def leer(self, anidado=False):
-        palabras, heredocs, profundidad = [], [], 0
-
-        def cerrar():
-            if palabras:
-                self.ordenes.append(palabras.copy())
-                palabras.clear()
-
-        while self.i < len(self.t):
-            c = self.t[self.i]
-            if c == "\n":
-                self.i += 1
-                cerrar()
-                self._cuerpos(heredocs)
-                heredocs.clear()
-            elif c in " \t":
-                self.i += 1
-            elif c == "\\" and self.t[self.i + 1:self.i + 2] == "\n":
-                self.i += 2
-            elif c == "#":
-                fin = self.t.find("\n", self.i)
-                self.i = len(self.t) if fin < 0 else fin
-            elif self.t.startswith("&>", self.i):
-                self._redireccion(palabras, heredocs)
-            elif c in ";&|":
-                self.i += 1
-                cerrar()
-            elif c == "(":
-                self.i += 1
-                profundidad += 1
-                cerrar()
-            elif c == ")":
-                self.i += 1
-                cerrar()
-                if anidado and profundidad == 0:
-                    return
-                profundidad = max(0, profundidad - 1)
-            elif c in "<>":
-                self._redireccion(palabras, heredocs)
-            else:
-                palabras.append(self._palabra())
-        cerrar()
-        self._cuerpos(heredocs)
-        if anidado:
-            raise NoAnalizable
-
-    def _espacios(self):
-        while self.t[self.i:self.i + 1] in (" ", "\t"):
-            self.i += 1
-
-    def _redireccion(self, palabras, heredocs):
-        t, i = self.t, self.i
-        if i > 0 and t[i - 1].isdigit() and palabras and palabras[-1].isdigit():
-            palabras.pop()
-        if t[i + 1:i + 2] == "(":  # <(orden) o >(orden): el paréntesis se lee como subshell.
-            self.i += 1
-        elif t.startswith("<<<", i):
-            self.i += 3
-            self._espacios()
-            self._palabra()
-        elif t.startswith("<<", i):
-            self.i += 2
-            quitar_tabs = t[self.i:self.i + 1] == "-"
-            self.i += quitar_tabs
-            self._espacios()
-            desde = self.i
-            delimitador = self._palabra()
-            literal = any(q in t[desde:self.i] for q in "'\"\\")
-            if not delimitador.isdigit():  # (( x << 2 )): un desplazamiento, no un heredoc.
-                heredocs.append((delimitador, quitar_tabs, literal))
-        else:
-            self.i += 1
-            while t[self.i:self.i + 1] in (">", "<", "&", "|"):
-                self.i += 1
-            self._espacios()
-            self._palabra()
-
-    def _cuerpos(self, heredocs):
-        for delimitador, quitar_tabs, literal in heredocs:
-            lineas = []
-            while self.i < len(self.t):
-                fin = self.t.find("\n", self.i)
-                fin = len(self.t) if fin < 0 else fin
-                linea = self.t[self.i:fin]
-                self.i = min(fin + 1, len(self.t))
-                if (linea.lstrip("\t") if quitar_tabs else linea) == delimitador:
-                    break
-                lineas.append(linea)
-            if not literal:
-                _Lector("\n".join(lineas), self.ordenes)._dobles(cierre=None)
-
-    def _palabra(self):
-        t, salida = self.t, []
-        while self.i < len(t):
-            c = t[self.i]
-            if c in " \t\n;&|()<>":
-                break
-            if c == "\\":
-                if t[self.i + 1:self.i + 2] != "\n":
-                    salida.append(t[self.i + 1:self.i + 2])
-                self.i += 2
-            elif c == "'":
-                fin = t.find("'", self.i + 1)
-                if fin < 0:
-                    raise NoAnalizable
-                salida.append(t[self.i + 1:fin])
-                self.i = fin + 1
-            elif c == '"':
-                self.i += 1
-                salida.append(self._dobles())
-            elif c == "`":
-                salida.append(self._invertidas())
-            elif c == "$":
-                salida.append(self._dolar())
-            else:
-                salida.append(c)
-                self.i += 1
-        return "".join(salida)
-
-    def _dobles(self, cierre='"'):
-        t, salida = self.t, []
-        while self.i < len(t):
-            c = t[self.i]
-            if c == cierre:
-                self.i += 1
-                return "".join(salida)
-            if c == "\\":
-                siguiente = t[self.i + 1:self.i + 2]
-                if siguiente != "\n":
-                    salida.append(siguiente if siguiente in ('$', '`', '"', "\\") else c + siguiente)
-                self.i += 2
-            elif c == "`":
-                salida.append(self._invertidas())
-            elif c == "$":
-                salida.append(self._dolar(en_dobles=True))
-            else:
-                salida.append(c)
-                self.i += 1
-        if cierre is not None:
-            raise NoAnalizable
-        return "".join(salida)
-
-    def _dolar(self, en_dobles=False):
-        t, i = self.t, self.i
-        if t.startswith("$((", i):
-            return self._equilibrado("(", ")", i + 1)
-        if t.startswith("$(", i):
-            self.i += 2
-            self.leer(anidado=True)
-            return "$()"
-        if t.startswith("${", i):
-            return self._equilibrado("{", "}", i + 1)
-        if t.startswith("$'", i) and not en_dobles:
-            j = i + 2
-            while j < len(t) and t[j] != "'":
-                j += 2 if t[j] == "\\" else 1
-            if j >= len(t):
-                raise NoAnalizable
-            self.i = j + 1
-            return t[i + 2:j]
-        if t.startswith('$"', i) and not en_dobles:
-            self.i += 2
-            return self._dobles()
-        self.i += 1
-        return "$"
-
-    def _equilibrado(self, abre, cierra, desde):
-        t, j, nivel = self.t, desde, 0
-        while j < len(t):
-            if t[j] == "\\":
-                j += 2
-                continue
-            nivel += (t[j] == abre) - (t[j] == cierra)
-            j += 1
-            if nivel == 0:
-                texto = t[self.i:j]
-                self.i = j
-                return texto
-        raise NoAnalizable
-
-    def _invertidas(self):
-        t, j = self.t, self.i + 1
-        interior = []
-        while j < len(t) and t[j] != "`":
-            if t[j] == "\\" and t[j + 1:j + 2] in ("`", "\\", "$"):
-                j += 1
-            interior.append(t[j:j + 1])
-            j += 1
-        if j >= len(t):
-            raise NoAnalizable
-        self.i = j + 1
-        _Lector("".join(interior), self.ordenes).leer()
-        return "$()"
-
-
-def analizar(texto):
-    lector = _Lector(texto)
-    lector.leer()
-    return lector.ordenes
-
-
-def orden_efectiva(palabras):
-    """Quita asignaciones, palabras reservadas y envolturas como env o timeout."""
-    i = 0
-    while i < len(palabras):
-        palabra = palabras[i]
-        if palabra in RESERVADAS or ASIGNACION.match(palabra):
-            i += 1
-        elif posixpath.basename(palabra) in ENVOLTURAS:
-            con_valor, posicionales = ENVOLTURAS[posixpath.basename(palabra)]
-            i += 1
-            while i < len(palabras) and palabras[i].startswith("-") and palabras[i] != "-":
-                i += 2 if palabras[i] in con_valor else 1
-            i += posicionales
-        else:
-            break
-    return palabras[i:]
 
 
 def separar_git(palabras):
@@ -334,53 +127,6 @@ def separar_git(palabras):
     if i >= len(palabras):
         return None
     return palabras[i], palabras[i + 1:], directorios, ajustes
-
-
-def _resolver(nombre, largas):
-    if nombre in largas:
-        return nombre
-    candidatas = [l for l in largas if l.startswith(nombre)]
-    return candidatas[0] if len(candidatas) == 1 else nombre
-
-
-def opciones(args, cortas_con_valor="", largas=None):
-    """Separa opciones y posicionales como parse-options de Git: cortas juntas
-    (-fu), largas abreviadas (--set-up) y valores con = o en la palabra siguiente."""
-    largas = largas or {}
-    encontradas, posicionales, i = [], [], 0
-    while i < len(args):
-        a = args[i]
-        i += 1
-        if a == "--":
-            posicionales.extend(args[i:])
-            break
-        if a.startswith("--"):
-            nombre, igual, valor = a[2:].partition("=")
-            nombre = _resolver(nombre, largas)
-            if not igual and largas.get(nombre) and i < len(args):
-                valor = args[i]
-                i += 1
-            encontradas.append((nombre, valor))
-        elif a.startswith("-") and len(a) > 1:
-            j = 1
-            while j < len(a):
-                corta = a[j]
-                j += 1
-                if corta in cortas_con_valor:
-                    valor = a[j:]
-                    if not valor and i < len(args):
-                        valor = args[i]
-                        i += 1
-                    encontradas.append((corta, valor))
-                    break
-                encontradas.append((corta, ""))
-        else:
-            posicionales.append(a)
-    return encontradas, posicionales
-
-
-def _nombres(encontradas):
-    return {nombre for nombre, _ in encontradas}
 
 
 def _configura_seguimiento(ajuste):
@@ -447,7 +193,7 @@ def regla_add(args, conf):
 
 def _git(cwd, *args, codigos_validos=(0,)):
     try:
-        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=3)
+        r = subprocess.run(["git", *GIT_SEGURO, "-C", cwd, *args], capture_output=True, text=True, timeout=_plazo())
     except (OSError, subprocess.SubprocessError) as e:
         raise NoPuedoMirar(str(e))
     if r.returncode not in codigos_validos:
@@ -510,10 +256,6 @@ def regla_crear_rama(sub, args, cwd, previas, conf):
     return comprobar_base(inicio, cwd, previas, conf) if crea else None
 
 
-def _juntar(cwd, ruta):
-    return os.path.normpath(os.path.join(cwd, os.path.expanduser(ruta)))
-
-
 def _trae_main(args, conf):
     """Si un git fetch o git pull con estos argumentos trae la rama principal del remoto."""
     encontradas, posicionales = opciones(args)
@@ -524,7 +266,99 @@ def _trae_main(args, conf):
     return posicionales[0] == conf["remoto"] and (len(posicionales) == 1 or conf["rama_principal"] in posicionales[1:])
 
 
-def _regla_de(sub, args, ajustes, cwd, previas, conf):
+def _git_entrada(cwd, entrada, *args, codigos_validos=(0,)):
+    try:
+        r = subprocess.run(["git", *GIT_SEGURO, "-C", cwd, *args], input=entrada, capture_output=True, text=True,
+                           timeout=_plazo())
+    except (OSError, subprocess.SubprocessError) as e:
+        raise NoPuedoMirar(str(e))
+    if r.returncode not in codigos_validos:
+        raise NoPuedoMirar(r.stderr.strip())
+    return r.stdout
+
+
+def _rutas(salida):
+    return [r for r in salida.split("\0") if r]
+
+
+def _nunca_se_sube(ruta, fugas):
+    nombre = posixpath.basename(ruta)
+    if re.search(fugas["excepciones"], nombre):
+        return False
+    return any(fnmatch.fnmatchcase(ruta if "/" in patron else nombre, patron) for patron in fugas["nunca"])
+
+
+def _dentro(ruta, carpeta):
+    if "$" in carpeta:
+        return False
+    ruta, carpeta = os.path.realpath(ruta), os.path.realpath(carpeta)
+    return ruta == carpeta or ruta.startswith(carpeta.rstrip("/") + "/")
+
+
+def anadidos_por_add(args, cwd):
+    """(ruta absoluta, forzado) de lo que un git add o git stage con estos argumentos va
+    a preparar. Las rutas pueden ser carpetas o patrones: regla_commit las expande."""
+    encontradas, posicionales = opciones(args, "", LARGAS_ADD)
+    if _nombres(encontradas) & {"n", "dry-run"}:
+        return []
+    forzado = bool(_nombres(encontradas) & {"f", "force"})
+    return [(juntar(cwd, ruta), forzado) for ruta in posicionales]
+
+
+def regla_commit(args, cwd, anadidos, conf, sesion=None):
+    """X-04. Devuelve ("commit-fuga", rutas) si el commit llevaría algo que .gitignore
+    excluye o que nunca debe subirse. anadidos son las rutas absolutas de los git add
+    anteriores de la misma orden, que aún no están preparadas cuando corre el hook."""
+    if "$" in cwd:
+        raise NoPuedoMirar("ruta dinámica")
+    encontradas, posicionales = opciones(args, "mFCct", LARGAS_COMMIT)
+    raiz = _git(cwd, "rev-parse", "--show-toplevel")
+    if anadidos and sesion:
+        # Solo los git add dentro del repo de la sesión (no solo de su carpeta: puede estar en
+        # una subcarpeta): fuera, un repo preparado haría listar nombres de ficheros ajenos.
+        try:
+            propio = _git(sesion, "rev-parse", "--show-toplevel")
+        except NoPuedoMirar:
+            propio = sesion
+        anadidos = [a for a in anadidos if _dentro(a[0], propio)]
+    rutas = _rutas(_git_entrada(cwd, None, "diff", "--cached", "--no-relative", "--no-ext-diff", "--no-textconv",
+                                "--name-only", "-z", "--diff-filter=d"))
+    preparadas = set(rutas)
+    if posicionales or _nombres(encontradas) & COMMIT_CON_TRABAJO:
+        # Con rutas, los ficheros del índice que casan con ellas; con -a, -p o
+        # --pathspec-from-file, todos. Se miran también los no modificados: comparar con
+        # el árbol de trabajo pasaría los filtros del repo.
+        rutas += _rutas(_git_entrada(raiz, None, "ls-files", "-z", "--full-name", "--",
+                                     *[os.path.relpath(juntar(cwd, r), raiz) for r in posicionales]))
+    # Lo que añadirían esos git add, en una llamada con -f y otra sin él (sin -f, git se
+    # salta lo ignorado).
+    for forzado in (False, True):
+        # Rutas reales en los dos lados: si cwd pasa por un enlace, relpath daría "..".
+        relativas = [os.path.relpath(os.path.realpath(ruta), os.path.realpath(raiz))
+                     for ruta, f in anadidos if f == forzado]
+        relativas = [r for r in relativas if r != ".." and not r.startswith(".." + os.sep)]
+        if relativas:
+            excluir = () if forzado else ("--exclude-standard",)
+            anadidas = _rutas(_git_entrada(raiz, None, "ls-files", "-z", "--full-name", "--cached", "--others",
+                                           *excluir, "--", *relativas))
+            rutas += anadidas
+            preparadas.update(anadidas)
+    rutas = list(dict.fromkeys(rutas))
+    if not rutas:
+        return None
+    ignoradas = set(_rutas(_git_entrada(cwd, "\0".join(rutas) + "\0", "-C", raiz, "check-ignore", "--no-index",
+                                        "-z", "--stdin", codigos_validos=(0, 1))))
+    if ignoradas:  # Lo que ya está en HEAD se versionó a propósito: solo cuenta la lista "fugas".
+        ignoradas -= set(_rutas(_git_entrada(raiz, None, "ls-tree", "-r", "-z", "--name-only", "--full-tree", "HEAD",
+                                             "--", *ignoradas, codigos_validos=(0, 128))))
+    fugas = [r for r in rutas if r in ignoradas or _nunca_se_sube(r, conf["fugas"])]
+    if not fugas:
+        return None
+    # Si solo salen de -a o de las rutas del commit, el remedio es otro: preparar por nombre.
+    return ("commit-fuga" if set(fugas) & preparadas else "commit-fuga-todo", fugas)
+
+
+def _regla_de(sub, args, ajustes, cwd, previas, conf, anadidos=(), otro_repo=False, sesion=None):
     if sub == "push":
         return regla_push(args, ajustes)
     if sub in ("fetch", "pull"):
@@ -537,48 +371,71 @@ def _regla_de(sub, args, ajustes, cwd, previas, conf):
         return regla_add(args, conf)
     if sub in ("switch", "checkout"):
         return regla_crear_rama(sub, args, cwd, previas, conf)
+    if sub == "commit":
+        try:
+            if otro_repo:
+                raise NoPuedoMirar("otro repo u otro índice")
+            return regla_commit(args, cwd, anadidos, conf, sesion)
+        except NoPuedoMirar:
+            return "commit-sin-mirar"
     return None
 
 
 def decidir(comando, cwd, conf):
     """Devuelve el id de la regla más grave que incumple la orden, o None."""
+    return decidir_con_detalle(comando, cwd, conf)[0]
+
+
+def decidir_con_detalle(comando, cwd, conf):
+    """Como decidir, pero devuelve (regla, detalle); el detalle son las rutas de X-04."""
     if len(comando) > conf["max_caracteres_orden"] and "git" in comando:
-        return "sin-analizar"
+        return "sin-analizar", None
     limite = time.monotonic() + conf["max_segundos_analisis"]
+    _LIMITE[0] = limite
+    sesion = cwd
     try:
         ordenes = analizar(comando)
     except NoAnalizable:
-        return "sin-analizar" if "git" in comando else None
-    candidata, previas = None, set()
+        return ("sin-analizar" if "git" in comando else None), None
+    candidata, previas, anadidos = None, set(), []
+    otro_repo = any(OTRO_REPO.match(p) for palabras in ordenes for p in palabras)
     for palabras in ordenes:
         if time.monotonic() > limite:  # Antes de que el timeout del hook deje pasar la orden.
-            return "sin-analizar"
+            return "sin-analizar", None
         efectiva = orden_efectiva(palabras)
         if efectiva[:1] in (["pushd"], ["popd"]):  # No se sigue: REG-83 falla cerrado.
             cwd = "$"
             continue
         if efectiva[:1] == ["cd"]:
             destinos = [a for a in efectiva[1:] if not a.startswith("-")]
-            if len(destinos) == 1:
-                cwd = _juntar(cwd, destinos[0])
+            # cd solo, cd - o varios destinos: no se sabe a dónde va.
+            cwd = juntar(cwd, destinos[0]) if len(destinos) == 1 and destinos[0] != "-" else "$"
             continue
         separado = separar_git(efectiva)
         if separado is None:
             continue
         sub, args, directorios, ajustes = separado
-        cwd_git = cwd
+        cwd_git = "$" if cambia_de_carpeta(palabras) else cwd
         for directorio in directorios:
-            cwd_git = _juntar(cwd_git, directorio)
+            cwd_git = juntar(cwd_git, directorio)
         try:
-            regla = _regla_de(sub, args, ajustes, cwd_git, previas, conf)
+            regla = _regla_de(sub, args, ajustes, cwd_git, previas, conf, anadidos, otro_repo, sesion)
         except NoPuedoMirar:
             regla = "sin-mirar"
+        regla, detalle = regla if isinstance(regla, tuple) else (regla, None)
         if regla and conf["reglas"][regla]["nivel"] != "preguntar":
-            return regla
+            return regla, detalle
         candidata = candidata or regla
         if sub in ("fetch", "pull") and _trae_main(args, conf):
             previas.add((sub, cwd_git))
-    return candidata
+        if sub in ("add", "stage"):
+            anadidos += anadidos_por_add(args, cwd_git)
+    return candidata, None
+
+
+def lista_corta(rutas, maximo=5):
+    nombres = ", ".join(rutas[:maximo])
+    return nombres + (f" y {len(rutas) - maximo} más" if len(rutas) > maximo else "")
 
 
 def respuesta(decision, motivo):
@@ -588,18 +445,21 @@ def respuesta(decision, motivo):
 
 def main():
     try:
+        if ERROR_DE_CARGA:
+            raise ERROR_DE_CARGA
         with open(RUTA_REGLAS, encoding="utf-8") as f:
             conf = json.load(f)
         datos = json.load(sys.stdin)
         comando = datos["tool_input"]["command"]
-        regla = decidir(comando, datos.get("cwd") or os.getcwd(), conf)
+        regla, detalle = decidir_con_detalle(comando, datos.get("cwd") or os.getcwd(), conf)
         if regla is None:
             return
         info = conf["reglas"][regla]
+        mensaje = info["mensaje"].replace("{ficheros}", lista_corta(detalle or []))
         if info["nivel"] == "preguntar":
-            salida = respuesta("ask", info["mensaje"])
+            salida = respuesta("ask", mensaje)
         else:
-            salida = respuesta("deny", f'{info["mensaje"]} {conf["cierre"]}')
+            salida = respuesta("deny", f'{mensaje} {conf["cierre"]}')
     except Exception as e:  # Si no puede mirar, falla cerrado (criterio 5 del inventario).
         salida = respuesta("deny", f"La guarda de Git no ha podido comprobar esta orden ({type(e).__name__}). "
                                    "Avisa a la persona; no la esquives.")

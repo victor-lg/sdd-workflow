@@ -64,7 +64,7 @@ Rellena la plantilla del PR: por qué existe, qué spec y AC cubre (`SPEC-XXX-NN
 ## Tareas largas o interrumpidas
 
 - El estado de la entrega vive en la issue de Linear.
-- En cambios R1 y R2, abre el PR como borrador desde el principio. Mantén en su descripción el plan y una lista de pasos que vayas marcando.
+- Abre el PR como borrador desde el principio, también en R0. Mantén en su descripción el plan y una lista de pasos que vayas marcando.
 - Si una sesión larga se interrumpe, guarda el estado en `.tareas/<ID>.md` (fuera de Git): objetivo, progreso verificado, ficheros tocados, pruebas, bloqueos y siguiente paso. Bórralo al cerrar la tarea.
 - Al reanudar, contrasta cualquier resumen con el estado real de Git y de la CI antes de actuar.
 - Una sesión por PR. Nunca trabajes en una copia del repo que esté usando otra sesión: si hay trabajo en paralelo, cada sesión usa su propio clon o `git worktree`.

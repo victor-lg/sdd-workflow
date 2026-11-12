@@ -109,7 +109,7 @@ class Sesion(unittest.TestCase):
         os.mkdir(os.path.join(directorio, "900006.json"))
         self.assertEqual(sesion.registrar(self.git_dir, os.getpid(), "s"), [])
         self.assertTrue(os.path.exists(fuera))
-        self.assertEqual(sorted(os.listdir(directorio)), [f"{os.getpid()}.json", "900006.json"])
+        self.assertEqual(sorted(os.listdir(directorio)), sorted([f"{os.getpid()}.json", "900006.json"]))
 
     def test_error_de_git_no_es_estar_fuera_de_un_repo(self):
         with open(os.path.join(self.git_dir, "config"), "w", encoding="utf-8") as f:
