@@ -3,3 +3,19 @@ __pycache__/
 .tareas/
 plugin-sdd/evals/results/
 evals/results/
+
+# Ficheros vacíos de solo lectura que el sandbox de Claude Code monta en la
+# raíz (M17, como en la plantilla).
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.gitmodules
+/.idea
+/.mcp.json
+/.profile
+/.ripgreprc
+/.vscode
+/.zprofile
+/.zshrc
+/.claude/*
+!/.claude/settings.json

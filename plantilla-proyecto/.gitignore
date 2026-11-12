@@ -5,3 +5,25 @@
 
 # Ajustes locales de Claude Code
 .claude/settings.local.json
+
+# Ficheros vacíos de solo lectura que el sandbox de Claude Code monta en la
+# raíz (M17). No son del proyecto: un `git add .` los metería en un commit.
+# Si el proyecto necesita versionar alguno, quita su línea.
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.gitmodules
+/.idea
+/.mcp.json
+/.profile
+/.ripgreprc
+/.vscode
+/.zprofile
+/.zshrc
+# De .claude/ solo se versiona settings.json, si el proyecto lo usa.
+/.claude/*
+!/.claude/settings.json
+
+# Capturas de las pruebas (se suben al PR, no al repo) y resultados de evaluaciones
+/capturas-*/
+evals/results/

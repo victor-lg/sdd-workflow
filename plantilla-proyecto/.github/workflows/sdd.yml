@@ -12,8 +12,8 @@ name: sdd
 on:
   pull_request:
     branches: [main]
-    # "edited" vuelve a lanzar los checks cuando cambia la descripción del PR
-    # (nivel de riesgo o AC cubiertos).
+    # "edited" vuelve a lanzar los checks cuando cambia el título o la
+    # descripción del PR (nivel de riesgo, AC cubiertos o `Fixes`).
     types: [opened, edited, synchronize, reopened, ready_for_review]
 
 permissions:
@@ -43,10 +43,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sdd"
           git show "origin/$BASE_REF:.github/sdd/checks.py" > "$RUNNER_TEMP/sdd/checks.py"
 
-      # La descripción del PR entra por variable de entorno, nunca
-      # interpolada en el script (evita inyección de órdenes).
-      - name: Specs, mezcla, trazabilidad (G3) y riesgo
+      # La descripción, el título y la rama del PR entran por variables de
+      # entorno, nunca interpolados en el script (evita inyección de órdenes).
+      - name: Specs, mezcla, trazabilidad (G3), riesgo y convenciones
         env:
           BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BRANCH: ${{ github.head_ref }}
         run: python3 "$RUNNER_TEMP/sdd/checks.py" --base "origin/$BASE_REF"
