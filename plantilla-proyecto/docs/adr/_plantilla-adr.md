@@ -5,7 +5,7 @@ estado: Propuesto         # Propuesto | Aceptado | Rechazado | Sustituido
 fecha: YYYY-MM-DD
 sustituye: null           # ADR-NNNN si sustituye a otro
 sustituido_por: null
-referencias: []           # specs, issues, PRs, ADR relacionados
+referencias: []           # specs, issues, PRs, ADR relacionados, entre comillas: ["SPEC-CALC-001", "PR #12"]
 ---
 
 <!--

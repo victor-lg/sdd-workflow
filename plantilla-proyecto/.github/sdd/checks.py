@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks SDD de la CI (workflow SDD + IA, v0.22).
+"""Checks SDD de la CI (workflow SDD + IA, v1.1).
 
 Se ejecuta en cada PR contra `main`. La CI siempre usa la copia de este
 fichero que hay en `main`, nunca la del PR, para que un PR no pueda
@@ -14,8 +14,19 @@ Comprueba:
                 las rutas tocadas, las specs que implementa y los ADR. La CI
                 solo puede subir el nivel, nunca bajarlo.
   tests         lista los tests existentes que el PR modifica o borra (no bloquea).
+  convenciones  M11: rama `<tipo>/vic-<N>-<descripcion>`, título del PR en formato
+                de commit y descripción que empieza por `Fixes`, `Part of` o `Refs`
+                con el ID (docs/convenciones.md del workflow).
+  autoria       REG-34: ni el PR ni sus commits mencionan a Claude
+                (`Co-Authored-By`, "Generated with"; ADR-0007).
+  historial     M39: avisa si una spec que cambia lleva historial en la cabecera.
+  adr           M7: las listas de la cabecera YAML de los ADR que cambian van
+                entre comillas (un `#` sin comillas se lee como comentario).
 
-Uso local:  PR_BODY="$(cat cuerpo.md)" python3 .github/sdd/checks.py --base origin/main
+Uso local:
+  PR_BODY="$(cat cuerpo.md)" PR_TITLE="feat(calculo): …" PR_BRANCH="feat/vic-12-calculo" \
+    python3 .github/sdd/checks.py --base origin/main
+Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta.
 """
 
 from __future__ import annotations
@@ -65,6 +76,29 @@ PREFIJOS_NO_CODIGO = ("docs/", "discovery/", ".github/", ".claude/")
 NO_CODIGO_SUELTOS = {".gitignore"}
 
 ORDEN = {"R0": 0, "R1": 1, "R2": 2}
+
+# Convenciones de nombres (M11). La clave es la del equipo de Linear.
+CLAVE_ISSUE = "VIC"
+TIPOS = ("feat", "fix", "spec", "adr", "refactor", "test", "docs", "ci", "chore")
+RE_RAMA = re.compile(rf"^({'|'.join(TIPOS)})/{CLAVE_ISSUE.lower()}-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$")
+RE_TITULO = re.compile(rf"^({'|'.join(TIPOS)})(?:\(([^()\s]+)\))?(!)?: (\S.*)$")
+RE_ID_ISSUE = re.compile(rf"^{CLAVE_ISSUE}-\d+$", re.I)
+RE_ENLACE = re.compile(rf"^(?:Fixes|Part of|Refs):?\s+{CLAVE_ISSUE}-([1-9]\d*)\b")
+LARGO_RAMA, LARGO_DESCRIPCION = 50, 72
+
+# Menciones a Claude que no van en commits ni PR (REG-34, ADR-0007).
+RE_AUTORIA = re.compile(r"Co-Authored-By:.*(claude|anthropic)|Generated with \[?Claude", re.I)
+
+# Señales de historial en la cabecera de una spec (M39): el porqué de cada
+# versión vive en Git, en los PR y en los ADR.
+SENALES_HISTORIAL = [
+    (re.compile(r"^(historial|cambios|changelog)\s*:", re.I | re.M), "un campo de historial"),
+    (re.compile(r"\bronda\s+\d", re.I), "rondas de revisión"),
+    (re.compile(r"\bversi[oó]n\s+\d+\.\d+", re.I), "versiones anteriores"),
+    (re.compile(r"\bPR\s*#\d+"), "referencias a PR"),
+    (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), "fechas"),
+]
+RE_TITULO_HISTORIAL = re.compile(r"^#+\s*(?:\d+\.\s*)?(historial|registro de cambios|cambios|changelog)\b", re.I | re.M)
 
 
 # --- Utilidades -----------------------------------------------------------
@@ -391,6 +425,132 @@ def check_tests(inf: Informe, base: str) -> None:
                              + "\n".join(filas))
 
 
+# --- Convenciones de nombres (M11) ----------------------------------------
+
+def check_convenciones(inf: Informe, rama: str, titulo: str, cuerpo_pr: str) -> None:
+    m_rama = RE_RAMA.match(rama)
+    if not m_rama:
+        inf.error("convenciones", f"la rama `{rama}` no sigue `<tipo>/{CLAVE_ISSUE.lower()}-<N>-<descripcion>`, con el tipo uno de {', '.join(TIPOS)} y la descripción en minúsculas y *kebab-case*.")
+    elif len(rama) > LARGO_RAMA:
+        inf.aviso("convenciones", f"la rama `{rama}` tiene {len(rama)} caracteres; la convención es unos {LARGO_RAMA}.")
+
+    m_tit = RE_TITULO.match(titulo)
+    if not m_tit:
+        inf.error("convenciones", f"el título del PR `{titulo}` no sigue `<tipo>(<alcance>)!: <descripción>`, con el tipo uno de {', '.join(TIPOS)}. Al fusionar por squash será el commit de `main`.")
+    else:
+        tipo, alcance, _, descripcion = m_tit.groups()
+        if alcance and RE_ID_ISSUE.match(alcance):
+            inf.error("convenciones", f"el alcance del título es el ID `{alcance}`; el alcance es la zona del código o del documento y el ID va en la descripción del PR.")
+        if len(descripcion) > LARGO_DESCRIPCION:
+            inf.error("convenciones", f"la descripción del título tiene {len(descripcion)} caracteres; el máximo es {LARGO_DESCRIPCION}.")
+        if descripcion[0].isupper() or descripcion.endswith("."):
+            inf.aviso("convenciones", "la descripción del título va en minúscula y sin punto final.")
+        if m_rama and m_rama.group(1) != tipo:
+            inf.aviso("convenciones", f"el tipo del título (`{tipo}`) no es el de la rama (`{m_rama.group(1)}`).")
+
+    texto = re.sub(r"<!--.*?-->", "", cuerpo_pr, flags=re.S)
+    primera = next((l.strip() for l in texto.splitlines()
+                    if l.strip() and not l.lstrip().startswith("#")), "")
+    m_enl = RE_ENLACE.match(primera)
+    if not m_enl:
+        inf.error("convenciones", f"la descripción del PR debe empezar por `Fixes {CLAVE_ISSUE}-N`, `Part of {CLAVE_ISSUE}-N` o `Refs {CLAVE_ISSUE}-N` (decisión 4 de M11); " + (f"empieza por `{primera[:80]}`." if primera else "está vacía."))
+    elif m_rama and m_enl.group(1) != m_rama.group(2):
+        inf.aviso("convenciones", f"la descripción enlaza {CLAVE_ISSUE}-{m_enl.group(1)} y la rama es de {CLAVE_ISSUE}-{m_rama.group(2)}.")
+
+
+# --- Autoría (REG-34) -----------------------------------------------------
+
+def check_autoria(inf: Informe, titulo: str, cuerpo_pr: str, mensajes: list[str]) -> None:
+    if RE_AUTORIA.search(titulo) or RE_AUTORIA.search(cuerpo_pr):
+        inf.error("autoria", "el título o la descripción del PR mencionan a Claude (`Co-Authored-By` o \"Generated with\"). Quítalo (ADR-0007).")
+    n = sum(1 for m in mensajes if RE_AUTORIA.search(m))
+    if n:
+        inf.error("autoria", f"{n} commit(s) del PR mencionan a Claude (`Co-Authored-By` o \"Generated with\"). Reescribe sus mensajes (ADR-0007).")
+
+
+def mensajes_commits(base: str) -> list[str]:
+    salida = git("log", "--format=%B%x00", f"{base}..HEAD") or ""
+    return [m for m in salida.split("\x00") if m.strip()]
+
+
+# --- Historial en las specs (M39) -----------------------------------------
+
+def cabecera_spec(texto: str) -> str:
+    """Frontmatter y lo que va antes del título `# ` o de la sección 1."""
+    m = re.search(r"^(#\s|##\s+1\.)", texto[3:] if texto.startswith("---") else texto, re.M)
+    return texto[:m.start() + 3] if m else texto
+
+
+def check_historial(inf: Informe, ficheros: dict[str, str]) -> None:
+    for ruta, texto in sorted(ficheros.items()):
+        senales = [nombre for regex, nombre in SENALES_HISTORIAL if regex.search(cabecera_spec(texto))]
+        if RE_TITULO_HISTORIAL.search(texto):
+            senales.append("una sección de historial")
+        if senales:
+            inf.aviso("historial", f"⚠️ `{ruta}` parece llevar historial en la cabecera ({', '.join(senales)}). La spec describe solo lo vigente; el porqué de cada versión va en el PR, en Git o en un ADR (M39).")
+
+
+# --- Cabecera YAML de los ADR (M7) ----------------------------------------
+
+def elementos(texto: str, en_linea: bool) -> tuple[list[str], bool]:
+    """Elementos de una lista YAML sencilla, hasta un comentario `#` fuera de comillas,
+    y si la lista en línea se cierra con `]` en este texto."""
+    partes, actual, comilla, cerrada = [], "", "", False
+    for i, c in enumerate(texto):
+        if comilla:
+            actual += c
+            if c == comilla:
+                comilla = ""
+        elif c in "\"'" and not actual.strip():
+            comilla, actual = c, actual + c
+        elif c == "#" and (i == 0 or texto[i - 1].isspace()):
+            break
+        elif en_linea and c in ",]":
+            partes.append(actual)
+            actual = ""
+            if c == "]":
+                cerrada = True
+                break
+        else:
+            actual += c
+    partes.append(actual)
+    return [p.strip() for p in partes if p.strip()], cerrada
+
+
+def entre_comillas(valor: str) -> bool:
+    return len(valor) >= 2 and valor[0] in "\"'" and valor[-1] == valor[0]
+
+
+def refs_sin_comillas(texto: str) -> list[str]:
+    if not texto.startswith("---"):
+        return []
+    fin = texto.find("\n---", 3)
+    malas, abierta = [], False
+    for linea in texto[3:fin if fin >= 0 else None].splitlines():
+        m_linea = re.match(r"^[\w-]+:\s*\[(.*)$", linea)
+        m_bloque = re.match(r"^\s*-\s+(.*)$", linea)
+        if abierta:
+            # Continuación de una lista en línea repartida en varias líneas.
+            valores, cerrada = elementos(linea, en_linea=True)
+            abierta = not cerrada
+        elif m_linea:
+            valores, cerrada = elementos(m_linea.group(1), en_linea=True)
+            abierta = not cerrada
+        elif m_bloque:
+            valores = elementos(m_bloque.group(1), en_linea=False)[0][:1]
+        else:
+            continue
+        malas += [v for v in valores if not entre_comillas(v)]
+    return malas
+
+
+def check_adr(inf: Informe, ficheros: dict[str, str]) -> None:
+    for ruta, texto in sorted(ficheros.items()):
+        malas = refs_sin_comillas(texto)
+        if malas:
+            inf.error("adr", f"`{ruta}`: en la cabecera YAML, las referencias van entre comillas (M7): {', '.join(f'`{v}`' for v in malas)}.")
+
+
 # --- Programa -------------------------------------------------------------
 
 def main() -> int:
@@ -425,6 +585,14 @@ def main() -> int:
     check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
                  specs_head_ficheros, specs_base_ficheros)
     check_tests(inf, args.base)
+
+    rama, titulo = os.environ.get("PR_BRANCH", ""), os.environ.get("PR_TITLE", "")
+    if rama or titulo:
+        check_convenciones(inf, rama, titulo, cuerpo_pr)
+    check_autoria(inf, titulo, cuerpo_pr, mensajes_commits(args.base))
+    check_historial(inf, {f: specs_head_ficheros[f] for f in cambiados if f in specs_head_ficheros})
+    check_adr(inf, {f: (raiz / f).read_text(encoding="utf-8")
+                    for f in cambiados if es_adr(f) and (raiz / f).is_file()})
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]

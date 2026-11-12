@@ -131,7 +131,8 @@ Una convención que no se comprueba se acaba incumpliendo (M25). Se comprueba en
 | --- | --- | --- |
 | Formato del mensaje de commit | hook `commit-msg` con lefthook (en local) | 3 (M33) |
 | Nombre de la rama con tipo e ID | CI (`checks.py`) | 2 (M11) |
-| Título del PR y `Fixes`/`Part of` con ID | CI (`checks.py`) | 2 (M11) |
+| Título del PR y `Fixes`/`Part of`/`Refs` con ID | CI (`checks.py`) | 2 (M11) |
+| Sin `Co-Authored-By` ni "Generated with" de Claude en el PR y sus commits | CI (`checks.py`) | 2 (REG-34) |
 | Issue → rama → PR enlazados | Integración Linear–GitHub (ya activa) | — |
 | Métricas por issue | `sdd-metricas.py` lee el ID de la rama con el formato nuevo | 1 |
 
@@ -148,8 +149,9 @@ Una convención que no se comprueba se acaba incumpliendo (M25). Se comprueba en
 
 Aplicada en el PR de VIC-16 (ADR-0007): `plantilla-proyecto/AGENTS.md`, la plantilla de PR, `sdd-plan`, `sdd-spec`, `sdd-implement`, `sdd-review`, el lector de `sdd-metricas.py` y la guía de instalación. `docs/glosario.md` no necesitaba cambios.
 
+`checks.py` comprueba ramas, títulos y enlaces desde VIC-17 (M11, bloque 2).
+
 Pendiente:
-- `checks.py`, cuando compruebe ramas y títulos (M11, bloque 2);
 - los repos de cada proyecto, al actualizar su plantilla.
 
 El historial ya escrito no se toca.
