@@ -151,7 +151,7 @@ Aplicada en el PR de VIC-16 (ADR-0007): `plantilla-proyecto/AGENTS.md`, la plant
 
 `checks.py` comprueba ramas, títulos y enlaces desde VIC-17 (M11, bloque 2), y el formato de los commits desde el PR 3 de VIC-18: el título como el del PR, la línea en blanco tras él y el pie con `Refs: VIC-N` y, si van, `Spec:` y `BREAKING CHANGE:` en ese orden. No mira los merges (el de la CI es el merge efímero de GitHub, y el squash los absorbe); el hook deja pasar el título que Git pone a un merge. Sí rechaza los títulos que proponen `git revert` (`Revert "…"`) o la web de GitHub al aplicar una sugerencia de revisión: se reescriben antes del commit o, en la web, en el cuadro del mensaje.
 
-**Excepción:** los PR de Dependabot (M38) no siguen estas convenciones. `checks.py` no las comprueba si el autor del PR y el de todos sus commits es Dependabot y el PR solo cambia dependencias o workflows; nunca por el nombre de la rama.
+**Excepción:** los PR de Dependabot (M38) no siguen estas convenciones. `checks.py` no las comprueba si el autor del PR y el de todos sus commits es Dependabot, no hay merges y el PR solo cambia dependencias o workflows; nunca por el nombre de la rama.
 
 Pendiente:
 - los repos de cada proyecto, al actualizar su plantilla.

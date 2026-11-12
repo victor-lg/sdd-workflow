@@ -611,14 +611,16 @@ def comprobar_mensaje(fichero: str) -> int:
 # Sus PR no siguen las convenciones de rama, título ni descripción. La excepción mira el autor
 # del PR (lo pone GitHub; nadie más puede abrirlo como Dependabot) y el de cada commit, nunca
 # la rama, que el agente también puede llamar `dependabot/…`; y solo vale si el PR toca
-# dependencias o workflows. El nivel de riesgo, la autoría y la configuración de lefthook se
+# dependencias o workflows y no tiene merges (Dependabot no los hace, y un merge podría
+# traer cambios de otro autor). El nivel de riesgo, la autoría y la configuración de lefthook se
 # comprueban igual.
 DEPENDABOT = "dependabot[bot]"
 DEPENDABOT_CORREO = "49699333+dependabot[bot]@users.noreply.github.com"
 
 
-def es_de_dependabot(autor_pr: str, commits: list[tuple[str, str]] | None, cambiados: list[str]) -> bool:
-    return (autor_pr == DEPENDABOT and bool(commits) and bool(cambiados)
+def es_de_dependabot(autor_pr: str, commits: list[tuple[str, str]] | None, cambiados: list[str],
+                     sin_merges: bool) -> bool:
+    return (autor_pr == DEPENDABOT and sin_merges and bool(commits) and bool(cambiados)
             and all(correo == DEPENDABOT_CORREO for correo, _ in commits)
             and all(es_manifiesto(f) or f.startswith(".github/workflows/") for f in cambiados))
 
@@ -822,7 +824,9 @@ def main() -> int:
     readme_head = readme_head_p.read_text(encoding="utf-8") if readme_head_p.exists() else None
 
     commits = commits_sin_merges(args.base)
-    dependabot = es_de_dependabot(os.environ.get("PR_AUTHOR", ""), commits, cambiados)
+    # En la CI, HEAD es el merge que prueba GitHub; la cabeza del PR viene en PR_HEAD_SHA.
+    merges = git("rev-list", "--merges", f"{args.base}..{os.environ.get('PR_HEAD_SHA') or 'HEAD'}")
+    dependabot = es_de_dependabot(os.environ.get("PR_AUTHOR", ""), commits, cambiados, merges == "")
 
     specs_head = cargar_specs(specs_head_ficheros)
     check_specs(inf, specs_head_ficheros)

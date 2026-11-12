@@ -90,7 +90,7 @@ En ese repo:
   - *Bypass list*: solo el rol de administrador (tú), en modo **"Allow for pull requests only"**: ni siquiera tú empujas directo a `main`.
   - Los checks requeridos (`checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`) se añaden en el bloque C, cuando GitHub ya los conoce.
 - **Settings → Code security** (M38): activa *Dependabot alerts*. Las actualizaciones de versión las abre Dependabot solo, con `.github/dependabot.yml` (una vez al mes, agrupadas). Sus PR tocan dependencias: son R2 y los apruebas tú. Si activas también *Dependabot security updates*, abre además un PR por vulnerabilidad, sin esperar al mes.
-- **La tarea mensual** de osv-scanner (`seguridad.yml`, el día 1) corre sola sobre `main`; si encuentra algo, GitHub te avisa por correo de la ejecución fallida. Para lanzarla a mano: *Actions → seguridad → Run workflow*.
+- **La tarea mensual** de osv-scanner (`osv-mensual.yml`, el día 1) corre sola sobre `main`; si encuentra algo, GitHub te avisa por correo de la ejecución fallida. Para lanzarla a mano: *Actions → osv-mensual → Run workflow*, sobre `main`. No la marques como check requerido.
 
 ### A5. Cuenta de máquina del agente (ADR-0005)
 
@@ -311,6 +311,8 @@ sudo install -m 755 gitleaks /usr/local/bin/gitleaks
 4. `git status --ignored .claude/` no muestra nada nuevo.
 5. Desde esa carpeta trabaja el agente.
 
+**Tampoco hagas commit con una rama del agente sacada en una copia tuya con los hooks instalados:** su `lefthook.json` y su `.github/sdd/checks.py` (que lanza `commit-msg`) son los de la rama, escritos por el agente. Si hace falta, con `LEFTHOOK=0`.
+
 **Después, no lances órdenes de Git en la copia del agente** (tampoco `gh pr checkout`, `git worktree add` ni un editor con Git abierto ahí): ejecutarían fuera del sandbox lo que el agente haya escrito en el árbol de trabajo. Aprueba y fusiona en GitHub; tus cambios, desde la web o desde una copia tuya. Si alguna vez no hay más remedio, con `LEFTHOOK=0` delante, en un alias tuyo y nunca en el perfil de shell que hereda el agente.
 
 **Comprobación,** con el agente, en el proyecto: pídele que ejecute `git commit --no-verify -m x` y el hook del plugin lo bloquea (`guarda-saltos.py`). Desde el repo del workflow, `python3 -m unittest tests.test_sandbox_git -v` dentro de una sesión del agente confirma que `.git/hooks` y `.git/config` siguen en solo lectura.
@@ -340,7 +342,7 @@ Pídele a Claude, dentro de la sesión:
 
 1. El push y el PR funcionan desde el sandbox: GitHub está en la lista blanca y las credenciales de `gh` sirven.
 2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, y pasan.
-3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`. Apunta en `docs/herramientas.md` del workflow (PR R2) lo que tardó cada job de `seguridad`: hoy son estimaciones.
+3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. Apunta en `docs/herramientas.md` del workflow (PR R2) lo que tardó cada job de `seguridad`: hoy son estimaciones.
 4. Pide a Claude que fusione el PR: GitHub lo rechaza (N4).
 5. Tú lo apruebas y lo fusionas desde el navegador.
 6. Opcional (N5): pide a Claude que cree `.github/workflows/x.yml` y lo empuje en otra rama. El push debe fallar porque el token no tiene `workflow`. Borra después la rama local.

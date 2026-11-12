@@ -570,7 +570,11 @@ class TestDependabot(unittest.TestCase):
     CAMBIADOS = ["package.json", "package-lock.json", ".github/workflows/sdd.yml"]
 
     def test_autor_y_commits_de_dependabot(self):
-        self.assertTrue(checks.es_de_dependabot("dependabot[bot]", self.COMMITS, self.CAMBIADOS))
+        self.assertTrue(checks.es_de_dependabot("dependabot[bot]", self.COMMITS, self.CAMBIADOS, True))
+
+    def test_con_merges_no_vale(self):
+        """G4 del PR 3, ronda 2: un merge del agente no pasa por la lista de autores."""
+        self.assertFalse(checks.es_de_dependabot("dependabot[bot]", self.COMMITS, self.CAMBIADOS, False))
 
     def test_la_excepcion_no_vale_sin_todas_sus_condiciones(self):
         """Nunca por la rama: el agente puede llamar a la suya `dependabot/…`."""
@@ -587,7 +591,7 @@ class TestDependabot(unittest.TestCase):
             ("dependabot[bot]", self.COMMITS, ["package.json", ".github/dependabot.yml"]),
         ]:
             with self.subTest(autor=autor, commits=commits, cambiados=cambiados):
-                self.assertFalse(checks.es_de_dependabot(autor, commits, cambiados))
+                self.assertFalse(checks.es_de_dependabot(autor, commits, cambiados, True))
 
     def test_sin_nivel_marcado_toma_r2(self):
         self.assertTrue(riesgo(["package.json"], nivel=None).errores)
@@ -660,7 +664,7 @@ class TestPuntaAPunta(unittest.TestCase):
         self.git("switch", "-q", "adr/vic-7-0002-x")
         (self.repo / "docs" / "specs" / "SPEC-CALC-003-x.md").write_text(SPEC_CON_HISTORIAL, encoding="utf-8")
         self.git("add", "docs/specs")
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         historial = [l for l in r.stdout.splitlines() if "**historial:**" in l]
         self.assertEqual(len(historial), 1, r.stdout)
         self.assertIn("SPEC-CALC-003-x.md", historial[0])
@@ -668,7 +672,7 @@ class TestPuntaAPunta(unittest.TestCase):
     def test_comprueba_la_configuracion_de_lefthook(self):
         (self.repo / "lefthook.yml").write_text("pre-commit: {}\n", encoding="utf-8")
         self.git("add", "lefthook.yml")
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("**lefthook:**", r.stdout)
         self.assertIn("`lefthook.yml`", r.stdout)
@@ -677,7 +681,7 @@ class TestPuntaAPunta(unittest.TestCase):
         """G4 del PR #30: un enlace en lefthook.json da el error previsto, sin traza."""
         (self.repo / "lefthook.json").symlink_to("/dev/null")
         self.git("add", "lefthook.json")
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("tiene que ser un fichero normal", r.stdout)
         self.assertNotIn("Traceback", r.stderr)
@@ -689,7 +693,7 @@ class TestPuntaAPunta(unittest.TestCase):
         self.git("commit", "-q", "-m", "chore: lefthook")
         self.git("switch", "-q", "-C", "adr/vic-7-0002-x", "main")
         self.git("rm", "-q", "lefthook.json")
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("el PR quita `lefthook.json`", r.stdout)
 
@@ -743,11 +747,32 @@ class TestPuntaAPunta(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertIn("PR de Dependabot", r.stdout)
         self.assertIn("**R2**", r.stdout)
+        # Como en la CI: HEAD es el merge que prueba GitHub y la cabeza del PR llega aparte.
+        cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                                text=True, env=ENTORNO_GIT).stdout.strip()
+        self.git("switch", "-q", "--detach", "main")
+        self.git("merge", "-q", "--no-ff", "--no-edit", cabeza)
+        r = correr(PR_HEAD_SHA=cabeza)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("PR de Dependabot", r.stdout)
+        self.git("switch", "-q", "dependabot/npm_and_yarn/lodash-4.17.21")
         # Con otro autor del PR, los mismos commits fallan en las convenciones.
         r = correr(PR_AUTHOR="victor-lg-bot")
         self.assertEqual(r.returncode, 1, r.stdout)
         for check in ("**convenciones:**", "**riesgo:**", "**trazabilidad:**"):
             self.assertIn(check, r.stdout)
+        # Un merge en la rama (aquí, de main con un cambio de package.json) quita la excepción.
+        self.git("switch", "-q", "main")
+        (self.repo / "package-lock.json").write_text("{}\n", encoding="utf-8")
+        self.git("add", "package-lock.json")
+        self.git("commit", "-q", "-m", "chore: lock")
+        self.git("switch", "-q", "dependabot/npm_and_yarn/lodash-4.17.21")
+        self.git("merge", "-q", "--no-ff", "--no-edit", "main")
+        cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                                text=True, env=ENTORNO_GIT).stdout.strip()
+        r = correr(PR_HEAD_SHA=cabeza)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertNotIn("PR de Dependabot", r.stdout)
 
 
 if __name__ == "__main__":

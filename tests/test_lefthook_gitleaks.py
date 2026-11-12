@@ -137,6 +137,18 @@ class CommitConSecreto(unittest.TestCase):
 ORDEN_CI = ["git", "--redact", "--no-banner", "--ignore-gitleaks-allow", "--log-opts=--diff-merges=remerge HEAD", "."]
 
 
+class OrdenDeLaCi(unittest.TestCase):
+    """Sin binarios, para que corra en la CI: seguridad.yml lanza la orden que prueba GitleaksEnLaCi
+    (G4 del PR 3, ronda 2)."""
+
+    def test_el_workflow_lanza_esta_orden(self):
+        texto = " ".join(SEGURIDAD.read_text(encoding="utf-8").split())
+        orden = " ".join(f'--log-opts="{o[len("--log-opts="):]}"' if o.startswith("--log-opts=") else o
+                         for o in ORDEN_CI)
+        self.assertIn(f'"$RUNNER_TEMP/gitleaks" {orden}', texto)
+        self.assertIn("echo '* diff' >> .git/info/attributes", texto)
+
+
 @unittest.skipUnless(shutil.which("gitleaks"), "sin gitleaks en el PATH")
 class GitleaksEnLaCi(unittest.TestCase):
     """Lo comprobado al escribir seguridad.yml: sin sus opciones, gitleaks no ve el secreto."""
@@ -163,12 +175,6 @@ class GitleaksEnLaCi(unittest.TestCase):
         r = subprocess.run(["gitleaks", *opciones], cwd=self.repo, capture_output=True, text=True, env=ENTORNO)
         self.assertNotIn("ghp_", r.stdout + r.stderr)
         return r.returncode
-
-    def test_el_workflow_lanza_esta_orden(self):
-        texto = " ".join(SEGURIDAD.read_text(encoding="utf-8").split())
-        self.assertIn('"$RUNNER_TEMP/gitleaks" git --redact --no-banner --ignore-gitleaks-allow '
-                      '--log-opts="--diff-merges=remerge HEAD" .', texto)
-        self.assertIn("echo '* diff' >> .git/info/attributes", texto)
 
     def test_un_atributo_anidado_lo_esconde_y_info_attributes_lo_devuelve(self):
         for atributo in ("* -diff", "* binary", "config.py -diff"):

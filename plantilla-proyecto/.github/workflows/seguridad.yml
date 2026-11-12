@@ -1,10 +1,13 @@
 # Escáneres de seguridad del workflow SDD + IA v1.1 (ADR-0008; M33 y M38).
 #
-# En cada PR contra `main`: gitleaks, osv-scanner y Semgrep. El día 1 de cada mes,
-# osv-scanner sobre `main` (tarea mensual): si encuentra algo, la ejecución falla y
-# GitHub avisa por correo. Los nombres de los jobs son los checks que se marcan como
-# requeridos en la regla de `main`. El agente no puede modificar este fichero: su token
-# no tiene el permiso `workflow` (ADR-0005, caso N5).
+# En cada PR contra `main`: gitleaks, osv-scanner y Semgrep. Los nombres de los jobs son
+# los checks que se marcan como requeridos en la regla de `main`. El agente no puede
+# modificar este fichero: su token no tiene el permiso `workflow` (ADR-0005, caso N5).
+#
+# Solo `pull_request`, a propósito: con `workflow_dispatch`, el agente podría lanzarlo
+# sobre su rama y dejar en esos checks una ejecución más reciente, saltada o con la
+# configuración de la rama (G4 del PR 3 de VIC-18). La tarea mensual va en
+# osv-mensual.yml, con otro nombre de job.
 #
 # Cada escáner usa la configuración de `main`, no la del PR: así un PR no puede silenciar
 # sus propios hallazgos. Un cambio en esa configuración lo marca R2 checks.py y vale
@@ -19,27 +22,22 @@ name: seguridad
 on:
   pull_request:
     branches: [main]
-  schedule:
-    - cron: "17 6 1 * *"
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: seguridad-${{ github.event.pull_request.number || github.ref }}
+  group: seguridad-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 env:
-  # La configuración de los escáneres sale de aquí: `main` en un PR, la propia rama en la
-  # tarea mensual.
-  BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD' }}
+  # La configuración de los escáneres sale de aquí.
+  BASE: origin/${{ github.base_ref }}
   # Git no sustituye objetos con refs/replace al leer la historia.
   GIT_NO_REPLACE_OBJECTS: "1"
 
 jobs:
   gitleaks:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -109,7 +107,6 @@ jobs:
           --no-call-analysis=all --config "$RUNNER_TEMP/osv-scanner.toml" .
 
   semgrep:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
@@ -126,8 +123,11 @@ jobs:
           git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           find . -path ./.git -prune -o -name .semgrepignore ! -type d -exec rm -f {} +
           rm -f .semgrepignore
-          if git cat-file -e "$BASE:.semgrepignore" 2>/dev/null; then git show "$BASE:.semgrepignore" > .semgrepignore; fi
+          # Sin .semgrepignore, Semgrep aplica su lista por defecto (tests/, vendor/, build/…).
+          # Uno vacío no excluye nada; el proyecto pone el suyo en `main`, con un PR R2.
+          if git cat-file -e "$BASE:.semgrepignore" 2>/dev/null; then git show "$BASE:.semgrepignore" > .semgrepignore; else : > .semgrepignore; fi
 
       # --disable-nosem: no respeta los comentarios `nosemgrep`.
+      # --max-target-bytes=0: también los ficheros de más de 1 MB.
       - name: Semgrep
-        run: semgrep scan --config p/default --metrics=off --error --disable-nosem
+        run: semgrep scan --config p/default --metrics=off --error --disable-nosem --max-target-bytes=0
