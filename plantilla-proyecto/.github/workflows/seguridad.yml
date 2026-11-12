@@ -49,8 +49,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Si Git no responde, falla aquí: nunca se cae en silencio a la configuración de la rama.
       - name: Configuración de gitleaks de main
         run: |
+          git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           for f in .gitleaks.toml .gitleaksignore; do
             rm -f "$f"
             if git cat-file -e "$BASE:$f" 2>/dev/null; then git show "$BASE:$f" > "$f"; fi
@@ -85,6 +87,7 @@ jobs:
       # Con --config, osv-scanner no lee los osv-scanner.toml de cada carpeta.
       - name: Configuración de osv-scanner de main
         run: |
+          git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           if git cat-file -e "$BASE:osv-scanner.toml" 2>/dev/null; then
             git show "$BASE:osv-scanner.toml" > "$RUNNER_TEMP/osv-scanner.toml"
           else
@@ -120,6 +123,7 @@ jobs:
 
       - name: Configuración de Semgrep de main
         run: |
+          git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           find . -path ./.git -prune -o -name .semgrepignore ! -type d -exec rm -f {} +
           rm -f .semgrepignore
           if git cat-file -e "$BASE:.semgrepignore" 2>/dev/null; then git show "$BASE:.semgrepignore" > .semgrepignore; fi

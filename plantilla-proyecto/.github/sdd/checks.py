@@ -36,7 +36,7 @@ Uso local:
 Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta.
 
 Como hook `commit-msg` de lefthook, solo el formato del mensaje:
-  python3 .github/sdd/checks.py --mensaje .git/COMMIT_EDITMSG
+  python3 -I .github/sdd/checks.py --mensaje .git/COMMIT_EDITMSG
 """
 
 from __future__ import annotations
@@ -131,7 +131,7 @@ LEFTHOOK_HOOKS = {"pre-commit", "commit-msg"}
 LEFTHOOK_CLAVES_HOOK = {"parallel", "piped", "jobs"}
 LEFTHOOK_CLAVES_JOB = {"name", "run", "glob", "exclude", "file_types", "fail_text"}
 RE_GITLEAKS_ANTES = re.compile(r'"run"\s*:\s*"gitleaks git --pre-commit')
-RE_FORMATO_ANTES = re.compile(r'"run"\s*:\s*"python3 \.github/sdd/checks\.py --mensaje ')
+RE_FORMATO_ANTES = re.compile(r'"run"\s*:\s*"python3 -I \.github/sdd/checks\.py --mensaje ')
 
 RE_TITULO_HISTORIAL = re.compile(r"^#+\s*(?:\d+\.\s*)?(historial|registro de cambios|cambios|changelog)\b", re.I | re.M)
 

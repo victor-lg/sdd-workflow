@@ -459,7 +459,7 @@ class TestLefthook(unittest.TestCase):
 
     def test_la_plantilla_comprueba_el_formato_de_los_commits(self):
         trabajos = json.loads(LEFTHOOK_PLANTILLA)["commit-msg"]["jobs"]
-        self.assertEqual([t["run"] for t in trabajos], ['python3 .github/sdd/checks.py --mensaje "{1}"'])
+        self.assertEqual([t["run"] for t in trabajos], ['python3 -I .github/sdd/checks.py --mensaje "{1}"'])
 
     def test_sin_formato_de_commits_avisa(self):
         conf = json.loads(LEFTHOOK_PLANTILLA)

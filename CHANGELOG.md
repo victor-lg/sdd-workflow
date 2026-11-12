@@ -14,7 +14,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
     - check `commits` (REG-31, REG-32): el mensaje de cada commit del PR, sin los merges, sigue `docs/convenciones.md` §4, con `Refs: VIC-N` en el pie. La misma función corre como hook `commit-msg` en `lefthook.json` (`checks.py --mensaje`), y el check `lefthook` avisa si deja de hacerlo;
     - `R2_CONTROLES`: la configuración de lefthook, gitleaks, Semgrep, osv-scanner, `.gitattributes` y ESLint es R2 (ADR-0008, §5; también en la línea base, §6);
     - excepción de Dependabot: si el autor del PR y de todos sus commits es Dependabot y solo cambia dependencias o workflows, no comprueba convenciones ni formato de los commits, no pide AC y toma R2 si no marca nivel. `sdd.yml` le pasa el autor del PR (`PR_AUTHOR`).
-  - Caso de evaluación `hook-commit-msg-formato`: tras el rechazo del formato, el agente repite el commit con el mensaje corregido.
+  - Plugin 1.4.1: caso de evaluación `hook-commit-msg-formato` (tras el rechazo del formato, el agente repite el commit con el mensaje corregido), y `guarda-saltos.py` bloquea también escribir ficheros llamados `python3` (el hook `commit-msg` lo busca en el `PATH`, y lo lanza con `-I`).
   - Tests: ficheros sensibles, formato de los commits, Dependabot y punta a punta en `tests/test_checks.py`; `commit-msg` con lefthook de verdad y la orden de gitleaks de la CI en `tests/test_lefthook_gitleaks.py` (se saltan sin los binarios).
   - `docs/herramientas.md`, la guía de instalación (checks requeridos, Dependabot, digest de Semgrep), `docs/convenciones.md`, el inventario (REG-31, REG-32), `AGENTS.md` y `README.md` de la plantilla, al día.
 - **lefthook y gitleaks en la plantilla (ADR-0008, VIC-18, PR 2 de 4; plugin 1.4.0):**

@@ -14,7 +14,7 @@ de Git que instala lefthook (docs/herramientas.md, "Formas de saltarlo"):
   lefthook.json, .gitleaks.toml o .gitleaksignore en el árbol de trabajo, porque lefthook
   y gitleaks los leen de ahí aunque el cambio no llegue a un commit;
 - ocultar cambios con update-index o .git/info/exclude;
-- escribir .git/info/attributes, perfiles de shell o ficheros llamados lefthook o gitleaks
+- escribir .git/info/attributes, perfiles de shell o ficheros llamados lefthook, gitleaks o python3
   (un atributo binary deja ciego a gitleaks; un perfil o un binario antes en el PATH
   sustituyen a los de verdad); y preguntar antes de cambiar .gitattributes;
 - crear commits sin pasar por pre-commit: am, commit-tree, fast-import, un clon local,

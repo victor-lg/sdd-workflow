@@ -80,7 +80,7 @@
     },
     "ajustes-del-agente": {
       "nivel": "bloquear",
-      "mensaje": "ADR-0008: no escribas los ajustes de Claude Code, los perfiles de shell ni ficheros llamados lefthook o gitleaks ({forma}): pueden fijar variables como LEFTHOOK=0 para todas las sesiones o poner otro binario antes en el PATH. En su lugar: si hace falta cambiar un ajuste o el entorno, pídeselo a la persona."
+      "mensaje": "ADR-0008: no escribas los ajustes de Claude Code, los perfiles de shell ni ficheros llamados lefthook, gitleaks o python3 ({forma}): pueden fijar variables como LEFTHOOK=0 para todas las sesiones o poner otro binario antes en el PATH. En su lugar: si hace falta cambiar un ajuste o el entorno, pídeselo a la persona."
     },
     "config-de-controles": {
       "nivel": "preguntar",
@@ -98,5 +98,5 @@
   "ajustes_del_agente": "(^|/)\\.claude/settings(\\.local)?\\.json$",
   "config_de_controles": "(^|/)(lefthook\\.json|\\.gitleaks\\.toml|\\.gitleaksignore|\\.gitattributes)$",
   "ocultar_a_gitleaks": "(^|/)\\.git/(.+/)?info/attributes$",
-  "entorno_del_agente": "(?-i:(^|/)\\.(bashrc|bash_profile|bash_login|profile|zshrc|zprofile|zshenv)$|(^|/)(lefthook|gitleaks)(\\.exe)?$)"
+  "entorno_del_agente": "(?-i:(^|/)\\.(bashrc|bash_profile|bash_login|profile|zshrc|zprofile|zshenv)$|(^|/)(lefthook|gitleaks|python3?(\\.[0-9]+)?)(\\.exe)?$)"
 }
