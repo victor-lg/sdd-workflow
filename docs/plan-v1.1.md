@@ -54,7 +54,7 @@
 | **M7** | Comillas en las referencias de la cabecera YAML de los ADR, comprobado por `checks.py` |
 | **Poda** | `AGENTS.md` queda como mapa corto (Jake, Pocock `writing-for-agents`); los procedimientos van a las skills y los controles a hooks y CI. Se desactiva lo que no se usa (MCP, plugins). Se mide el contexto fijo antes y después (mejora #9 del primer recorrido) |
 
-**Hecho cuando:** cada regla del inventario tiene su destino, los hooks pasan sus evaluaciones (M35) y el contexto fijo baja de forma medible. ✔ Hecho el 2026-11-12 (VIC-17): inventario en `docs/inventario-reglas.md`, hooks en el plugin 1.2.0 y 1.3.0, checks en `checks.py`, y `AGENTS.md` como mapa corto en el 1.3.1. Contexto fijo de un proyecto (`AGENTS.md`, `CLAUDE.md` y el plugin): de ~2050 a ~1430 tokens estimados.
+**Hecho cuando:** cada regla del inventario tiene su destino, los hooks pasan sus evaluaciones (M35) y el contexto fijo baja de forma medible. ✔ Hecho el 2026-11-12 (VIC-17): inventario en `docs/inventario-reglas.md`, hooks en el plugin 1.2.0 y 1.3.0, checks en `checks.py`, y `AGENTS.md` como mapa corto en el 1.3.1. Contexto fijo de un proyecto (`AGENTS.md`, `CLAUDE.md` y el plugin): de ~2050 a ~1550 tokens estimados.
 
 ## Bloque 3 — Calidad y seguridad sin opinión
 

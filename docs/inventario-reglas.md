@@ -187,7 +187,7 @@ Los PR que abre Claude desde el navegador (workflows, `managed-settings`) pasan 
 
 ## Poda de `AGENTS.md` (plugin 1.3.1)
 
-Las líneas de "Antes" son las de `plantilla-proyecto/AGENTS.md` en el commit `dccc13e`, y las de "Ahora", las de las skills del plugin 1.3.1. Las reglas de criterio que salen tienen el mismo texto en su skill o en una plantilla; si la skill no lo recoge entero, la regla se queda en `AGENTS.md` con su texto. Las mecánicas que ya tienen control se quedan como una línea que lo nombra.
+Las líneas de "Antes" son las de `plantilla-proyecto/AGENTS.md` en el commit `dccc13e`, y las de "Ahora", las de las skills del plugin 1.3.1. Las reglas de criterio que salen tienen el mismo texto en su skill o en una plantilla; si la skill no lo recoge entero, la regla se queda en `AGENTS.md` con su texto. Las mecánicas que ya tienen control se quedan como una línea que lo nombra, escrita como norma, porque los hooks solo existen en Claude Code con el plugin.
 
 | Regla | Antes | Ahora |
 | --- | --- | --- |
@@ -201,26 +201,26 @@ Las líneas de "Antes" son las de `plantilla-proyecto/AGENTS.md` en el commit `d
 | REG-12 | A:22,45 | CI `riesgo`, nombrada en "Lo que ya comprueba una máquina"; `plan:25-35` |
 | REG-14 | A:26 | `implement:10,20-26` |
 | REG-15 | A:27 | `implement:25` y `plan:29`; la CI (`riesgo`) sube a R2 las dependencias |
-| REG-16 | A:28 | `discover:29-36` y `spec:24-28` |
+| REG-16 | A:28 | `discover:29-36` y `spec:24-28`, como preveía el inventario. Al planificar, implementar y revisar ya no consta |
 | REG-17 | A:29 | Se queda en "En cualquier tarea" |
 | REG-18 | A:45 | CI `mezcla`, nombrada |
 | REG-19 | A:30 | `implement:49` y `spec:90` |
-| REG-20, REG-21 (ADR) | A:31 | `implement:50`, `spec:39` y el comentario de `docs/adr/_plantilla-adr.md` (estado y cuándo crear un ADR) |
+| REG-20, REG-21 (ADR) | A:31 | `implement:50`, `spec:39` y el comentario de `plantilla-proyecto/docs/adr/_plantilla-adr.md` (estado y cuándo crear un ADR). Sale la lista de ejemplos: arquitectura, tecnología, seguridad, persistencia o algo difícil de revertir |
 | REG-22 | A:35 | CI `trazabilidad`, nombrada; `implement:32` |
 | REG-23 | A:36,56 | Se queda en "En cualquier tarea" (`implement:72` no dice "relajes controles") |
 | REG-24 a REG-27 | A:37-40 | `implement:51-53,58` |
 | REG-28 | A:41 | Se queda en "En cualquier tarea" |
 | REG-29 | A:45 | `implement:60` y `plan:41` |
 | REG-30, REG-33 | A:11,49,53 | CI `convenciones`, nombrada (con `Fixes`, `Part of` y `Refs`); `plan:40,43` |
-| REG-31 | A:48,50 | El título del PR, CI `convenciones`. El de los commits, sin control hasta M33: se queda la línea "Commits" |
+| REG-31 | A:48,50 | El título del PR, CI `convenciones`. El de los commits, sin control hasta M33: se queda en la línea "Commits", con los tipos y el estilo de la descripción |
 | REG-32 | A:51-52 | Línea "Commits" (sin control hasta M33) |
-| REG-34 | A:54 | CI `autoria`, nombrada |
+| REG-34 | A:54 | CI `autoria`, nombrada con su alcance (`Co-Authored-By` y "Generated with"). La cuenta de máquina la fija ADR-0007 |
 | REG-35 | A:55 | `plan:39` e `implement:66` |
 | REG-36 | A:56 | CI `tests`, nombrada; `implement:64` |
 | REG-37 | A:45 | `implement:61-66` |
 | REG-38, REG-39, REG-40 | A:60-62 | Se quedan en "Lo que no te corresponde" |
 | REG-42 | A:66 | Se queda, en la línea de la issue |
-| REG-43 | A:67 | Hook `guarda-gh.py`, nombrado; `plan:41,47` |
+| REG-43 | A:67 | Hook `guarda-gh.py`, en la línea de hooks como norma; `plan:41,47` |
 | REG-44 | A:67 | `plan:46` e `implement:48` |
 | REG-45, REG-46 | A:68 | `implement:54,68` |
 | REG-47 | A:69 | Se queda en "En cualquier tarea" (`implement:54` solo habla de `.tareas/<ID>.md`) |

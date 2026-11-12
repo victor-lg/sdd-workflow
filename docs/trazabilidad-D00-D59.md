@@ -71,10 +71,10 @@ El objetivo de esta trazabilidad es que nada se pierda *sin querer*, no conserva
 - **D31 Catálogo modular de roles** — CONDENSADA. En v1, implementador y revisor; el resto de roles son skills.
 - **D32 Orquestación híbrida bajo demanda** — CONSERVADA. *Dónde:* P09 (un agente más un subagente revisor).
 - **D33 Contratos de delegación** — CONDENSADA. *Dónde:* `CLAUDE.md` (qué recibe el revisor). El contrato general queda aplazado con el multiagente.
-- **D34 Persistencia y reanudación** — CONSERVADA (ADR-0004, Q09). *Dónde:* P10 y `AGENTS.md`. La entrega vive en la issue de Linear; el plan y el progreso, en la descripción del PR borrador; las sesiones interrumpidas, en `.tareas/<ID>.md` fuera de Git, que se borra al cerrar.
+- **D34 Persistencia y reanudación** — CONSERVADA (ADR-0004, Q09). *Dónde:* P10, `sdd-plan` y `sdd-implement` (en `AGENTS.md` hasta el plugin 1.3.1). La entrega vive en la issue de Linear; el plan y el progreso, en la descripción del PR borrador; las sesiones interrumpidas, en `.tareas/<ID>.md` fuera de Git, que se borra al cerrar.
 - **D35 Paralelismo acotado** — APLAZADA (§10).
 - **D36 Selección y sustitución de modelos** — MODIFICADA (aceptada, ADR-0002). Routing estático con dos perfiles en Claude Code: Claude por suscripción (principal) y Go para modelos ligeros. El reparto de tareas, las reglas de datos y el registro del modelo usado están en §5.
-- **D37 Presupuestos y límites de ejecución** — CONDENSADA. *Dónde:* métricas de coste (§11). ✔ LAGUNA L6 (cerrada): no hay límite de reintentos o iteraciones antes de parar y avisar. *Resolución aceptada:* una línea en `AGENTS.md`: tras 3 intentos fallidos sobre el mismo problema, detenerse, resumir y preguntar.
+- **D37 Presupuestos y límites de ejecución** — CONDENSADA. *Dónde:* métricas de coste (§11). ✔ LAGUNA L6 (cerrada): no hay límite de reintentos o iteraciones antes de parar y avisar. *Resolución aceptada:* una línea en `AGENTS.md`: tras 3 intentos fallidos sobre el mismo problema, detenerse, resumir y preguntar. Desde el plugin 1.3.1 está en `sdd-implement`.
 - **D38 Observabilidad y supervisión remota** — CONDENSADA. *Dónde:* §8 (Remote Control y GitHub). La observabilidad propia queda aplazada.
 - **D39 Contrato verificable de aprobación** — MODIFICADA (aceptada, M2). *Dónde:* §8. La caducidad es la invalidación de aprobaciones con cada push; la revocación, cerrar el PR o retirar la aprobación. Sin aprobaciones por lotes en v1. Las operaciones que no son un merge (despliegue, producción, escrituras externas) quedan deshabilitadas hasta que un ADR diseñe su aprobación; la evolución prevista está en §10.
 - **D40 Orquestación y controles portables** — CONSERVADA. *Dónde:* P08.
@@ -83,7 +83,7 @@ El objetivo de esta trazabilidad es que nada se pierda *sin querer*, no conserva
 
 - **D41 Verificación a partir de specs** — CONSERVADA. *Dónde:* G3 y `AGENTS.md`.
 - **D42 Pirámide de pruebas adaptable** — CONDENSADA. *Dónde:* futura guía de testing de `sdd-implement` (pendiente en la hoja de ruta).
-- **D43 Entornos y datos de prueba fiables** — CONDENSADA. ✔ LAGUNA L7 (cerrada): no hay regla para tests intermitentes (flaky). *Resolución aceptada:* una línea en `AGENTS.md`: un test intermitente se reporta como tal y no se da por bueno repitiéndolo hasta que pase.
+- **D43 Entornos y datos de prueba fiables** — CONDENSADA. ✔ LAGUNA L7 (cerrada): no hay regla para tests intermitentes (flaky). *Resolución aceptada:* una línea en `AGENTS.md`: un test intermitente se reporta como tal y no se da por bueno repitiéndolo hasta que pase. Desde el plugin 1.3.1 está en `sdd-implement`.
 - **D44 Calidad no funcional** — CONSERVADA. *Dónde:* plantilla de spec (NFR) y, en R2, evidencia de NFR y plan de vuelta atrás en la sección "Validación" del PR (`sdd-implement`).
 - **D45 Evaluaciones del workflow y agentes** — CONDENSADA. *Dónde:* casos N1–N8 y métricas (§11). Las evals versionadas quedan aplazadas.
 - **D46 Evolución controlada del workflow** — CONSERVADA. *Dónde:* §15, ADR y `CHANGELOG.md`.
