@@ -63,7 +63,7 @@ Si ya tienes tu cuenta en *Preferences → Accounts* de Fork, usa esa. Y si te p
 
 1. Copia el **contenido** de `plantilla-proyecto/`, ficheros ocultos incluidos (`.github`, `.gitignore`), a una carpeta nueva, por ejemplo `Documentos\sdd-template`.
 2. **Acción de checkout fijada por SHA** (ya hecho: v7.0.1). Para actualizarla, cambia el SHA y el comentario de `.github/workflows/sdd.yml` y `seguridad.yml` a la vez; desde VIC-18, Dependabot lo propone en un PR. Los binarios y la imagen de `seguridad.yml` (gitleaks, osv-scanner y Semgrep) se suben a mano, con sus sumas de `docs/herramientas.md`.
-3. **Imagen de Semgrep** (una vez, con Docker fuera del sandbox): `docker buildx imagetools inspect semgrep/semgrep:1.185.0` da como `Digest` el de `seguridad.yml` (`sha256:67518c17…a0d`). El agente lo leyó de la API de Docker Hub sin poder comprobarlo; si no coincide, para y avisa.
+3. **Imagen de Semgrep** (una vez, con Docker fuera del sandbox, y **antes** de marcar `semgrep` como check requerido en el bloque C): `docker buildx imagetools inspect semgrep/semgrep:1.185.0` da como `Digest` el de `seguridad.yml` (`sha256:67518c17…a0d`). El agente lo leyó de la API de Docker Hub sin poder comprobarlo; si no coincide, para y avisa.
 4. Publícala igual que en A2: repo privado y vacío `sdd-template` en github.com; después *Init*, commit, remoto `origin` y *push* de `main` desde Fork.
 5. En github.com → *Settings* del repo → marca **Template repository**.
 
@@ -342,7 +342,8 @@ Pídele a Claude, dentro de la sesión:
 
 1. El push y el PR funcionan desde el sandbox: GitHub está en la lista blanca y las credenciales de `gh` sirven.
 2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, y pasan.
-3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. Apunta en `docs/herramientas.md` del workflow (PR R2) lo que tardó cada job de `seguridad`: hoy son estimaciones.
+3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. `semgrep`, solo si ya comprobaste su digest (A3, paso 3).
+   - Si el proyecto no usa npm, quita la entrada `npm` de `.github/dependabot.yml`: sin `package.json`, Dependabot da error cada mes. Apunta en `docs/herramientas.md` del workflow (PR R2) lo que tardó cada job de `seguridad`: hoy son estimaciones.
 4. Pide a Claude que fusione el PR: GitHub lo rechaza (N4).
 5. Tú lo apruebas y lo fusionas desde el navegador.
 6. Opcional (N5): pide a Claude que cree `.github/workflows/x.yml` y lo empuje en otra rama. El push debe fallar porque el token no tiene `workflow`. Borra después la rama local.

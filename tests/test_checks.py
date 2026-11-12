@@ -494,6 +494,13 @@ class TestFicherosSensibles(unittest.TestCase):
                 self.assertIn("exige R2", inf.errores[0])
                 self.assertEqual(riesgo([ruta], "R2").errores, [])
 
+    def test_submodulos(self):
+        """G4 del PR 3, ronda 3: el código de un submódulo no lo ve ningún escáner."""
+        inf = ejecutar(checks.check_riesgo, "## Nivel de riesgo\n\n- [x] R1\n", ["src/lib"], None, None, {}, {},
+                       None, ["src/lib"])
+        self.assertIn("submódulo", inf.errores[0] + inf.secciones[0])
+        self.assertTrue(riesgo([".gitmodules"]).errores)
+
     def test_los_demas_no(self):
         for ruta in self.NORMALES:
             with self.subTest(ruta=ruta):
@@ -510,11 +517,12 @@ class TestMensajeCommit(unittest.TestCase):
         "Spec: SPEC-CALC-003/AC-04, SPEC-CALC-003/AC-05\nBREAKING CHANGE: el peso guardado cambia de unidad",
         "docs: añade la guía\n\nRefs: VIC-12, VIC-13",
         "test(calculo): cita el AC\n\n- viñeta uno\n- viñeta dos\n\nRefs: VIC-12\nSpec: SPEC-CALC-003/AC-04",
-        # Como lo deja el editor de Git: comentarios y lo que va tras la tijera no cuentan.
-        "feat: algo\n\nRefs: VIC-12\n# Please enter the commit message\n# ------------------------ >8 ------------------------\nno cuenta",
     ]
+    # Como lo recibe el hook del editor de Git: los comentarios y lo que va tras la tijera no cuentan.
+    DEL_EDITOR = ("feat: algo\n\nRefs: VIC-12\n# Please enter the commit message\n"
+                  "# ------------------------ >8 ------------------------\nno cuenta")
     MALOS = [
-        ("", "vacío"), ("# solo un comentario\n", "vacío"),
+        ("", "vacío"),
         ("suma el peso\n\nRefs: VIC-12", "título"), ("Feat: suma\n\nRefs: VIC-12", "título"),
         ("fixup! feat: algo\n\nRefs: VIC-12", "título"),
         ('Revert "feat: algo"\n\nRefs: VIC-12', "título"),
@@ -548,6 +556,13 @@ class TestMensajeCommit(unittest.TestCase):
                 errores, avisos = checks.problemas_mensaje(texto)
                 self.assertEqual(errores, [])
                 self.assertIn("minúscula", avisos[0])
+
+    def test_solo_el_hook_limpia_el_mensaje_como_git(self):
+        """G4 del PR 3, ronda 3: en la CI el mensaje ya está guardado; un `#` es parte de él."""
+        self.assertEqual(checks.problemas_mensaje(self.DEL_EDITOR, admite_merge=True), ([], []))
+        self.assertTrue(checks.problemas_mensaje(self.DEL_EDITOR)[0])
+        self.assertIn("vacío", checks.problemas_mensaje("# solo un comentario\n", admite_merge=True)[0][0])
+        self.assertTrue(checks.problemas_mensaje("# x\nfeat: algo\n\nRefs: VIC-12")[0])
 
     def test_el_hook_deja_pasar_el_merge_de_git_y_la_ci_no(self):
         """El hook ve el mensaje que Git propone en un merge; la CI no mira los merges, pero sí
@@ -727,6 +742,13 @@ class TestPuntaAPunta(unittest.TestCase):
                 self.assertEqual(r.returncode, salida, r.stdout + r.stderr)
                 if salida:
                     self.assertIn("Error: falta el pie `Refs: VIC-N`", r.stdout)
+
+    def test_un_submodulo_exige_r2(self):
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{'a' * 40},vendor/lib")
+        self.git("commit", "-q", "-m", "chore: añade lib\n\nRefs: VIC-7")
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("`vendor/lib` (submódulo", r.stdout)
 
     def test_pr_de_dependabot(self):
         """Ni convenciones, ni formato de los commits, ni AC; el riesgo, R2 aunque no lo marque."""

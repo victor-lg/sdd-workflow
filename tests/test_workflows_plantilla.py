@@ -62,6 +62,7 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         """Sin .semgrepignore, Semgrep excluiría tests/, vendor/… y los ficheros de más de 1 MB."""
         texto = leer("seguridad.yml")
         self.assertIn("else : > .semgrepignore; fi", texto)
+        self.assertIn("\\( -name .semgrepignore -o -name .gitignore \\) ! -type d -exec rm -f {} +", texto)
         self.assertIn("semgrep scan --config p/default --metrics=off --error --disable-nosem --max-target-bytes=0", texto)
 
     def test_acciones_fijadas_por_sha(self):

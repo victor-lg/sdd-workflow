@@ -121,7 +121,9 @@ jobs:
       - name: Configuración de Semgrep de main
         run: |
           git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
-          find . -path ./.git -prune -o -name .semgrepignore ! -type d -exec rm -f {} +
+          # Los .gitignore de la rama no son R2 y Semgrep podría saltarse lo que cubren, aunque
+          # esté versionado. En la CI solo hay ficheros versionados: quitarlos no amplía nada.
+          find . -path ./.git -prune -o \( -name .semgrepignore -o -name .gitignore \) ! -type d -exec rm -f {} +
           rm -f .semgrepignore
           # Sin .semgrepignore, Semgrep aplica su lista por defecto (tests/, vendor/, build/…).
           # Uno vacío no excluye nada; el proyecto pone el suyo en `main`, con un PR R2.

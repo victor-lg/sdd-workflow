@@ -75,7 +75,9 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 ".gitattributes", "*/.gitattributes",
                 ".semgrepignore", "*/.semgrepignore",
                 "osv-scanner.toml", "*/osv-scanner.toml",
-                "eslint.config.*", "*/eslint.config.*"]
+                "eslint.config.*", "*/eslint.config.*",
+                # Un submódulo trae código que no ve ningún escáner (también sus gitlinks, ver main).
+                ".gitmodules"]
 MANIFIESTOS = {
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb",
     "requirements.txt", "pyproject.toml", "poetry.lock", "uv.lock", "Pipfile", "Pipfile.lock",
@@ -392,8 +394,10 @@ def riesgo_de(texto: str | None) -> str | None:
 def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
                  readme_base: str | None, readme_head: str | None,
                  specs_head_ficheros: dict[str, str],
-                 specs_base_ficheros: dict[str, str], por_defecto: str | None = None) -> None:
-    """por_defecto: el nivel que se toma si el PR no marca ninguno (solo los de Dependabot)."""
+                 specs_base_ficheros: dict[str, str], por_defecto: str | None = None,
+                 submodulos: list[str] | None = None) -> None:
+    """por_defecto: el nivel que se toma si el PR no marca ninguno (solo los de Dependabot).
+    submodulos: los gitlinks (modo 160000) que el PR añade o cambia."""
     marcados = RE_RIESGO_MARCADO.findall(seccion(cuerpo_pr, "Nivel de riesgo"))
     if not marcados and por_defecto:
         declarado = por_defecto
@@ -421,6 +425,8 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
             subir("R2", f"`{f}` (dependencias)")
         elif any(fnmatch.fnmatchcase(f, p) for p in propias):
             subir("R2", f"`{f}` (ruta sensible del README)")
+    for f in submodulos or []:
+        subir("R2", f"`{f}` (submódulo: su código no lo ve ningún escáner)")
     if "README.md" in cambiados and rutas_sensibles(readme_head) != propias:
         subir("R2", "cambia la lista de rutas sensibles")
     for f in cambiados:
@@ -536,8 +542,9 @@ def limpiar_mensaje(texto: str) -> str:
 
 
 def problemas_mensaje(texto: str, admite_merge: bool = False) -> tuple[list[str], list[str]]:
-    """(errores, avisos) del mensaje de un commit según `docs/convenciones.md` §4 del workflow."""
-    lineas = limpiar_mensaje(texto).splitlines()
+    """(errores, avisos) del mensaje de un commit según `docs/convenciones.md` §4 del workflow.
+    admite_merge: es el hook `commit-msg`, que recibe el mensaje antes de que Git lo limpie."""
+    lineas = (limpiar_mensaje(texto) if admite_merge else texto.strip("\n")).splitlines()
     if not lineas or not lineas[0].strip():
         return ["el mensaje está vacío."], []
     titulo = lineas[0]
@@ -833,8 +840,10 @@ def main() -> int:
     check_mezcla(inf, cambiados)
     check_trazabilidad(inf, cuerpo_pr, cambiados, cargar_specs(specs_base_ficheros),
                        specs_head, citas_en_tests(raiz), dependabot)
+    versionados = ficheros_versionados()
+    submodulos = [f for f in cambiados if (versionados or {}).get(f) == "160000"]
     check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
-                 specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None)
+                 specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None, submodulos)
     check_tests(inf, args.base)
 
     rama, titulo = os.environ.get("PR_BRANCH", ""), os.environ.get("PR_TITLE", "")
@@ -851,7 +860,6 @@ def main() -> int:
     check_adr(inf, {f: (raiz / f).read_text(encoding="utf-8")
                     for f in cambiados if es_adr(f) and (raiz / f).is_file()})
     # Del índice y solo si es un fichero normal: un enlace no se sigue (check_lefthook lo rechaza).
-    versionados = ficheros_versionados()
     normal = versionados is not None and versionados.get(LEFTHOOK_CONFIG) == "100644"
     texto_lefthook = git("show", f":{LEFTHOOK_CONFIG}") if normal else None
     en_base = git("ls-tree", "--name-only", args.base, "--", LEFTHOOK_CONFIG)
