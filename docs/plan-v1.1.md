@@ -65,9 +65,9 @@
 | **M26** | Tests con dientes. En `sdd-implement`: el resultado esperado sale del AC, no del código; antes de terminar se enseña el test en rojo; y los antipatrones de Pocock (tautológico, acoplado). En la CI, mutaciones con la herramienta de cada lenguaje (Stryker en JS/TS), o mutantes del agente si no la hay |
 | **M27** | Regresión visual con capturas de referencia aprobadas una vez, y accesibilidad automática (axe) en los E2E |
 | **M19** | La regla de los E2E: lo que no trata de una capacidad cara corre sin ella, y esa capacidad tiene sus ficheros y un recorrido completo |
-| **M33** | Seguridad estática: Semgrep más el escáner del lenguaje, gitleaks y osv-scanner. Antes del commit con lefthook; en la CI como autoridad. Un hook bloquea `--no-verify`, `LEFTHOOK=0` y `LEFTHOOK_EXCLUDE` |
+| **M33** | Seguridad estática: Semgrep más el escáner del lenguaje, gitleaks y osv-scanner. Antes del commit con lefthook; en la CI como autoridad. Un hook bloquea `--no-verify`, `LEFTHOOK=0` y `LEFTHOOK_EXCLUDE`, y las demás formas conocidas de saltarlo. Criterios y condiciones de lefthook en el ADR-0008; cada herramienta, en `docs/herramientas.md` |
 | **M23** (parte fija) | knip en JS/TS y jscpd con baseline: avisan de código que sobra y de duplicación nueva |
-| **M38** | Bot de dependencias (Renovate o Dependabot) y tarea mensual con osv-scanner |
+| **M38** | Bot de dependencias (Dependabot, decidido en `docs/herramientas.md`) y tarea mensual con osv-scanner |
 | **M6** | El ejemplo de workflow de tests con el contenedor de Playwright por digest y el reparto en trozos del #34 |
 | Piloto | AgentShield una vez, en un contenedor, sobre la configuración del workflow |
 

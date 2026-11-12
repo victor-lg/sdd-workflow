@@ -7,9 +7,9 @@ Los hooks y los servidores MCP corren fuera del sandbox, así que cada entrada d
 ## Criterios (ADR-0008)
 
 - **Licencia:** solo cuenta si copiamos su código o su texto a nuestros repos.
-- **Riesgo configurable:** un riesgo que se apaga o se acota con configuración es un coste, no un veto. Solo vetan una trifecta letal que no se puede romper, que la herramienta reescriba nuestras instrucciones o configuración sin revisión, o que vea credenciales en tránsito sin necesitarlas.
-- **Hooks de terceros** (de Claude Code o de Git): solo si se ha leído su código en la versión fijada, al menos lo que decide qué se ejecuta, qué escribe y qué sale por red. Al subir de versión se relee lo que cambió en esas partes.
-- **Qué se anota de cada una:** qué hace, qué toca y qué lee, versión y digest, el tiempo que añade, si necesita red, la alternativa y el riesgo de ejecutar código ajeno fuera del sandbox.
+- **Riesgo configurable:** un riesgo que se apaga o se acota con configuración es un coste, no un veto, si el agente no puede cambiar esa configuración sin que lo vea la persona (fuera de su alcance de escritura, o la CI marca el cambio como sensible). Solo vetan una trifecta letal que no se puede romper, que la herramienta reescriba nuestras instrucciones o configuración sin revisión, o que vea credenciales en tránsito sin necesitarlas.
+- **Hooks de terceros** (de Claude Code o de Git): solo si se ha leído su código en la versión fijada, al menos lo que decide qué se ejecuta, qué escribe y qué sale por red. Al subir de versión se relee lo que cambió en esas partes. Es necesario, no suficiente: un hook de Claude Code de terceros, además, solo informa; nunca decide, cambia órdenes ni añade lo que ve el modelo.
+- **Qué se anota de cada una:** qué hace, qué toca y qué lee, versión y digest o suma (o por qué no hay; lo pendiente, marcado), el tiempo que añade, si necesita red, la alternativa y el riesgo de ejecutar código ajeno fuera del sandbox.
 
 | Herramienta | Versión | Para qué | Permisos y alcance | Aprobada |
 | --- | --- | --- | --- | --- |
@@ -42,7 +42,7 @@ Tiempos: **estimaciones sin medir.** No se mide antes de aprobar porque lo que n
 - **Tiempo:** menos de 1 s antes del commit; unos segundos en la CI con un historial como el de la calculadora.
 - **Red:** no.
 - **Alternativa:** trufflehog, que por defecto verifica cada secreto contra la API de su proveedor: sale a la red con el secreto (tercer veto, que se apaga con `--no-verification`, y entonces no aporta sobre gitleaks). La acción `gitleaks-action` v2 pide licencia en repos de organización; se usa el binario.
-- **Riesgo fuera del sandbox:** ninguno en local (corre en el commit del agente, dentro del sandbox) y en la CI corre en el runner. Lo que hay que vigilar es que el agente lo silencie: un comentario `gitleaks:allow` (la CI lo ignora con `--ignore-gitleaks-allow`) o una entrada en `.gitleaks.toml` o `.gitleaksignore`, que van en CODEOWNERS.
+- **Riesgo fuera del sandbox:** ninguno en local (corre en el commit del agente, dentro del sandbox) y en la CI corre en el runner. Lo que hay que vigilar es que el agente lo silencie: un comentario `gitleaks:allow` (la CI lo ignora con `--ignore-gitleaks-allow`) o una entrada en `.gitleaks.toml` o `.gitleaksignore`. Como la CI lee la configuración de la rama del PR, un cambio en esos ficheros lo marca la CI como sensible (PR 3).
 - **Decisión:** adoptar, antes del commit y en la CI.
 
 ### osv-scanner
@@ -53,16 +53,17 @@ Tiempos: **estimaciones sin medir.** No se mide antes de aprobar porque lo que n
 - **Tiempo:** unos segundos en la CI.
 - **Red:** sí. Envía a `api.osv.dev` nombres, versiones y hashes de los paquetes, no código. Por eso no corre antes del commit: el sandbox no llega a ese dominio, y ampliar su lista es tocar los ajustes gestionados.
 - **Alternativa:** `npm audit` (solo JS) o las alertas de Dependabot (gratis, pero no bloquean un PR). La revisión de licencias (`--licenses`) no se activa: según el criterio de licencia, contaría para las dependencias que se publican con la app, y eso se decide por proyecto.
-- **Riesgo fuera del sandbox:** ninguno; solo corre en la CI.
+- **Riesgo fuera del sandbox:** ninguno; solo corre en la CI. Se puede silenciar una vulnerabilidad con `osv-scanner.toml`: un cambio en él lo marca la CI como sensible (PR 3).
 - **Decisión:** adoptar, en la CI de cada PR y en la tarea mensual (M38).
 
 ### Semgrep
 
 - **Qué hace:** análisis estático de seguridad de varios lenguajes con reglas por patrones (`semgrep scan --config p/default --metrics=off --error --disable-nosem`).
-- **Qué toca y qué lee:** lee los ficheros del repo (respeta `.gitignore` y `.semgrepignore`); analiza, no ejecuta código del repo. `--disable-nosem` hace que la CI no respete los comentarios `nosemgrep`, con los que el agente podría silenciar un hallazgo; `.semgrepignore`, si existe, va en CODEOWNERS.
+- **Qué toca y qué lee:** lee los ficheros del repo (respeta `.gitignore` y `.semgrepignore`); analiza, no ejecuta código del repo. `--disable-nosem` hace que la CI no respete los comentarios `nosemgrep`, con los que el agente podría silenciar un hallazgo; un cambio en `.semgrepignore` lo marca la CI como sensible (PR 3).
 - **Versión:** 1.185.0 (commit `9240f708f8d7e2fbd38b67aa6cd17704b1f81e14`). Motor LGPL-2.1. En la CI, la imagen `semgrep/semgrep:1.185.0` fijada por digest: el digest se toma en el PR 3, porque el sandbox no llega a Docker Hub. Si se instala con pip, la rueda `manylinux_2_34_x86_64` tiene SHA-256 `0eb6aaadad5b957af96d1300487e10af1dc8016e8ef53072effb48cd4906c02b`, pero `--require-hashes` obligaría a fijar también sus dependencias.
 - **Tiempo:** de 30 s a 1,5 min en la CI.
 - **Red:** sí, descarga las reglas de `semgrep.dev` en cada ejecución. Con `--metrics=off` no envía métricas.
+- **Límite:** las reglas de `p/default` no quedan fijadas: cambian sin subir de versión. Se acepta porque solo pueden añadir hallazgos; si una regla nueva da falsos positivos, se excluye por PR.
 - **Por qué no antes del commit:** sin red a `semgrep.dev` haría falta copiar las reglas al repo, y las del registro llevan la *Semgrep Rules License v1.0*, que limita su uso (aquí la licencia sí cuenta, porque se copian). Además pide instalar Python y Semgrep en cada máquina. El escáner del lenguaje cubre lo local.
 - **Alternativa:** Opengrep, la bifurcación LGPL-2.1 del mismo motor, si Semgrep restringe más su versión libre. CodeQL es gratis solo en repos públicos.
 - **Riesgo fuera del sandbox:** ninguno; solo corre en la CI.
@@ -72,24 +73,70 @@ Tiempos: **estimaciones sin medir.** No se mide antes de aprobar porque lo que n
 
 - **Qué hace:** detecta la inyección de HTML en el DOM (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`…), que es el riesgo principal de una PWA. Se activan solo esas reglas y las de `eval` del núcleo (`no-eval`, `no-implied-eval`, `no-new-func`): no es un linter de estilo.
 - **Qué toca y qué lee:** lee los ficheros JS/TS (los preparados antes del commit; todos en la CI). **Ejecuta código del repo:** `eslint.config.js` y los plugins de `node_modules/`.
-- **Versión:** dependencias de desarrollo fijadas en `package-lock.json`, con su `integrity`: `eslint` 10.14.0 (MIT, `sha512-T0pNsxkb9IKmtQjhpK3d7nWOpFv+YHuMbTJnSVMoQblF0onvXfErrtp4V1jHtsQPan7dKaGVD0q1WCXnzMF31A==`, 30 dependencias directas) y `eslint-plugin-no-unsanitized` 4.1.5 (MPL-2.0, `sha512-MSB4hXPVFQrI8weqzs6gzl7reP2k/qSjtCoL2vUMSDejIIq9YL1ZKvq5/ORBXab/PvfBBrWO2jWviYpL+4Ghfg==`, sin dependencias). Ninguno de los dos tiene scripts de instalación.
+- **Versión:** dependencias de desarrollo fijadas en `package-lock.json`, con su `integrity`: `eslint` 10.14.0 (MIT, `sha512-T0pNsxkb9IKmtQjhpK3d7nWOpFv+YHuMbTJnSVMoQblF0onvXfErrtp4V1jHtsQPan7dKaGVD0q1WCXnzMF31A==`, 30 dependencias directas) y `eslint-plugin-no-unsanitized` 4.1.5 (MPL-2.0, `sha512-MSB4hXPVFQrI8weqzs6gzl7reP2k/qSjtCoL2vUMSDejIIq9YL1ZKvq5/ORBXab/PvfBBrWO2jWviYpL+4Ghfg==`, sin dependencias). Ninguno de los dos tiene scripts de instalación; las dependencias transitivas se comprueban al añadirlos, con la marca `hasInstallScript` del lockfile, y la CI instala con `npm ci --ignore-scripts`.
 - **Tiempo:** de 1 a 3 s antes del commit.
 - **Red:** no (se instala desde `registry.npmjs.org`, que ya está en la lista del sandbox).
 - **Alternativa:** `eslint-plugin-security`, pensado para Node (`fs`, `child_process`, expresiones regulares), no para el navegador. Solo Semgrep, que no corre antes del commit. En otros lenguajes, el equivalente (bandit en Python, gosec en Go) se decide con el proyecto que lo use.
-- **Riesgo fuera del sandbox:** `eslint.config.js` es código que el agente puede cambiar. Si la persona hace un commit con hooks en la copia del agente, lo ejecuta fuera del sandbox: por eso esos commits van con `LEFTHOOK=0` o desde la web (ADR-0008). Las 30 dependencias de `eslint` son cadena de suministro: fijadas en el lockfile y vigiladas por osv-scanner y Dependabot.
+- **Riesgo fuera del sandbox:** `eslint.config.js` es código que el agente puede cambiar. Si la persona hace un commit con hooks en la copia del agente, lo ejecuta fuera del sandbox: por eso esos commits van con `LEFTHOOK=0` o desde la web (ADR-0008). Las 30 dependencias de `eslint` son cadena de suministro: fijadas en el lockfile y vigiladas por osv-scanner y Dependabot. Un cambio en `eslint.config.js` lo marca la CI como sensible (PR 3).
 - **Decisión:** adoptar en los proyectos JS/TS, antes del commit y en la CI. Añadirlo a la calculadora es R2 (dependencia nueva) y va en otra issue.
 
 ### lefthook
 
-- **Qué hace:** gestor de hooks de Git. Lee `lefthook.yml` y ejecuta sus órdenes en paralelo, solo sobre lo preparado.
-- **Qué toca y qué lee:** lee `lefthook.yml`, `lefthook-local.yml`, `.lefthook/`, `.lefthook-local/`, `.config/lefthook*.yml` y las variables `LEFTHOOK`, `LEFTHOOK_EXCLUDE`, `LEFTHOOK_CONFIG`, `LEFTHOOK_BIN` y `LEFTHOOK_OUTPUT`. `lefthook install` escribe `.git/hooks/`; al ejecutarse, si la configuración cambió, intenta reescribirlos (dentro del sandbox falla con un aviso, sin efecto). Con `stage_fixed` hace `git add --force` (se salta `.gitignore`), `git stash` y `git checkout --force`: no se usa. Con `ai:`, `lefthook install` escribe hooks de Claude Code en `.claude/settings.json`, y con `remotes:` clona otros repos: no se usan.
-- **Código leído** (criterio de hooks de terceros), en v2.2.2: la plantilla del hook que instala (`internal/templates/hook.tmpl`), la ejecución (`internal/command/run.go`), la carga de configuración y sus variables (`internal/config/loader.go`), la instalación con `ai` y `remotes` (`internal/command/install.go` e `install_ai.go`), las órdenes de Git que lanza (`internal/git/wrapper/`) y la única salida a la red (`internal/updater/`, solo en `lefthook self-update`). No se ha leído el ejecutor de órdenes en paralelo ni el registro.
-- **Versión:** v2.2.2 (commit `eb4e504b7c1d1ea6cb1fd29542431cb6d1a93a03`). Binario `lefthook_2.2.2_Linux_x86_64`, SHA-256 `4fbf89eb7748c6aed84d833ee1a29edac48fae614468ca9a82896ec32f2800b6`, en el `PATH` de la persona. MIT. No el paquete de npm: su `postinstall` ejecuta `lefthook install`.
+- **Qué hace:** gestor de hooks de Git. Lee su configuración y ejecuta sus órdenes en paralelo, solo sobre lo preparado.
+- **Qué toca y qué lee:**
+  - **Configuración:** la principal (`lefthook`, `.lefthook` o `.config/lefthook`) y la local (`lefthook-local`, `.lefthook-local` o `.config/lefthook-local`), cada una en `.yml`, `.yaml`, `.json`, `.jsonc` o `.toml`. La local se fusiona con la principal y puede redefinir órdenes. También lee las carpetas de scripts `.lefthook/` y `.lefthook-local/`.
+  - **Variables de entorno:** `LEFTHOOK`, `LEFTHOOK_EXCLUDE`, `LEFTHOOK_CONFIG`, `LEFTHOOK_BIN`, `LEFTHOOK_OUTPUT` y `LEFTHOOK_VERBOSE`.
+  - **Escritura:** `lefthook install` escribe `.git/hooks/`. Al ejecutarse, si la configuración cambió, los reinstala: dentro del sandbox falla con un aviso, sin efecto; fuera, funciona, y puede instalar hooks nuevos (por ejemplo `post-checkout`) que corren en órdenes posteriores.
+  - **Opciones que no se usan:**
+    - `stage_fixed`: hace `git add --force`, que se salta `.gitignore`, además de `git stash` y `git checkout --force`;
+    - `ai`: `lefthook install` escribe hooks de Claude Code en `.claude/settings.json`, también si la clave está en la configuración local;
+    - `remotes`: clona otros repos;
+    - `extends`, `rc` y `templates`: traen configuración, entorno o texto sin escapar de fuera de la configuración principal;
+    - `lefthook`: la ruta del binario.
+  - **Si no encuentra su binario** (ni `LEFTHOOK_BIN`, ni en el `PATH`, ni en la ruta absoluta guardada al instalar), el hook prueba binarios del árbol de trabajo (`node_modules/lefthook*/`) y gestores (`yarn`, `pnpm`, `uv run`, `bundle exec`, `mise`, `devbox`), que pueden ejecutar código del repo y salir a la red. `assert_lefthook_installed: true` solo actúa al final de esa cadena. Por eso el binario no se mueve después de instalar.
+- **Código leído** (criterio de hooks de terceros), en la etiqueta v2.2.2:
+  - la plantilla del hook que instala (`internal/templates/hook.tmpl`);
+  - la ejecución (`internal/command/run.go`);
+  - la carga de configuración, sus nombres y sus variables (`internal/config/loader.go`);
+  - la instalación con `ai` y `remotes` (`internal/command/install.go` e `install_ai.go`);
+  - la sustitución de `{staged_files}` en la orden, que escapa los nombres de fichero con `shellescape.Quote` y no escapa las plantillas propias (`internal/run/controller/command/replacer/replacer.go`);
+  - las órdenes de Git que lanza (`internal/git/wrapper/`);
+  - la única salida a la red (`internal/updater/`, solo en `lefthook self-update`).
+
+  No se ha leído el reparto en paralelo de las órdenes ni el registro de salida.
+- **Versión:** v2.2.2. La etiqueta anotada es el objeto `85141db4e1fda882e2e7eadb7706f3ae44b177d3` y apunta al commit `eb4e504b7c1d1ea6cb1fd29542431cb6d1a93a03`; el código leído es el de esa etiqueta. Binario `lefthook_2.2.2_Linux_x86_64`, SHA-256 `4fbf89eb7748c6aed84d833ee1a29edac48fae614468ca9a82896ec32f2800b6`, instalado por la persona en una ruta fija de su `PATH`. MIT. No se usa el paquete de npm: su `postinstall` ejecuta `lefthook install`.
 - **Tiempo:** milisegundos propios; el resto es lo que lanza.
-- **Red:** no (salvo `self-update` y `remotes`, que no se usan).
-- **Alternativa:** sin hooks, solo la CI; un script propio fuera del repo; husky (solo JS, mismo riesgo: los hooks son ficheros de `.husky/`); pre-commit (Python, descarga hooks de repos de terceros). Comparación en el ADR-0008.
-- **Riesgo fuera del sandbox:** lo que ejecuta en un commit lo deciden ficheros que el agente puede escribir. Condiciones del ADR-0008: commits de la persona en la copia del agente con `LEFTHOOK=0` o desde la web; `lefthook.yml` sin `ai`, `remotes`, `extends`, `rc`, `lefthook` ni `stage_fixed`, con `assert_lefthook_installed: true` y en CODEOWNERS junto con `.lefthook/`; `lefthook install` sobre `main` recién descargado.
-- **Formas de saltarlo** que el hook del plugin debe bloquear en las órdenes del agente (PR 2): `git commit --no-verify` y `-n`; `LEFTHOOK=0` o `false`; `LEFTHOOK_EXCLUDE`; `LEFTHOOK_CONFIG`; `LEFTHOOK_BIN`; `core.hooksPath` con `git -c`, `--config-env` o `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_*`/`GIT_CONFIG_VALUE_*`; y escribir `lefthook-local.yml`, `.lefthook-local/` o `.config/lefthook-local.yml`. La issue pedía las tres primeras; las demás salen de leer el código.
+- **Red:** no, salvo `self-update` y `remotes`, que no se usan, y la cadena de búsqueda del binario si este falta.
+- **Alternativa:**
+  - sin hooks, solo la CI;
+  - un script propio fuera del repo;
+  - husky: solo JS, y con el mismo riesgo, porque los hooks son ficheros de `.husky/`;
+  - pre-commit: en Python, y descarga hooks de repos de terceros.
+
+  Comparación en el ADR-0008.
+- **Riesgo fuera del sandbox:** lo que se ejecuta en una orden de Git lo deciden ficheros que el agente puede escribir. Condiciones del ADR-0008, en concreto:
+  - **Toda orden de Git de la persona en la copia del agente va con `LEFTHOOK=0`.** El hook sale antes de llamar a lefthook, así que tampoco reinstala nada. Sirve un alias o un perfil propio de la persona; nunca el perfil de shell que hereda el agente, porque apagaría también sus hooks. Los commits de la persona, mejor desde la web.
+  - **La configuración principal:**
+    - no usa `ai`, `remotes`, `extends`, `rc`, `templates`, `lefthook` ni `stage_fixed`;
+    - lleva `assert_lefthook_installed: true`;
+    - no hay configuración local en el repo.
+
+    Lo comprueba la CI (PR 3).
+  - **Instalación.** La persona, fuera del sandbox:
+    1. hace `git status --ignored` sobre `main` recién descargado;
+    2. comprueba que no aparece configuración local de lefthook (ningún `lefthook-local.*`, `.lefthook-local.*`, `.config/lefthook-local.*` ni `.lefthook-local/`) y que la principal es la de `main`;
+    3. ejecuta `lefthook install`;
+    4. comprueba con `git status` que `.claude/` no ha cambiado.
+
+    Mejor aún, en un clon nuevo.
+- **Formas de saltarlo** conocidas, que el hook del plugin bloquea en las órdenes del agente como segunda capa (PR 2). La autoridad es la CI.
+  - **Opciones de Git:** `--no-verify` y sus prefijos abreviados (`--no-verif`…) en `commit`, `merge` y `am`; `-n`, también combinado con otras letras (`-nm`, `-an`).
+  - **Variables de entorno:** `LEFTHOOK=0` o `false`, `LEFTHOOK_EXCLUDE`, `LEFTHOOK_CONFIG` y `LEFTHOOK_BIN`, en la orden, con `env` o con `export` en una orden anterior.
+  - **Configuración de Git:** `core.hooksPath` con `git -c`, `--config-env` o `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_*`/`GIT_CONFIG_VALUE_*`.
+  - **Ficheros:** escribir configuración local de lefthook (los nombres de arriba, en cualquier extensión).
+  - **Commits que no pasan por `pre-commit`:** `git commit-tree` con `update-ref`.
+
+  `cherry-pick`, `rebase` y la edición de la configuración principal, de `eslint.config.js` o de `.gitleaks.toml` en la rama no se bloquean: los cubren la CI, que repite los controles, y el aviso de cambio sensible. La issue pedía las tres primeras variables y `--no-verify`; las demás salen de leer el código y de G4.
 - **Decisión:** adoptar con las condiciones del ADR-0008.
 
 ### Bot de dependencias: Dependabot
@@ -103,7 +150,7 @@ Tiempos: **estimaciones sin medir.** No se mide antes de aprobar porque lo que n
 - **Riesgo fuera del sandbox:** ninguno en el PC. Dependabot es de GitHub, en quien ya confiamos para todo lo demás.
 - **Decisión:** Dependabot. Hay que comprobar en el PR 3:
   - si actualiza la imagen de Playwright fijada en un `container:` de un workflow (M6). Si no, se vuelve a valorar Renovate;
-  - sus ramas (`dependabot/…`) y títulos no siguen `docs/convenciones.md`, así que `checks.py` (M11) los rechazaría. Hace falta una excepción acotada a la cuenta de Dependabot, o configurar su prefijo y sus ramas.
+  - sus ramas (`dependabot/…`) y títulos no siguen `docs/convenciones.md`, así que `checks.py` (M11) los rechazaría. Hace falta una excepción acotada al autor del PR (`dependabot[bot]`), nunca al prefijo de la rama, que el agente también puede usar.
 
 ### AgentShield (piloto, una vez)
 
@@ -111,7 +158,7 @@ Tiempos: **estimaciones sin medir.** No se mide antes de aprobar porque lo que n
 - **Qué toca y qué lee:** lee la carpeta que se le indica con `--path`. No se usan `--fix`, que reescribe la configuración (veto 2), `--opus`, que envía la configuración a la API de Anthropic con una clave, ni `--supply-chain-online`, que consulta npm.
 - **Versión:** paquete npm `ecc-agentshield` 1.6.0 (MIT, `sha512-lpeHG96DtEn7ofq7Iiyvq29piQOwParaiZOdDB206i4ZeCL4yjwT6xN5BSGI4yhCEAN0eO0f9F9hxHLBuRqf/g==`), sin scripts de instalación y con 7 dependencias, entre ellas `@anthropic-ai/sdk`. Con `npx` las dependencias no quedan fijadas; se instala con un lockfile dentro del contenedor y `--ignore-scripts`.
 - **Tiempo:** una ejecución de segundos; no entra en el commit ni en la CI.
-- **Red:** solo para instalarlo. El análisis, en un contenedor sin red.
+- **Red:** solo para instalarlo. El análisis, en un contenedor sin red. Si el PR 4 elige un runner de GitHub, la red no se corta: se apoya en que no hay clave de Anthropic ni `--opus`, y en que el runner no lleva secretos.
 - **Alternativa:** la revisión del `reviewer` de seguridad que ya hace `sdd-review`, que es opinión; AgentShield aporta reglas fijas.
 - **Riesgo fuera del sandbox:** ninguno si corre en el contenedor. Hoy no hay Docker ni Podman en WSL: el PR 4 decide entre instalar uno (lo haría la persona) o pasarlo en un runner de GitHub sin secretos.
 - **Decisión:** piloto, una vez, con informe y lo decidido.
