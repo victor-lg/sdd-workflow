@@ -80,8 +80,8 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-28 | No afirmar fuentes o pruebas no consultadas o no ejecutadas | A:41; context:28 | Criterio | No consta | **Instrucción** (`AGENTS.md`, una línea; ver X-05) |
 | REG-29 | Rellenar la plantilla del PR | A:45; implement:60 | Mecánica | Sí: calc#7 y #8 con `<ID>` sin sustituir, abiertos desde la web | **Instrucción** (`implement`, por ahora; decisión 5) |
 | REG-30 | Rama `<tipo>/vic-<N>-<descripcion>`, unos 50 caracteres | A:11,49; plan:40; spec:80 | Mecánica | Antes de la regla: ramas sin ID en calc y sesiones de VIC-13 atribuidas a VIC-10 (M11). wf#1 a #16 la cumplen | **CI** (M11) |
-| REG-31 | Título de commit y PR en Conventional Commits, con el alcance como zona | A:50; plan:42; spec:80; review:75 | Mecánica | Antes de la regla: `calc#10` y siguientes usan el ID como alcance. wf#1 a #16 la cumplen | **CI** (M11 el título; commits con lefthook, M33) |
-| REG-32 | Pie del commit con `Refs: VIC-N` y `Spec:` | A:11,52 | Mecánica | Sí: el commit de `main` de wf#16 no lleva `Refs` (wf#1 tampoco, antes de aplicar la regla) | **CI** (`commit-msg` con lefthook, M33; `docs/convenciones.md` §8) |
+| REG-31 | Título de commit y PR en Conventional Commits, con el alcance como zona | A:50; plan:42; spec:80; review:75 | Mecánica | Antes de la regla: `calc#10` y siguientes usan el ID como alcance. wf#1 a #16 la cumplen | **CI** (M11 el título; los commits, `commits` en la CI y `commit-msg` con lefthook, M33, PR 3 de VIC-18) |
+| REG-32 | Pie del commit con `Refs: VIC-N` y `Spec:` | A:11,52 | Mecánica | Sí: el commit de `main` de wf#16 no lleva `Refs` (wf#1 tampoco, antes de aplicar la regla) | **CI** (`commits` en la CI y `commit-msg` con lefthook, M33, PR 3 de VIC-18; `docs/convenciones.md` §8) |
 | REG-33 | La descripción empieza por `Fixes VIC-N` o `Part of VIC-N` | A:53; plan:43 | Mecánica | Antes de la regla: calc usa "Issue de Linear: …" y `Refs` (M4). wf#1 a #16 la cumplen | **CI** (M11; admite `Fixes`, `Part of` y `Refs`, decisión 4) |
 | REG-34 | Sin `Co-Authored-By` ni "Generated with" | A:54; plan:42; spec:80 | Mecánica | Antes de la regla: los PR del agente en calc lo llevan, porque la §7 de la línea base lo pedía. Ninguno desde ADR-0007 | **CI** (ya en `validar` para este repo; nuevo en `checks.py` para los proyectos) |
 | REG-35 | Unas 400 líneas de código por PR; si no, partir o explicar | A:55; plan:39; implement:66 | Mecánica | Sí: calc#33, ~990 líneas estimadas en ~550 | **Instrucción** (`plan`, por ahora; decisión 5) |
@@ -213,8 +213,8 @@ Las líneas de "Antes" son las de `plantilla-proyecto/AGENTS.md` en el commit `d
 | REG-28 | A:41 | Se queda en "En cualquier tarea" |
 | REG-29 | A:45 | `implement:60` y `plan:41` |
 | REG-30, REG-33 | A:11,49,53 | CI `convenciones`, nombrada (con `Fixes`, `Part of` y `Refs`); `plan:40,43` |
-| REG-31 | A:48,50 | El título del PR, CI `convenciones`. El de los commits, sin control hasta M33: se queda en la línea "Commits", con los tipos y el estilo de la descripción |
-| REG-32 | A:51-52 | Línea "Commits" (sin control hasta M33) |
+| REG-31 | A:48,50 | El título del PR, CI `convenciones`. El de los commits, CI `commits` y `commit-msg` desde el PR 3 de VIC-18: la línea "Commits" sigue con los tipos y el estilo de la descripción y nombra los dos controles |
+| REG-32 | A:51-52 | Línea "Commits", que nombra la CI `commits` y `commit-msg` (PR 3 de VIC-18) |
 | REG-34 | A:54 | CI `autoria`, nombrada con su alcance (`Co-Authored-By` y "Generated with"). La cuenta de máquina la fija ADR-0007 |
 | REG-35 | A:55 | `plan:39` e `implement:66` |
 | REG-36 | A:56 | CI `tests`, nombrada; `implement:64` |

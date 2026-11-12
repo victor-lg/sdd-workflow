@@ -4,6 +4,7 @@
 # en la regla de `main` (G5). El agente no puede modificar este fichero:
 # su token no tiene el permiso `workflow` (ADR-0005, caso N5).
 #
+# Los escáneres de seguridad (gitleaks, osv-scanner y Semgrep) van en seguridad.yml.
 # Los tests del stack se añaden en otro workflow cuando el proyecto pasa a la
 # etapa técnica (lo fija el ADR de tecnología) y también se marcan como requeridos.
 
@@ -43,12 +44,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sdd"
           git show "origin/$BASE_REF:.github/sdd/checks.py" > "$RUNNER_TEMP/sdd/checks.py"
 
-      # La descripción, el título y la rama del PR entran por variables de
-      # entorno, nunca interpolados en el script (evita inyección de órdenes).
-      - name: Specs, mezcla, trazabilidad (G3), riesgo y convenciones
+      # La descripción, el título, la rama y el autor del PR entran por variables
+      # de entorno, nunca interpolados en el script (evita inyección de órdenes).
+      # El autor lo pone GitHub: es lo que acota la excepción de Dependabot. La cabeza del
+      # PR sirve para ver sus merges sin el merge efímero que GitHub prueba (HEAD).
+      - name: Specs, mezcla, trazabilidad (G3), riesgo, convenciones y commits
         env:
           BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BRANCH: ${{ github.head_ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: python3 "$RUNNER_TEMP/sdd/checks.py" --base "origin/$BASE_REF"

@@ -318,6 +318,7 @@ Esta es la **lista canónica**: la implementa `checks.py` y el resto de ficheros
 - manifiestos de dependencias;
 - `.github/`;
 - la configuración del agente (`.claude/`, `AGENTS.md`, `CLAUDE.md`);
+- la configuración de los controles de seguridad: lefthook, gitleaks, Semgrep, osv-scanner, `.gitattributes`, ESLint y los submódulos (lista en `docs/herramientas.md`, ADR-0008);
 - migraciones;
 - las **rutas sensibles** que el proyecto declara en su README (autenticación, pagos o cualquier componente delicado).
 

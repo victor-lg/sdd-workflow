@@ -11,5 +11,14 @@
         "fail_text": "gitleaks ha encontrado un posible secreto en lo preparado. Sácalo del commit (git restore --staged <fichero>) y quítalo del fichero; si es un falso positivo, díselo a la persona."
       }
     ]
+  },
+  "commit-msg": {
+    "jobs": [
+      {
+        "name": "formato",
+        "run": "python3 -I .github/sdd/checks.py --mensaje \"{1}\"",
+        "fail_text": "El mensaje del commit no sigue el formato de AGENTS.md («Commits»): mira los errores de arriba, corrígelo y repite el commit con el mensaje nuevo."
+      }
+    ]
   }
 }

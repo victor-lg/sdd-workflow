@@ -1,0 +1,39 @@
+# Dependabot del workflow SDD + IA v1.1 (M38; docs/herramientas.md del workflow).
+#
+# Una vez al mes, un PR por ecosistema con todo agrupado, y siete días de espera tras
+# cada publicación (cooldown) contra paquetes comprometidos recién publicados. Sus PR
+# pasan la CI sin los secretos del repo y los aprueba la persona: tocan dependencias,
+# así que son R2. checks.py los reconoce por el autor del PR y de sus commits.
+#
+# No sube los binarios de seguridad.yml (gitleaks, osv-scanner) ni las imágenes de un
+# `container:` (Semgrep, Playwright): esos se suben a mano. Si el proyecto no usa npm,
+# quita su entrada; si usa otro gestor, añade la suya con las mismas opciones.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      acciones:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope

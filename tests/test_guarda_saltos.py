@@ -154,6 +154,10 @@ BASH = {
         "printf 'x' > /home/u/.profile",
         "cp falso.sh /home/u/.local/bin/gitleaks",
         "ln -s /bin/true /home/u/.local/bin/lefthook",
+        # G4 del PR 3 de VIC-18: commit-msg lanza python3, que también se busca en el PATH.
+        "cp falso.sh /home/u/.local/bin/python3",
+        "ln -s /bin/true /home/u/.local/bin/python",
+        "echo x > /home/u/.local/bin/python3.12",
     ],
     # G4 del PR #30, ronda 2: lefthook y gitleaks los leen del árbol de trabajo. Pregunta.
     "config-de-controles": [
@@ -375,6 +379,7 @@ class GuardaHerramientas(unittest.TestCase):
                             (f"{CWD}/.gitattributes", "config-de-controles"),
                             ("/home/u/.bashrc", "ajustes-del-agente"),
                             ("/home/u/.local/bin/gitleaks", "ajustes-del-agente"),
+                            ("/home/u/.local/bin/python3", "ajustes-del-agente"),
 (f"{CWD}/.claude/settings.local.json", "ajustes-del-agente"),
                             (f"{CWD}/.claude/settings.json", "ajustes-del-agente"),
                             (f"{CWD}/lefthook.json", "config-de-controles"),
@@ -401,7 +406,7 @@ class GuardaHerramientas(unittest.TestCase):
     def test_pasan(self):
         for ruta in (f"{CWD}/docs/lefthook.md", f"{CWD}/docs/lefthook-local.md",
                      f"{CWD}/.gitignore", f"{CWD}/src/git/config", f"{CWD}/hooks/pre-commit",
-                     f"{CWD}/src/exclude", "notas.md"):
+                     f"{CWD}/src/exclude", "notas.md", f"{CWD}/src/python3_utils.py", f"{CWD}/docs/python3.md"):
             with self.subTest(ruta=ruta):
                 self.assertIsNone(self.decide("Write", ruta))
 

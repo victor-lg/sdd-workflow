@@ -1,8 +1,9 @@
 """Tests de plantilla-proyecto/.github/sdd/checks.py (VIC-17): M11 (rama, título y
 enlace a la issue), REG-34 (sin menciones a Claude), M39 (historial en la cabecera
 de una spec), M7 (comillas en la cabecera de los ADR), M17 (`.gitignore` de la
-plantilla y de este repo con los ficheros del sandbox) y la configuración de lefthook
-(ADR-0008). Casos que pasan y que fallan."""
+plantilla y de este repo con los ficheros del sandbox), la configuración de lefthook
+(ADR-0008) y, desde el PR 3 de VIC-18, los ficheros sensibles, el formato de los commits
+(REG-31, REG-32) y la excepción de Dependabot (M38). Casos que pasan y que fallan."""
 import importlib.util
 import json
 import os
@@ -456,6 +457,171 @@ class TestLefthook(unittest.TestCase):
         self.assertEqual(self.comprobar(versionados={"lefthook.json": "100644", "docs/lefthook.md": "100644",
                                                       "lefthook.json.example": "100644"}), [])
 
+    def test_la_plantilla_comprueba_el_formato_de_los_commits(self):
+        trabajos = json.loads(LEFTHOOK_PLANTILLA)["commit-msg"]["jobs"]
+        self.assertEqual([t["run"] for t in trabajos], ['python3 -I .github/sdd/checks.py --mensaje "{1}"'])
+
+    def test_sin_formato_de_commits_avisa(self):
+        conf = json.loads(LEFTHOOK_PLANTILLA)
+        del conf["commit-msg"]
+        inf = ejecutar(checks.check_lefthook, {"lefthook.json": "100644"}, json.dumps(conf), True)
+        self.assertEqual(inf.errores, [])
+        self.assertIn("formato de los commits", " ".join(inf.avisos))
+
+
+# --- Ficheros sensibles (ADR-0008, §5) -------------------------------------
+
+def riesgo(cambiados, nivel="R1", **extra):
+    cuerpo = f"## Nivel de riesgo\n\n- [x] {nivel}\n" if nivel else "## Nivel de riesgo\n\n- [ ] R0\n"
+    return ejecutar(checks.check_riesgo, cuerpo, cambiados, None, None, {}, {}, *extra.values())
+
+
+class TestFicherosSensibles(unittest.TestCase):
+    """La CI marca R2 un cambio en cualquiera de los ficheros de la lista de docs/herramientas.md."""
+    SENSIBLES = ["lefthook.json", ".lefthook/pre-commit/a.sh", ".lefthook-local/a.sh", ".gitleaks.toml",
+                 ".gitleaksignore", ".gitattributes", "src/.gitattributes", "a/b/.gitattributes",
+                 ".semgrepignore", "src/.semgrepignore", "osv-scanner.toml", "web/osv-scanner.toml",
+                 "eslint.config.js", "eslint.config.mjs", "web/eslint.config.ts", ".github/dependabot.yml",
+                 ".github/sdd/checks.py", ".github/workflows/seguridad.yml", ".GITATTRIBUTES", "Lefthook.json"]
+    NORMALES = ["src/app.js", "docs/gitattributes.md", "src/gitattributes", "eslint.js", "lefthook.md",
+                "docs/osv-scanner.toml.md", "src/.gitattributes.bak", "gitleaks.toml"]
+
+    def test_cada_fichero_sensible_exige_r2(self):
+        for ruta in self.SENSIBLES:
+            with self.subTest(ruta=ruta):
+                inf = riesgo([ruta])
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("exige R2", inf.errores[0])
+                self.assertEqual(riesgo([ruta], "R2").errores, [])
+
+    def test_submodulos(self):
+        """G4 del PR 3, ronda 3: el código de un submódulo no lo ve ningún escáner."""
+        inf = ejecutar(checks.check_riesgo, "## Nivel de riesgo\n\n- [x] R1\n", ["src/lib"], None, None, {}, {},
+                       None, ["src/lib"])
+        self.assertIn("submódulo", inf.errores[0] + inf.secciones[0])
+        self.assertTrue(riesgo([".gitmodules"]).errores)
+
+    def test_los_demas_no(self):
+        for ruta in self.NORMALES:
+            with self.subTest(ruta=ruta):
+                self.assertEqual(riesgo([ruta]).errores, [])
+
+
+# --- Formato de los commits (REG-31, REG-32) -------------------------------
+
+class TestMensajeCommit(unittest.TestCase):
+    BUENOS = [
+        "feat(calculo): suma el peso disco a disco\n\nRefs: VIC-12\n",
+        "fix: corrige el redondeo\n\nRefs: VIC-12",
+        "feat(calculo)!: cambia el formato\n\nEl cuerpo explica\nel porqué.\n\nRefs: VIC-12\n"
+        "Spec: SPEC-CALC-003/AC-04, SPEC-CALC-003/AC-05\nBREAKING CHANGE: el peso guardado cambia de unidad",
+        "docs: añade la guía\n\nRefs: VIC-12, VIC-13",
+        "test(calculo): cita el AC\n\n- viñeta uno\n- viñeta dos\n\nRefs: VIC-12\nSpec: SPEC-CALC-003/AC-04",
+    ]
+    # Como lo recibe el hook del editor de Git: los comentarios y lo que va tras la tijera no cuentan.
+    DEL_EDITOR = ("feat: algo\n\nRefs: VIC-12\n# Please enter the commit message\n"
+                  "# ------------------------ >8 ------------------------\nno cuenta")
+    MALOS = [
+        ("", "vacío"),
+        ("suma el peso\n\nRefs: VIC-12", "título"), ("Feat: suma\n\nRefs: VIC-12", "título"),
+        ("fixup! feat: algo\n\nRefs: VIC-12", "título"),
+        ('Revert "feat: algo"\n\nRefs: VIC-12', "título"),
+        ("Merge branch 'main' into feat/vic-12-x\n\nRefs: VIC-12", "título"),
+        ("feat(VIC-12): suma el peso\n\nRefs: VIC-12", "alcance"),
+        ("feat: " + "a" * 73 + "\n\nRefs: VIC-12", "73"),
+        ("feat: suma el peso\nRefs: VIC-12", "línea en blanco"),
+        ("feat: suma el peso", "Refs"), ("feat: suma el peso\n\nCuerpo sin pie.", "Refs"),
+        ("feat: suma el peso\n\nRefs: VIC-12\n\nCuerpo después del pie.", "Refs"),
+        ("feat: suma el peso\n\nRefs: #12", "Refs"), ("feat: suma el peso\n\nRefs: vic-12", "Refs"),
+        ("feat: suma el peso\n\nRefs: VIC-12\nSpec: CALC-003", "Spec"),
+        ("feat: suma el peso\n\nSpec: SPEC-CALC-003/AC-04\nRefs: VIC-12", "orden"),
+        ("feat: suma el peso\n\nRefs: VIC-12\nBREAKING CHANGE: x\nSpec: SPEC-CALC-003/AC-04", "orden"),
+    ]
+
+    def test_mensajes_correctos_pasan(self):
+        for texto in self.BUENOS:
+            with self.subTest(texto=texto):
+                self.assertEqual(checks.problemas_mensaje(texto), ([], []))
+
+    def test_mensajes_incorrectos_fallan(self):
+        for texto, motivo in self.MALOS:
+            with self.subTest(texto=texto):
+                errores, _ = checks.problemas_mensaje(texto)
+                self.assertTrue(errores)
+                self.assertIn(motivo, " ".join(errores))
+
+    def test_mayuscula_o_punto_final_avisan(self):
+        for texto in ("feat: Suma el peso\n\nRefs: VIC-12", "feat: suma el peso.\n\nRefs: VIC-12"):
+            with self.subTest(texto=texto):
+                errores, avisos = checks.problemas_mensaje(texto)
+                self.assertEqual(errores, [])
+                self.assertIn("minúscula", avisos[0])
+
+    def test_solo_el_hook_limpia_el_mensaje_como_git(self):
+        """G4 del PR 3, ronda 3: en la CI el mensaje ya está guardado; un `#` es parte de él."""
+        self.assertEqual(checks.problemas_mensaje(self.DEL_EDITOR, admite_merge=True), ([], []))
+        self.assertTrue(checks.problemas_mensaje(self.DEL_EDITOR)[0])
+        self.assertIn("vacío", checks.problemas_mensaje("# solo un comentario\n", admite_merge=True)[0][0])
+        self.assertTrue(checks.problemas_mensaje("# x\nfeat: algo\n\nRefs: VIC-12")[0])
+
+    def test_el_hook_deja_pasar_el_merge_de_git_y_la_ci_no(self):
+        """El hook ve el mensaje que Git propone en un merge; la CI no mira los merges, pero sí
+        un commit normal con ese título."""
+        texto = "Merge branch 'main' into feat/vic-12-calculo\n"
+        self.assertEqual(checks.problemas_mensaje(texto, admite_merge=True), ([], []))
+        self.assertTrue(checks.problemas_mensaje(texto)[0])
+
+    def test_check_commits_dice_cual_falla(self):
+        inf = ejecutar(checks.check_commits, ["feat: bien\n\nRefs: VIC-1", "mal hecho", "feat: Bien\n\nRefs: VIC-1"])
+        self.assertEqual(len(inf.errores), 2, inf.errores)
+        self.assertTrue(all("«mal hecho»" in e for e in inf.errores))
+        self.assertEqual(len(inf.avisos), 1)
+
+
+# --- Dependabot (M38) ------------------------------------------------------
+
+class TestDependabot(unittest.TestCase):
+    COMMITS = [(checks.DEPENDABOT_CORREO, "chore(deps): bump lodash from 4.17.15 to 4.17.21")]
+    CAMBIADOS = ["package.json", "package-lock.json", ".github/workflows/sdd.yml"]
+
+    def test_autor_y_commits_de_dependabot(self):
+        self.assertTrue(checks.es_de_dependabot("dependabot[bot]", self.COMMITS, self.CAMBIADOS, True))
+
+    def test_con_merges_no_vale(self):
+        """G4 del PR 3, ronda 2: un merge del agente no pasa por la lista de autores."""
+        self.assertFalse(checks.es_de_dependabot("dependabot[bot]", self.COMMITS, self.CAMBIADOS, False))
+
+    def test_la_excepcion_no_vale_sin_todas_sus_condiciones(self):
+        """Nunca por la rama: el agente puede llamar a la suya `dependabot/…`."""
+        otro = ("agente@example.com", "chore: algo\n\nRefs: VIC-1")
+        for autor, commits, cambiados in [
+            ("victor-lg-bot", self.COMMITS, self.CAMBIADOS),
+            ("dependabot", self.COMMITS, self.CAMBIADOS),
+            ("dependabot[bot]", self.COMMITS + [otro], self.CAMBIADOS),
+            ("dependabot[bot]", [("dependabot[bot]@users.noreply.github.com", "x")], self.CAMBIADOS),
+            ("dependabot[bot]", [], self.CAMBIADOS), ("dependabot[bot]", None, self.CAMBIADOS),
+            ("dependabot[bot]", self.COMMITS, []),
+            ("dependabot[bot]", self.COMMITS, self.CAMBIADOS + ["src/app.js"]),
+            ("dependabot[bot]", self.COMMITS, ["package.json", ".github/sdd/checks.py"]),
+            ("dependabot[bot]", self.COMMITS, ["package.json", ".github/dependabot.yml"]),
+        ]:
+            with self.subTest(autor=autor, commits=commits, cambiados=cambiados):
+                self.assertFalse(checks.es_de_dependabot(autor, commits, cambiados, True))
+
+    def test_sin_nivel_marcado_toma_r2(self):
+        self.assertTrue(riesgo(["package.json"], nivel=None).errores)
+        inf = riesgo(["package.json"], nivel=None, por_defecto="R2")
+        self.assertEqual(inf.errores, [])
+        self.assertIn("Dependabot", inf.secciones[0])
+        self.assertTrue(riesgo(["package.json"], "R1", por_defecto="R2").errores)
+
+    def test_no_declara_ac(self):
+        args = ("Part of VIC-1", ["package.json"], {}, {}, {})
+        self.assertTrue(ejecutar(checks.check_trazabilidad, *args).errores)
+        inf = ejecutar(checks.check_trazabilidad, *args, True)
+        self.assertEqual(inf.errores, [])
+        self.assertIn("Dependabot", inf.avisos[0])
+
 
 # --- De punta a punta: main() en un repo de verdad -------------------------
 
@@ -513,7 +679,7 @@ class TestPuntaAPunta(unittest.TestCase):
         self.git("switch", "-q", "adr/vic-7-0002-x")
         (self.repo / "docs" / "specs" / "SPEC-CALC-003-x.md").write_text(SPEC_CON_HISTORIAL, encoding="utf-8")
         self.git("add", "docs/specs")
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         historial = [l for l in r.stdout.splitlines() if "**historial:**" in l]
         self.assertEqual(len(historial), 1, r.stdout)
         self.assertIn("SPEC-CALC-003-x.md", historial[0])
@@ -521,7 +687,7 @@ class TestPuntaAPunta(unittest.TestCase):
     def test_comprueba_la_configuracion_de_lefthook(self):
         (self.repo / "lefthook.yml").write_text("pre-commit: {}\n", encoding="utf-8")
         self.git("add", "lefthook.yml")
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("**lefthook:**", r.stdout)
         self.assertIn("`lefthook.yml`", r.stdout)
@@ -530,7 +696,7 @@ class TestPuntaAPunta(unittest.TestCase):
         """G4 del PR #30: un enlace en lefthook.json da el error previsto, sin traza."""
         (self.repo / "lefthook.json").symlink_to("/dev/null")
         self.git("add", "lefthook.json")
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("tiene que ser un fichero normal", r.stdout)
         self.assertNotIn("Traceback", r.stderr)
@@ -542,15 +708,93 @@ class TestPuntaAPunta(unittest.TestCase):
         self.git("commit", "-q", "-m", "chore: lefthook")
         self.git("switch", "-q", "-C", "adr/vic-7-0002-x", "main")
         self.git("rm", "-q", "lefthook.json")
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("el PR quita `lefthook.json`", r.stdout)
 
     def test_sin_rama_ni_titulo_no_comprueba_convenciones(self):
-        r = self.correr("adr: decide x", 'referencias: ["PR #12"]', PR_BRANCH="", PR_TITLE="",
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', PR_BRANCH="", PR_TITLE="",
                         PR_BODY="## Nivel de riesgo\n\n- [x] R1 normal\n")
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertNotIn("convenciones", r.stdout)
+
+    def test_comprueba_el_formato_de_los_commits_sin_los_merges(self):
+        self.git("switch", "-q", "main")
+        (self.repo / "b.md").write_text("b\n", encoding="utf-8")
+        self.git("add", "b.md")
+        self.git("commit", "-q", "-m", "docs: b")
+        self.git("switch", "-q", "adr/vic-7-0002-x")
+        self.git("merge", "-q", "--no-ff", "--no-edit", "main")
+        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        commits = [l for l in r.stdout.splitlines() if "**commits:**" in l]
+        self.assertEqual(len(commits), 1, r.stdout)
+        self.assertIn("«adr: decide x»", commits[0])
+
+    def test_modo_mensaje_del_hook(self):
+        fichero = self.repo / "COMMIT_EDITMSG"
+        for texto, salida in (("feat: algo\n\nRefs: VIC-7\n", 0), ("feat: algo\n", 1),
+                              ("Merge branch 'main' into feat/vic-7-x\n", 0)):
+            with self.subTest(texto=texto):
+                fichero.write_text(texto, encoding="utf-8")
+                r = subprocess.run([sys.executable, str(RUTA), "--mensaje", str(fichero)], cwd=self.repo,
+                                   capture_output=True, text=True, env=ENTORNO_GIT)
+                self.assertEqual(r.returncode, salida, r.stdout + r.stderr)
+                if salida:
+                    self.assertIn("Error: falta el pie `Refs: VIC-N`", r.stdout)
+
+    def test_un_submodulo_exige_r2(self):
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{'a' * 40},vendor/lib")
+        self.git("commit", "-q", "-m", "chore: añade lib\n\nRefs: VIC-7")
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("`vendor/lib` (submódulo", r.stdout)
+
+    def test_pr_de_dependabot(self):
+        """Ni convenciones, ni formato de los commits, ni AC; el riesgo, R2 aunque no lo marque."""
+        self.git("switch", "-q", "-c", "dependabot/npm_and_yarn/lodash-4.17.21", "main")
+        (self.repo / "package.json").write_text('{"dependencies": {"lodash": "4.17.21"}}\n', encoding="utf-8")
+        self.git("add", "package.json")
+        bot = {"GIT_AUTHOR_NAME": "dependabot[bot]", "GIT_AUTHOR_EMAIL": checks.DEPENDABOT_CORREO}
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-m",
+                        "chore(deps): bump lodash from 4.17.15 to 4.17.21 in the npm group across 1 directory"],
+                       check=True, env={**ENTORNO_GIT, **bot})
+        entorno = {**ENTORNO_GIT, "PR_BRANCH": "dependabot/npm_and_yarn/lodash-4.17.21",
+                   "PR_TITLE": "chore(deps): bump lodash from 4.17.15 to 4.17.21",
+                   "PR_BODY": "Bumps [lodash](https://github.com/lodash/lodash) from 4.17.15 to 4.17.21.",
+                   "PR_AUTHOR": "dependabot[bot]"}
+        correr = lambda **e: subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo,
+                                            capture_output=True, text=True, env={**entorno, **e})
+        r = correr()
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("PR de Dependabot", r.stdout)
+        self.assertIn("**R2**", r.stdout)
+        # Como en la CI: HEAD es el merge que prueba GitHub y la cabeza del PR llega aparte.
+        cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                                text=True, env=ENTORNO_GIT).stdout.strip()
+        self.git("switch", "-q", "--detach", "main")
+        self.git("merge", "-q", "--no-ff", "--no-edit", cabeza)
+        r = correr(PR_HEAD_SHA=cabeza)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("PR de Dependabot", r.stdout)
+        self.git("switch", "-q", "dependabot/npm_and_yarn/lodash-4.17.21")
+        # Con otro autor del PR, los mismos commits fallan en las convenciones.
+        r = correr(PR_AUTHOR="victor-lg-bot")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        for check in ("**convenciones:**", "**riesgo:**", "**trazabilidad:**"):
+            self.assertIn(check, r.stdout)
+        # Un merge en la rama (aquí, de main con un cambio de package.json) quita la excepción.
+        self.git("switch", "-q", "main")
+        (self.repo / "package-lock.json").write_text("{}\n", encoding="utf-8")
+        self.git("add", "package-lock.json")
+        self.git("commit", "-q", "-m", "chore: lock")
+        self.git("switch", "-q", "dependabot/npm_and_yarn/lodash-4.17.21")
+        self.git("merge", "-q", "--no-ff", "--no-edit", "main")
+        cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                                text=True, env=ENTORNO_GIT).stdout.strip()
+        r = correr(PR_HEAD_SHA=cabeza)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertNotIn("PR de Dependabot", r.stdout)
 
 
 if __name__ == "__main__":
