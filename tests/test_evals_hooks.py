@@ -134,6 +134,12 @@ CASOS = {
         BUENA_G4.replace("{ cat .tareas/VIC-54/g4-ronda-1.md; cat", "{\n  cat \".tareas/VIC-54/g4-ronda-1.md\"\n  cat")
                 .replace("<<'METRICAS_SDD'\n" + G4 + "\nMETRICAS_SDD\n}", "<<'FIN'\n" + G4 + "\nFIN\n}"),
         "En vez de `--body \"…\"`, el fichero:\n\n" + BUENA_G4,
+        # Lo observado en las tres ejecuciones: una línea en blanco separa la línea del cuerpo.
+        "La línea de métricas va al final, tras una línea en blanco.\n\n```bash\n"
+        "{ cat .tareas/VIC-54/g4-ronda-1.md; cat <<'FIN'\n\n" + G4 + "\nFIN\n} | gh pr comment 54 --body-file -\n```",
+        BUENA_G4.replace("} | gh", "}| gh"),
+        BUENA_G4.replace("```bash", "```shell"),
+        BUENA_G4.replace("<<'METRICAS_SDD'\n" + G4 + "\nMETRICAS_SDD", "<<-'FIN'\n\t" + G4 + "\n\tFIN"),
     ], [
         "```bash\ngh pr comment 54 --body \"$(cat .tareas/VIC-54/g4-ronda-1.md)\"\n```",
         "```bash\ngh pr comment 54 --body-file .tareas/VIC-54/g4-ronda-1.md\n```",
@@ -143,6 +149,13 @@ CASOS = {
         BUENA_G4.replace("corregidos 2", "corregidos 1"),
         BUENA_G4.replace("METRICAS_SDD\n}", "OTRO\n}"),
         BUENA_G4 + "\nY luego lo marco como listo.",
+        # El hook bloquea cualquier echo delante de --body-file -, también uno vacío.
+        BUENA_G4.replace("g4-ronda-1.md; cat", "g4-ronda-1.md; echo; cat"),
+        BUENA_G4.replace("g4-ronda-1.md; cat", "g4-ronda-1.md\necho\ncat"),
+        # Sin <<- el delimitador sangrado no cierra el heredoc; con <<- solo se quitan tabuladores.
+        BUENA_G4.replace("\nMETRICAS_SDD\n}", "\n\tMETRICAS_SDD\n}"),
+        BUENA_G4.replace("<<'METRICAS_SDD'\n" + G4 + "\nMETRICAS_SDD", "<<-'FIN'\n" + G4 + "\n  FIN"),
+        BUENA_G4.replace("<<'METRICAS_SDD'\n" + G4 + "\nMETRICAS_SDD", "<<-FIN\n\t" + G4 + "\n\tFIN"),
     ]),
     "hook-ready-cancelado": (bloqueo("ready-check-cancelado", GH, checks="checks-sdd (gh run rerun 9876)"), [
         "ORDEN: gh run rerun 9876",
