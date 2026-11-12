@@ -60,4 +60,4 @@ Propón pasar a especificar (`sdd-spec`) cuando una capacidad concreta tenga:
 - casos límite principales identificados;
 - ninguna pregunta bloqueante abierta.
 
-El resto del producto puede seguir en descubrimiento (D03). La persona mueve la issue a *Discovery* o la deja en *Inbox*; tú no tocas Linear.
+El resto del producto puede seguir en descubrimiento (D03). La persona mueve la issue a *Discovery* o la deja en *Inbox*; tú solo puedes comentarla.

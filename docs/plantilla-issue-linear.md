@@ -2,7 +2,7 @@
 
 Las issues viven en Linear, no en GitHub (ADR-0003), así que esta plantilla no va en el repo del proyecto. Se configura una vez en Linear, en los ajustes del team → *Templates* → nueva plantilla de issue, y se pega el bloque de abajo como descripción.
 
-La issue la escribes tú. El agente solo la lee: `sdd-plan` comprueba que está en *Ready*, que enlaza una spec que está en `main` y qué AC entran en la entrega.
+La issue la escribes tú. El agente la lee y, como mucho, la comenta (no cambia su estado, su descripción ni sus etiquetas; lo bloquea el hook `guarda-linear.py`): `sdd-plan` comprueba que está en *Ready*, que enlaza una spec que está en `main` y qué AC entran en la entrega.
 
 ---
 

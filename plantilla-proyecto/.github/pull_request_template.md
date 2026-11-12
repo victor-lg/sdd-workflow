@@ -7,7 +7,7 @@ Se fusiona solo por squash: el título será el commit de `main`. Sin menciones 
 
 ## Por qué existe este cambio
 
-Fixes VIC-<N> <!-- Sustituye <N> por el número de la issue. "Part of VIC-<N>" si no es el último PR de la entrega. -->
+Fixes VIC-<N> <!-- Sustituye <N> por el número de la issue. "Part of VIC-<N>" si no es el último PR de la entrega; "Refs VIC-<N>" si la issue no debe cerrarse al fusionar. -->
 
 ## Plan y progreso
 
