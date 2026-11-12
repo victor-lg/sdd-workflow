@@ -453,7 +453,7 @@ def check_convenciones(inf: Informe, rama: str, titulo: str, cuerpo_pr: str) -> 
                     if l.strip() and not l.lstrip().startswith("#")), "")
     m_enl = RE_ENLACE.match(primera)
     if not m_enl:
-        inf.error("convenciones", f"la descripción del PR debe empezar por `Fixes {CLAVE_ISSUE}-N`, `Part of {CLAVE_ISSUE}-N` o `Refs {CLAVE_ISSUE}-N` (decisión 4 de M11); empieza por `{primera[:80]}`.")
+        inf.error("convenciones", f"la descripción del PR debe empezar por `Fixes {CLAVE_ISSUE}-N`, `Part of {CLAVE_ISSUE}-N` o `Refs {CLAVE_ISSUE}-N` (decisión 4 de M11); " + (f"empieza por `{primera[:80]}`." if primera else "está vacía."))
     elif m_rama and m_enl.group(1) != m_rama.group(2):
         inf.aviso("convenciones", f"la descripción enlaza {CLAVE_ISSUE}-{m_enl.group(1)} y la rama es de {CLAVE_ISSUE}-{m_rama.group(2)}.")
 
@@ -462,7 +462,7 @@ def check_convenciones(inf: Informe, rama: str, titulo: str, cuerpo_pr: str) -> 
 
 def check_autoria(inf: Informe, titulo: str, cuerpo_pr: str, mensajes: list[str]) -> None:
     if RE_AUTORIA.search(titulo) or RE_AUTORIA.search(cuerpo_pr):
-        inf.error("autoria", "la descripción del PR menciona a Claude (`Co-Authored-By` o \"Generated with\"). Quítalo (ADR-0007).")
+        inf.error("autoria", "el título o la descripción del PR mencionan a Claude (`Co-Authored-By` o \"Generated with\"). Quítalo (ADR-0007).")
     n = sum(1 for m in mensajes if RE_AUTORIA.search(m))
     if n:
         inf.error("autoria", f"{n} commit(s) del PR mencionan a Claude (`Co-Authored-By` o \"Generated with\"). Reescribe sus mensajes (ADR-0007).")
@@ -492,9 +492,10 @@ def check_historial(inf: Informe, ficheros: dict[str, str]) -> None:
 
 # --- Cabecera YAML de los ADR (M7) ----------------------------------------
 
-def elementos(texto: str, en_linea: bool) -> list[str]:
-    """Elementos de una lista YAML sencilla, hasta un comentario `#` fuera de comillas."""
-    partes, actual, comilla = [], "", ""
+def elementos(texto: str, en_linea: bool) -> tuple[list[str], bool]:
+    """Elementos de una lista YAML sencilla, hasta un comentario `#` fuera de comillas,
+    y si la lista en línea se cierra con `]` en este texto."""
+    partes, actual, comilla, cerrada = [], "", "", False
     for i, c in enumerate(texto):
         if comilla:
             actual += c
@@ -508,11 +509,12 @@ def elementos(texto: str, en_linea: bool) -> list[str]:
             partes.append(actual)
             actual = ""
             if c == "]":
+                cerrada = True
                 break
         else:
             actual += c
     partes.append(actual)
-    return [p.strip() for p in partes if p.strip()]
+    return [p.strip() for p in partes if p.strip()], cerrada
 
 
 def entre_comillas(valor: str) -> bool:
@@ -523,14 +525,19 @@ def refs_sin_comillas(texto: str) -> list[str]:
     if not texto.startswith("---"):
         return []
     fin = texto.find("\n---", 3)
-    malas = []
+    malas, abierta = [], False
     for linea in texto[3:fin if fin >= 0 else None].splitlines():
         m_linea = re.match(r"^[\w-]+:\s*\[(.*)$", linea)
         m_bloque = re.match(r"^\s*-\s+(.*)$", linea)
-        if m_linea:
-            valores = elementos(m_linea.group(1), en_linea=True)
+        if abierta:
+            # Continuación de una lista en línea repartida en varias líneas.
+            valores, cerrada = elementos(linea, en_linea=True)
+            abierta = not cerrada
+        elif m_linea:
+            valores, cerrada = elementos(m_linea.group(1), en_linea=True)
+            abierta = not cerrada
         elif m_bloque:
-            valores = elementos(m_bloque.group(1), en_linea=False)[:1]
+            valores = elementos(m_bloque.group(1), en_linea=False)[0][:1]
         else:
             continue
         malas += [v for v in valores if not entre_comillas(v)]

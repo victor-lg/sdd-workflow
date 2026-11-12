@@ -136,7 +136,9 @@ class TestConvenciones(unittest.TestCase):
         self.assertEqual(len(inf.errores), 1)
 
     def test_descripcion_vacia_falla(self):
-        self.assertEqual(len(self.comprobar(cuerpo="").errores), 1)
+        inf = self.comprobar(cuerpo="")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("está vacía", inf.errores[0])
 
     def test_id_distinto_de_la_rama_avisa(self):
         inf = self.comprobar(cuerpo=cuerpo_plantilla("Part of VIC-13"))
@@ -266,7 +268,8 @@ class TestCabeceraAdr(unittest.TestCase):
         for cabecera in ["referencias: []", 'referencias: ["PR #12", "SPEC-CALC-001"]',
                          "referencias: ['PR #12']", 'referencias: ["a, b", "c"]  # comentario',
                          'referencias:\n  - "PR #12"\n  - \'VIC-3\'  # comentario',
-                         "sustituye: null", 'modifica:\n  - "docs/x.md §7, convenciones"']:
+                         "sustituye: null", 'modifica:\n  - "docs/x.md §7, convenciones"',
+                         'referencias: [\n  "PR #12",  # comentario\n  "VIC-3"\n]\nsustituye: null']:
             with self.subTest(cabecera=cabecera):
                 self.assertEqual(ejecutar(checks.check_adr, {"docs/adr/0002-x.md": adr(cabecera)}).errores, [])
 
@@ -288,7 +291,9 @@ class TestCabeceraAdr(unittest.TestCase):
                  "referencias: [SPEC-CALC-001]": "SPEC-CALC-001",
                  "referencias:\n  - PR #12": "PR",
                  'referencias:\n  - "VIC-3"\n  - docs/convenciones.md': "docs/convenciones.md",
-                 'referencias: ["PR #12" y más]': '"PR #12" y más'}
+                 'referencias: ["PR #12" y más]': '"PR #12" y más',
+                 'referencias: [\n  "VIC-3",\n  PR #12\n]': "PR",
+                 'referencias: ["VIC-3",\n  SPEC-CALC-001]': "SPEC-CALC-001"}
         for cabecera, mala in casos.items():
             with self.subTest(cabecera=cabecera):
                 inf = ejecutar(checks.check_adr, {"docs/adr/0002-x.md": adr(cabecera)})
@@ -381,6 +386,22 @@ class TestPuntaAPunta(unittest.TestCase):
         for check in ["**convenciones:** la rama", "**convenciones:** el título",
                       "**autoria:** 1 commit(s)", "**adr:**"]:
             self.assertIn(check, r.stdout)
+
+    def test_avisa_del_historial_solo_en_las_specs_que_cambian(self):
+        (self.repo / "docs" / "specs").mkdir(parents=True)
+        intacta = SPEC_CON_HISTORIAL.replace("SPEC-CALC-003", "SPEC-CALC-004")
+        (self.repo / "docs" / "specs" / "SPEC-CALC-004-x.md").write_text(intacta, encoding="utf-8")
+        self.git("add", "docs/specs")
+        self.git("commit", "-q", "-m", "spec: base")
+        self.git("switch", "-q", "main")
+        self.git("merge", "-q", "--ff-only", "adr/vic-7-0002-x")
+        self.git("switch", "-q", "adr/vic-7-0002-x")
+        (self.repo / "docs" / "specs" / "SPEC-CALC-003-x.md").write_text(SPEC_CON_HISTORIAL, encoding="utf-8")
+        self.git("add", "docs/specs")
+        r = self.correr("adr: decide x", 'referencias: ["PR #12"]')
+        historial = [l for l in r.stdout.splitlines() if "**historial:**" in l]
+        self.assertEqual(len(historial), 1, r.stdout)
+        self.assertIn("SPEC-CALC-003-x.md", historial[0])
 
     def test_sin_rama_ni_titulo_no_comprueba_convenciones(self):
         r = self.correr("adr: decide x", 'referencias: ["PR #12"]', PR_BRANCH="", PR_TITLE="",
