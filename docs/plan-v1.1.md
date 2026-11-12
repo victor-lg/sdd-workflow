@@ -94,7 +94,7 @@
 
 **Por qué ahora:** es lo que más cambia tu día a día. Depende de los controles (bloques 2–3) y de la revisión fiable (bloque 4).
 
-**ADR-0008 del workflow (modifica P03, G6, N4 y ADR-0006):**
+**ADR-0009 del workflow (modifica P03, G6, N4 y ADR-0006):**
 - **Tu papel:**
   - la entrevista y la spec (G1);
   - las decisiones de producto y las lecturas de la spec (M15);
@@ -116,7 +116,7 @@
 - **M4 y M20:** "Refs" por defecto con prueba manual; una sesión por PR también en entregas partidas, con el estado en `.tareas/`. Los subagentes se lanzan solo por un motivo explícito: explorar, verificar de forma independiente o relevar una sesión larga ("delegar por un motivo", de Gentle-AI).
 - **M28:** la plantilla de la issue de Linear lleva el contrato: alcance, fuera de alcance, cuándo está hecho, ficheros permitidos y qué hacer si se bloquea.
 
-**Hecho cuando:** el ADR-0008 está aceptado, el ruleset y CODEOWNERS de la calculadora están ajustados (eso lo haces tú) y una entrega completa pasa sin copiar nada desde este chat.
+**Hecho cuando:** el ADR-0009 está aceptado, el ruleset y CODEOWNERS de la calculadora están ajustados (eso lo haces tú) y una entrega completa pasa sin copiar nada desde este chat.
 
 ## Bloque 6 — Skills de producto y plantilla
 
@@ -138,7 +138,7 @@
 
 **Por qué al final:** depende de tener tests con dientes (para "subir si falla") y de las evaluaciones del workflow (para comprobar otro ejecutor).
 
-**ADR-0009 del workflow (modifica ADR-0002):**
+**ADR-0010 del workflow (modifica ADR-0002):**
 - **M29:** una tabla en un solo fichero con qué modelo y qué esfuerzo para cada tarea, y la regla de empezar barato y subir si fallan los tests. Cambiar de modelo es cambiar una línea.
 - **M30:** piloto de portabilidad con OpenCode y un modelo de Go, en contenedor, con los mismos ficheros y repitiendo N1–N8.
 - **Perfil Go** (mejora #10 del primer recorrido): se retoma dentro de este bloque.
