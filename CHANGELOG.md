@@ -4,6 +4,19 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **CI de seguridad, Dependabot y formato de los commits en la plantilla (ADR-0008, VIC-18, PR 3 de 4; plugin 1.4.1):**
+  - `plantilla-proyecto/.github/workflows/seguridad.yml`: gitleaks, osv-scanner y Semgrep en cada PR, con las versiones y sumas del registro y la configuración de los escáneres tomada de `main`; osv-scanner, además, el día 1 de cada mes sobre `main` (tarea mensual, M38).
+    - gitleaks mira solo la historia que se fusionaría (por defecto recorría todas las ramas), ve lo que añade un merge por su cuenta (`--diff-merges=remerge`) y no respeta los `.gitattributes` de la rama (`* diff` en `.git/info/attributes`): las tres cosas, comprobadas con el binario.
+    - osv-scanner, con `--no-ignore` (sin él no miraba un fichero de bloqueo en una ruta de `.gitignore`, comprobado), `--config` de `main` (no lee los `osv-scanner.toml` de cada carpeta), `--allow-no-lockfiles` y sin análisis de llamadas.
+    - Semgrep, en la imagen fijada por digest, sin los `.semgrepignore` de la rama.
+  - `plantilla-proyecto/.github/dependabot.yml`: acciones de GitHub y npm, una vez al mes, agrupado y con 7 días de espera. Dependabot no actualiza las imágenes de un `container:` (comprobado en su código): la imagen de Semgrep y los binarios se suben a mano, y la comparación con Renovate queda abierta con M6.
+  - `checks.py`:
+    - check `commits` (REG-31, REG-32): el mensaje de cada commit del PR, sin los merges, sigue `docs/convenciones.md` §4, con `Refs: VIC-N` en el pie. La misma función corre como hook `commit-msg` en `lefthook.json` (`checks.py --mensaje`), y el check `lefthook` avisa si deja de hacerlo;
+    - `R2_CONTROLES`: la configuración de lefthook, gitleaks, Semgrep, osv-scanner, `.gitattributes` y ESLint es R2 (ADR-0008, §5; también en la línea base, §6);
+    - excepción de Dependabot: si el autor del PR y de todos sus commits es Dependabot y solo cambia dependencias o workflows, no comprueba convenciones ni formato de los commits, no pide AC y toma R2 si no marca nivel. `sdd.yml` le pasa el autor del PR (`PR_AUTHOR`).
+  - Caso de evaluación `hook-commit-msg-formato`: tras el rechazo del formato, el agente repite el commit con el mensaje corregido.
+  - Tests: ficheros sensibles, formato de los commits, Dependabot y punta a punta en `tests/test_checks.py`; `commit-msg` con lefthook de verdad y la orden de gitleaks de la CI en `tests/test_lefthook_gitleaks.py` (se saltan sin los binarios).
+  - `docs/herramientas.md`, la guía de instalación (checks requeridos, Dependabot, digest de Semgrep), `docs/convenciones.md`, el inventario (REG-31, REG-32), `AGENTS.md` y `README.md` de la plantilla, al día.
 - **lefthook y gitleaks en la plantilla (ADR-0008, VIC-18, PR 2 de 4; plugin 1.4.0):**
   - ADR-0008 pasa a Aceptado (merge del PR #29, 2026-11-12), y `docs/herramientas.md` anota esa fecha como la de aprobación de las herramientas del bloque 3.
   - `plantilla-proyecto/lefthook.json`: gitleaks sobre lo preparado antes de cada commit (`--redact`, `--ignore-gitleaks-allow`), con `assert_lefthook_installed` y `no_auto_install`, que impide que lefthook reinstale hooks al ejecutarse. En JSON, para que la CI lo lea sin dependencias.

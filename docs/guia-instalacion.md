@@ -62,9 +62,10 @@ Si ya tienes tu cuenta en *Preferences → Accounts* de Fork, usa esa. Y si te p
 ### A3. Repo plantilla
 
 1. Copia el **contenido** de `plantilla-proyecto/`, ficheros ocultos incluidos (`.github`, `.gitignore`), a una carpeta nueva, por ejemplo `Documentos\sdd-template`.
-2. **Acción de checkout fijada por SHA** (ya hecho: v7.0.1). Para actualizarla, cambia el SHA y el comentario de `.github/workflows/sdd.yml` a la vez.
-3. Publícala igual que en A2: repo privado y vacío `sdd-template` en github.com; después *Init*, commit, remoto `origin` y *push* de `main` desde Fork.
-4. En github.com → *Settings* del repo → marca **Template repository**.
+2. **Acción de checkout fijada por SHA** (ya hecho: v7.0.1). Para actualizarla, cambia el SHA y el comentario de `.github/workflows/sdd.yml` y `seguridad.yml` a la vez; desde VIC-18, Dependabot lo propone en un PR. Los binarios y la imagen de `seguridad.yml` (gitleaks, osv-scanner y Semgrep) se suben a mano, con sus sumas de `docs/herramientas.md`.
+3. **Imagen de Semgrep** (una vez, con Docker fuera del sandbox): `docker buildx imagetools inspect semgrep/semgrep:1.185.0` da como `Digest` el de `seguridad.yml` (`sha256:67518c17…a0d`). El agente lo leyó de la API de Docker Hub sin poder comprobarlo; si no coincide, para y avisa.
+4. Publícala igual que en A2: repo privado y vacío `sdd-template` en github.com; después *Init*, commit, remoto `origin` y *push* de `main` desde Fork.
+5. En github.com → *Settings* del repo → marca **Template repository**.
 
 ### A4. Repo del primer recorrido
 
@@ -87,7 +88,9 @@ En ese repo:
     - *Require review from Code Owners*;
   - *Require approval of the most recent reviewable push*: el último push lo aprueba alguien distinto de quien lo hizo;
   - *Bypass list*: solo el rol de administrador (tú), en modo **"Allow for pull requests only"**: ni siquiera tú empujas directo a `main`.
-  - El check requerido `checks-sdd` se añade en el bloque C, cuando GitHub ya lo conoce.
+  - Los checks requeridos (`checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`) se añaden en el bloque C, cuando GitHub ya los conoce.
+- **Settings → Code security** (M38): activa *Dependabot alerts*. Las actualizaciones de versión las abre Dependabot solo, con `.github/dependabot.yml` (una vez al mes, agrupadas). Sus PR tocan dependencias: son R2 y los apruebas tú. Si activas también *Dependabot security updates*, abre además un PR por vulnerabilidad, sin esperar al mes.
+- **La tarea mensual** de osv-scanner (`seguridad.yml`, el día 1) corre sola sobre `main`; si encuentra algo, GitHub te avisa por correo de la ejecución fallida. Para lanzarla a mano: *Actions → seguridad → Run workflow*.
 
 ### A5. Cuenta de máquina del agente (ADR-0005)
 
@@ -298,7 +301,7 @@ sudo install -m 755 gitleaks /usr/local/bin/gitleaks
 
 **Comprobación:** `lefthook version` da `2.2.2` y `gitleaks version`, `8.30.1`. No los muevas después. El hook busca lefthook en este orden: `LEFTHOOK_BIN`, el `PATH`, la ruta guardada al instalar y, si nada funciona, binarios del árbol de trabajo (`node_modules/`) y gestores como `yarn`, `uv run` o `mise`, que leen configuración del repo. gitleaks lo busca por el `PATH`. Por eso ninguna carpeta del `PATH` anterior a `/usr/local/bin` puede ser una que el agente escriba. En WSL con nvm suelen ir antes `~/.local/bin` y la carpeta de nvm: desde Bash el sandbox no deja escribirlas, y escribir fuera del proyecto con Write pide permiso; además, `guarda-saltos.py` bloquea escribir ficheros llamados `lefthook` o `gitleaks` y los perfiles de shell. Comprueba con `which -a lefthook gitleaks` que solo salen los de `/usr/local/bin`, y con `ls ~/.local/bin` que ahí no hay ninguno.
 
-**Si cambia `lefthook.json` en `main`** (por ejemplo, el PR 3 añade `commit-msg`), repite la instalación en un clon nuevo: con `no_auto_install`, lefthook no reinstala los hooks solo.
+**Si cambia `lefthook.json` en `main`** (por ejemplo, el PR 3 de VIC-18 añade `commit-msg`), repite la instalación en un clon nuevo: con `no_auto_install`, lefthook no reinstala los hooks solo. `commit-msg` lanza `python3 .github/sdd/checks.py`, así que necesita `python3` en el `PATH` (en Ubuntu viene instalado).
 
 **En cada proyecto,** también fuera de Claude Code y siempre en un clon nuevo de `main`:
 
@@ -336,8 +339,8 @@ Pídele a Claude, dentro de la sesión:
 **Comprobación:**
 
 1. El push y el PR funcionan desde el sandbox: GitHub está en la lista blanca y las credenciales de `gh` sirven.
-2. En el PR corre el check `checks-sdd` y pasa.
-3. Ahora que GitHub lo conoce, añade `checks-sdd` al ruleset: *Require status checks to pass* → `checks-sdd`.
+2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, y pasan.
+3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`. Apunta en `docs/herramientas.md` del workflow (PR R2) lo que tardó cada job de `seguridad`: hoy son estimaciones.
 4. Pide a Claude que fusione el PR: GitHub lo rechaza (N4).
 5. Tú lo apruebas y lo fusionas desde el navegador.
 6. Opcional (N5): pide a Claude que cree `.github/workflows/x.yml` y lo empuje en otra rama. El push debe fallar porque el token no tiene `workflow`. Borra después la rama local.
@@ -486,7 +489,7 @@ Todo está en la página del PR, repartido en sus pestañas. En GitHub Mobile es
 
 1. **AC.** En **Conversation**, la descripción → "Qué comportamiento cubre". Los AC deben ser los de la issue de Linear ("AC de esta entrega").
 2. **Tests que cambian.** En la descripción → "Guía para el revisor humano" → "Tests existentes que cambian". Compruébalo en **Files changed**: las líneas rojas que quiten una comprobación (`expect`, `assert`) sin otra verde equivalente son señal de alarma. El panel lateral de ficheros muestra si se toca algo fuera de `tests/`.
-3. **CI.** En el recuadro de merge, al final de Conversation, o en la pestaña **Checks**: `checks-sdd` y `tests` en verde.
+3. **CI.** En el recuadro de merge, al final de Conversation, o en la pestaña **Checks**: `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep` y `tests` en verde.
 4. **Revisión de la IA.** En la descripción → "Revisión IA (G4)". No debe quedar ningún hallazgo "debe corregirse" sin corregir. Si hubo cambios tras la última revisión, están listados.
 5. **Dónde mirar.** En la guía del revisor: cada punto cita un fichero y una función. Ábrelo en Files changed y busca el nombre con Ctrl+F. En R1, un vistazo; en R2, lectura de verdad.
 6. **Evidencia.** En la sección "Validación": tests ejecutados, repeticiones, mutaciones detectadas, capturas o prueba en el dispositivo.

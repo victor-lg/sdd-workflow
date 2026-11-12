@@ -1,0 +1,129 @@
+# Escáneres de seguridad del workflow SDD + IA v1.1 (ADR-0008; M33 y M38).
+#
+# En cada PR contra `main`: gitleaks, osv-scanner y Semgrep. El día 1 de cada mes,
+# osv-scanner sobre `main` (tarea mensual): si encuentra algo, la ejecución falla y
+# GitHub avisa por correo. Los nombres de los jobs son los checks que se marcan como
+# requeridos en la regla de `main`. El agente no puede modificar este fichero: su token
+# no tiene el permiso `workflow` (ADR-0005, caso N5).
+#
+# Cada escáner usa la configuración de `main`, no la del PR: así un PR no puede silenciar
+# sus propios hallazgos. Un cambio en esa configuración lo marca R2 checks.py y vale
+# después del merge.
+#
+# Versiones y sumas: las de docs/herramientas.md del workflow. Dependabot sube la acción
+# de checkout, pero no los binarios ni la imagen de Semgrep: esos se suben a mano, en un
+# PR R2 que cambia también el registro.
+
+name: seguridad
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seguridad-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # La configuración de los escáneres sale de aquí: `main` en un PR, la propia rama en la
+  # tarea mensual.
+  BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD' }}
+  # Git no sustituye objetos con refs/replace al leer la historia.
+  GIT_NO_REPLACE_OBJECTS: "1"
+
+jobs:
+  gitleaks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Fijada por SHA (v7.0.1, 2026-07-17), igual que en sdd.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configuración de gitleaks de main
+        run: |
+          for f in .gitleaks.toml .gitleaksignore; do
+            rm -f "$f"
+            if git cat-file -e "$BASE:$f" 2>/dev/null; then git show "$BASE:$f" > "$f"; fi
+          done
+          # Un atributo `-diff` o `binary`, en cualquier .gitattributes, saca el contenido
+          # del diff que lee gitleaks. info/attributes manda sobre todos y lo devuelve.
+          echo '* diff' >> .git/info/attributes
+
+      - name: Instalar gitleaks 8.30.1
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSLO https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks_8.30.1_linux_x64.tar.gz" | sha256sum -c -
+          tar xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
+
+      # La historia de lo que se fusionaría (HEAD), no la de todas las ramas, y lo que
+      # añade un merge por su cuenta (remerge), que `git log -p` no enseña.
+      - name: gitleaks sobre la historia del PR
+        run: >-
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner --ignore-gitleaks-allow
+          --log-opts="--diff-merges=remerge HEAD" .
+
+  osv-scanner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Con --config, osv-scanner no lee los osv-scanner.toml de cada carpeta.
+      - name: Configuración de osv-scanner de main
+        run: |
+          if git cat-file -e "$BASE:osv-scanner.toml" 2>/dev/null; then
+            git show "$BASE:osv-scanner.toml" > "$RUNNER_TEMP/osv-scanner.toml"
+          else
+            : > "$RUNNER_TEMP/osv-scanner.toml"
+          fi
+
+      - name: Instalar osv-scanner 2.7.1
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSL -o osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64
+          echo "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8  osv-scanner" | sha256sum -c -
+          chmod +x osv-scanner
+
+      # --no-ignore: sin él no mira lo que cubre .gitignore, aunque esté versionado.
+      # --no-call-analysis: el análisis de llamadas de Rust ejecuta los scripts de build.
+      - name: osv-scanner sobre los ficheros de bloqueo
+        run: >-
+          "$RUNNER_TEMP/osv-scanner" scan source -r --no-ignore --allow-no-lockfiles
+          --no-call-analysis=all --config "$RUNNER_TEMP/osv-scanner.toml" .
+
+  semgrep:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      # semgrep/semgrep:1.185.0, fijada por el digest del índice de la imagen.
+      image: semgrep/semgrep:1.185.0@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configuración de Semgrep de main
+        run: |
+          find . -path ./.git -prune -o -name .semgrepignore ! -type d -exec rm -f {} +
+          rm -f .semgrepignore
+          if git cat-file -e "$BASE:.semgrepignore" 2>/dev/null; then git show "$BASE:.semgrepignore" > .semgrepignore; fi
+
+      # --disable-nosem: no respeta los comentarios `nosemgrep`.
+      - name: Semgrep
+        run: semgrep scan --config p/default --metrics=off --error --disable-nosem

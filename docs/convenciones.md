@@ -129,7 +129,7 @@ Una convención que no se comprueba se acaba incumpliendo (M25). Se comprueba en
 
 | Qué | Dónde | Bloque |
 | --- | --- | --- |
-| Formato del mensaje de commit | hook `commit-msg` con lefthook (en local) | 3 (M33) |
+| Formato del mensaje de commit | hook `commit-msg` con lefthook (en local) y CI (`checks.py`, `commits`), con la misma función | 3 (M33) |
 | Nombre de la rama con tipo e ID | CI (`checks.py`) | 2 (M11) |
 | Título del PR y `Fixes`/`Part of`/`Refs` con ID | CI (`checks.py`) | 2 (M11) |
 | Sin `Co-Authored-By` ni "Generated with" de Claude en el PR y sus commits | CI (`checks.py`) | 2 (REG-34) |
@@ -149,7 +149,9 @@ Una convención que no se comprueba se acaba incumpliendo (M25). Se comprueba en
 
 Aplicada en el PR de VIC-16 (ADR-0007): `plantilla-proyecto/AGENTS.md`, la plantilla de PR, `sdd-plan`, `sdd-spec`, `sdd-implement`, `sdd-review`, el lector de `sdd-metricas.py` y la guía de instalación. `docs/glosario.md` no necesitaba cambios.
 
-`checks.py` comprueba ramas, títulos y enlaces desde VIC-17 (M11, bloque 2).
+`checks.py` comprueba ramas, títulos y enlaces desde VIC-17 (M11, bloque 2), y el formato de los commits desde el PR 3 de VIC-18: el título como el del PR, la línea en blanco tras él y el pie con `Refs: VIC-N` y, si van, `Spec:` y `BREAKING CHANGE:` en ese orden. No mira los merges; el hook deja pasar el título que Git pone a un merge.
+
+**Excepción:** los PR de Dependabot (M38) no siguen estas convenciones. `checks.py` no las comprueba si el autor del PR y el de todos sus commits es Dependabot y el PR solo cambia dependencias o workflows; nunca por el nombre de la rama.
 
 Pendiente:
 - los repos de cada proyecto, al actualizar su plantilla.

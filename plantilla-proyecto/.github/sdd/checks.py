@@ -19,16 +19,24 @@ Comprueba:
                 con el ID (docs/convenciones.md del workflow).
   autoria       REG-34: ni el PR ni sus commits mencionan a Claude
                 (`Co-Authored-By`, "Generated with"; ADR-0007).
+  commits       REG-31 y REG-32: el mensaje de cada commit del PR (sin los merges) sigue
+                el formato de `docs/convenciones.md` §4 del workflow, con `Refs: VIC-N` en el pie.
   historial     M39: avisa si una spec que cambia lleva historial en la cabecera.
   adr           M7: las listas de la cabecera YAML de los ADR que cambian van
                 entre comillas (un `#` sin comillas se lee como comentario).
   lefthook      ADR-0008: la única configuración de lefthook es `lefthook.json`, solo con
                 las claves que no amplían lo que se ejecuta, y no se quita si `main` la tiene.
 
+Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
+`es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
+
 Uso local:
   PR_BODY="$(cat cuerpo.md)" PR_TITLE="feat(calculo): …" PR_BRANCH="feat/vic-12-calculo" \
     python3 .github/sdd/checks.py --base origin/main
 Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta.
+
+Como hook `commit-msg` de lefthook, solo el formato del mensaje:
+  python3 .github/sdd/checks.py --mensaje .git/COMMIT_EDITMSG
 """
 
 from __future__ import annotations
@@ -59,6 +67,15 @@ CAMPOS_OBLIGATORIOS = ["id", "titulo", "estado", "version", "riesgo"]
 # Disparadores de R2 del workflow (linea-base §6). `*` también cruza carpetas.
 R2_RUTAS = [".github/*", ".claude/*", "AGENTS.md", "CLAUDE.md",
             "*/migrations/*", "migrations/*"]
+# Configuración de los controles (ADR-0008, `docs/herramientas.md` del workflow): con ella se
+# silencia un escáner o un hook de Git. Sin distinguir mayúsculas. La de los escáneres de la CI
+# solo vale tras el merge (la CI usa la de `main`); la de lefthook y ESLint, ya en la rama.
+R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
+                ".gitleaks.toml", ".gitleaksignore",
+                ".gitattributes", "*/.gitattributes",
+                ".semgrepignore", "*/.semgrepignore",
+                "osv-scanner.toml", "*/osv-scanner.toml",
+                "eslint.config.*", "*/eslint.config.*"]
 MANIFIESTOS = {
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb",
     "requirements.txt", "pyproject.toml", "poetry.lock", "uv.lock", "Pipfile", "Pipfile.lock",
@@ -114,6 +131,7 @@ LEFTHOOK_HOOKS = {"pre-commit", "commit-msg"}
 LEFTHOOK_CLAVES_HOOK = {"parallel", "piped", "jobs"}
 LEFTHOOK_CLAVES_JOB = {"name", "run", "glob", "exclude", "file_types", "fail_text"}
 RE_GITLEAKS_ANTES = re.compile(r'"run"\s*:\s*"gitleaks git --pre-commit')
+RE_FORMATO_ANTES = re.compile(r'"run"\s*:\s*"python3 \.github/sdd/checks\.py --mensaje ')
 
 RE_TITULO_HISTORIAL = re.compile(r"^#+\s*(?:\d+\.\s*)?(historial|registro de cambios|cambios|changelog)\b", re.I | re.M)
 
@@ -305,14 +323,16 @@ def citas_en_tests(raiz: Path) -> dict[tuple[str, str], list[str]]:
 
 def check_trazabilidad(inf: Informe, cuerpo_pr: str, cambiados: list[str],
                        specs_base: dict[str, dict], specs_head: dict[str, dict],
-                       citas: dict[tuple[str, str], list[str]]) -> None:
+                       citas: dict[tuple[str, str], list[str]], dependabot: bool = False) -> None:
     codigo = [f for f in cambiados if es_codigo(f)]
     cubre = seccion(cuerpo_pr, "Qué comportamiento cubre")
     refs = sorted(set(RE_AC_REF.findall(cubre)))
 
     if codigo:
         if not refs:
-            if RE_NO_APLICA.search(cubre):
+            if dependabot:
+                inf.aviso("trazabilidad", "PR de Dependabot: solo cambia dependencias y no declara AC.")
+            elif RE_NO_APLICA.search(cubre):
                 inf.aviso("trazabilidad", "⚠️ el PR toca código y declara que no cubre ningún AC (`no aplica`). Comprueba que no cambia comportamiento: si lo cambia, necesita spec y AC.")
             else:
                 inf.error("trazabilidad", "el PR toca código pero no declara los AC que cubre. Escribe `AC cubiertos: SPEC-XXX-NNN/AC-NN, …` o `AC cubiertos: no aplica (motivo)`, con el motivo entre paréntesis.")
@@ -372,9 +392,12 @@ def riesgo_de(texto: str | None) -> str | None:
 def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
                  readme_base: str | None, readme_head: str | None,
                  specs_head_ficheros: dict[str, str],
-                 specs_base_ficheros: dict[str, str]) -> None:
+                 specs_base_ficheros: dict[str, str], por_defecto: str | None = None) -> None:
+    """por_defecto: el nivel que se toma si el PR no marca ninguno (solo los de Dependabot)."""
     marcados = RE_RIESGO_MARCADO.findall(seccion(cuerpo_pr, "Nivel de riesgo"))
-    if len(marcados) != 1:
+    if not marcados and por_defecto:
+        declarado = por_defecto
+    elif len(marcados) != 1:
         inf.error("riesgo", f"marca exactamente un nivel de riesgo en el PR (hay {len(marcados)}).")
         declarado = None
     else:
@@ -392,6 +415,8 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
     for f in cambiados:
         if any(fnmatch.fnmatchcase(f, p) for p in R2_RUTAS):
             subir("R2", f"`{f}` (configuración del agente, CI o migraciones)")
+        elif any(fnmatch.fnmatchcase(f.lower(), p) for p in R2_CONTROLES):
+            subir("R2", f"`{f}` (configuración de un control de seguridad)")
         elif es_manifiesto(f):
             subir("R2", f"`{f}` (dependencias)")
         elif any(fnmatch.fnmatchcase(f, p) for p in propias):
@@ -417,7 +442,8 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         if riesgo_base.get(spec):
             subir(riesgo_base[spec], f"implementa `{spec}`")
 
-    lineas = [f"- Nivel marcado en el PR: **{declarado or '—'}**",
+    lineas = [f"- Nivel marcado en el PR: **{declarado or '—'}**"
+              + (" (sin marcar: se toma el de Dependabot)" if declarado and not marcados else ""),
               f"- Nivel mínimo según lo tocado: **{minimo}**"]
     lineas += [f"  - {m}" for m in motivos]
     inf.secciones.append("### Nivel de riesgo\n\n" + "\n".join(lineas))
@@ -488,6 +514,113 @@ def check_autoria(inf: Informe, titulo: str, cuerpo_pr: str, mensajes: list[str]
 def mensajes_commits(base: str) -> list[str]:
     salida = git("log", "--format=%B%x00", f"{base}..HEAD") or ""
     return [m for m in salida.split("\x00") if m.strip()]
+
+
+# --- Formato de los commits (REG-31, REG-32) ------------------------------
+
+RE_PIE = re.compile(r"^(BREAKING CHANGE|[A-Za-z][\w-]*): ")
+RE_REFS = re.compile(rf"^Refs: {CLAVE_ISSUE}-[1-9]\d*(, {CLAVE_ISSUE}-[1-9]\d*)*$")
+RE_SPEC_PIE = re.compile(rf"^Spec: {SPEC_ID}/AC-\d{{2,3}}(, {SPEC_ID}/AC-\d{{2,3}})*$")
+ORDEN_PIE = ("Refs", "Spec", "BREAKING CHANGE")
+# Los títulos que Git pone a un merge: el hook los deja pasar. La CI no mira los merges, pero sí
+# un commit normal con ese título.
+RE_MERGE_GIT = re.compile(r"^Merge (branch|remote-tracking branch|commit|tag) ")
+TIJERA = "# ------------------------ >8 ------------------------"
+
+
+def limpiar_mensaje(texto: str) -> str:
+    """Como lo deja Git: sin comentarios `#` ni lo que va tras la línea de tijera."""
+    texto = texto.split(TIJERA, 1)[0]
+    lineas = [l.rstrip() for l in texto.splitlines() if not l.startswith("#")]
+    return "\n".join(lineas).strip("\n")
+
+
+def problemas_mensaje(texto: str, admite_merge: bool = False) -> tuple[list[str], list[str]]:
+    """(errores, avisos) del mensaje de un commit según `docs/convenciones.md` §4 del workflow."""
+    lineas = limpiar_mensaje(texto).splitlines()
+    if not lineas or not lineas[0].strip():
+        return ["el mensaje está vacío."], []
+    titulo = lineas[0]
+    if admite_merge and RE_MERGE_GIT.match(titulo):
+        return [], []
+    errores, avisos = [], []
+    m = RE_TITULO.match(titulo)
+    if not m:
+        errores.append(f"el título `{titulo[:80]}` no sigue `<tipo>(<alcance>)!: <descripción>`, con el tipo uno de {', '.join(TIPOS)}.")
+    else:
+        _, alcance, _, descripcion = m.groups()
+        if alcance and RE_ID_ISSUE.match(alcance):
+            errores.append(f"el alcance del título es el ID `{alcance}`; el alcance es la zona del código y el ID va en el pie (`Refs: {alcance.upper()}`).")
+        if len(descripcion) > LARGO_DESCRIPCION:
+            errores.append(f"la descripción del título tiene {len(descripcion)} caracteres; el máximo es {LARGO_DESCRIPCION}.")
+        if descripcion[0].isupper() or descripcion.endswith("."):
+            avisos.append("la descripción del título va en minúscula y sin punto final.")
+    if len(lineas) > 1 and lineas[1].strip():
+        errores.append("falta la línea en blanco entre el título y el cuerpo.")
+    # El pie es el último párrafo, si todas sus líneas son `Clave: valor`.
+    parrafos = "\n".join(lineas[1:]).strip("\n").split("\n\n")
+    pie = [l for l in parrafos[-1].splitlines() if l.strip()] if len(lineas) > 1 else []
+    if not pie or not all(RE_PIE.match(l) for l in pie):
+        pie = []
+    claves = [RE_PIE.match(l).group(1) for l in pie]
+    if "Refs" not in claves:
+        errores.append(f"falta el pie `Refs: {CLAVE_ISSUE}-N`, tras una línea en blanco al final del mensaje.")
+    for linea in pie:
+        if linea.startswith("Refs:") and not RE_REFS.match(linea):
+            errores.append(f"`{linea}` no sigue `Refs: {CLAVE_ISSUE}-N`.")
+        if linea.startswith("Spec:") and not RE_SPEC_PIE.match(linea):
+            errores.append(f"`{linea}` no sigue `Spec: SPEC-XXX-NNN/AC-NN`.")
+    orden = [c for c in claves if c in ORDEN_PIE]
+    if orden != sorted(orden, key=ORDEN_PIE.index):
+        errores.append(f"el pie va en este orden: {', '.join(f'`{c}`' for c in ORDEN_PIE)}.")
+    return errores, avisos
+
+
+def check_commits(inf: Informe, mensajes: list[str]) -> None:
+    """mensajes: los de los commits del PR, sin los merges."""
+    for mensaje in mensajes:
+        errores, avisos = problemas_mensaje(mensaje)
+        titulo = mensaje.strip().splitlines()[0][:80] if mensaje.strip() else ""
+        for e in errores:
+            inf.error("commits", f"«{titulo}»: {e}")
+        for a in avisos:
+            inf.aviso("commits", f"«{titulo}»: {a}")
+
+
+def commits_sin_merges(base: str) -> list[tuple[str, str]] | None:
+    """(correo del autor, mensaje) de cada commit del PR que no es un merge."""
+    salida = git("log", "--no-merges", "--format=%ae%x1f%B%x00", f"{base}..HEAD")
+    if salida is None:
+        return None
+    return [tuple(c.lstrip("\n").split("\x1f", 1)) for c in salida.split("\x00") if "\x1f" in c]
+
+
+def comprobar_mensaje(fichero: str) -> int:
+    """Hook `commit-msg` de lefthook: el mismo formato que el check `commits`."""
+    errores, avisos = problemas_mensaje(Path(fichero).read_text(encoding="utf-8", errors="replace"),
+                                        admite_merge=True)
+    for a in avisos:
+        print(f"Aviso: {a}")
+    for e in errores:
+        print(f"Error: {e}")
+    return 1 if errores else 0
+
+
+# --- Dependabot (M38) ------------------------------------------------------
+
+# Sus PR no siguen las convenciones de rama, título ni descripción. La excepción mira el autor
+# del PR (lo pone GitHub; nadie más puede abrirlo como Dependabot) y el de cada commit, nunca
+# la rama, que el agente también puede llamar `dependabot/…`; y solo vale si el PR toca
+# dependencias o workflows. El nivel de riesgo, la autoría y la configuración de lefthook se
+# comprueban igual.
+DEPENDABOT = "dependabot[bot]"
+DEPENDABOT_CORREO = "49699333+dependabot[bot]@users.noreply.github.com"
+
+
+def es_de_dependabot(autor_pr: str, commits: list[tuple[str, str]] | None, cambiados: list[str]) -> bool:
+    return (autor_pr == DEPENDABOT and bool(commits) and bool(cambiados)
+            and all(correo == DEPENDABOT_CORREO for correo, _ in commits)
+            and all(es_manifiesto(f) or f.startswith(".github/workflows/") for f in cambiados))
 
 
 # --- Historial en las specs (M39) -----------------------------------------
@@ -643,6 +776,8 @@ def check_lefthook(inf: Informe, versionados: dict[str, str] | None, texto: str 
         inf.error("lefthook", f"`{LEFTHOOK_CONFIG}`: {e} Solo valen las claves que no amplían lo que se ejecuta (ADR-0008, `docs/herramientas.md`).")
     if not errores and not RE_GITLEAKS_ANTES.search(texto or ""):
         inf.aviso("lefthook", f"⚠️ `{LEFTHOOK_CONFIG}` ya no lanza `gitleaks git --pre-commit`: sin él, nada busca secretos antes del commit. Comprueba que el cambio es a propósito.")
+    if not errores and not RE_FORMATO_ANTES.search(texto or ""):
+        inf.aviso("lefthook", f"⚠️ `{LEFTHOOK_CONFIG}` ya no comprueba el formato de los commits (`checks.py --mensaje`): lo seguirá comprobando la CI. Comprueba que el cambio es a propósito.")
 
 
 def ficheros_versionados() -> dict[str, str] | None:
@@ -662,7 +797,10 @@ def ficheros_versionados() -> dict[str, str] | None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--base", default="origin/main", help="referencia de la rama base")
+    ap.add_argument("--mensaje", metavar="FICHERO", help="solo comprueba el mensaje de commit de FICHERO (hook commit-msg)")
     args = ap.parse_args()
+    if args.mensaje:
+        return comprobar_mensaje(args.mensaje)
     raiz = Path.cwd()
     cuerpo_pr = os.environ.get("PR_BODY", "")
     inf = Informe()
@@ -683,19 +821,28 @@ def main() -> int:
     readme_head_p = raiz / "README.md"
     readme_head = readme_head_p.read_text(encoding="utf-8") if readme_head_p.exists() else None
 
+    commits = commits_sin_merges(args.base)
+    dependabot = es_de_dependabot(os.environ.get("PR_AUTHOR", ""), commits, cambiados)
+
     specs_head = cargar_specs(specs_head_ficheros)
     check_specs(inf, specs_head_ficheros)
     check_mezcla(inf, cambiados)
     check_trazabilidad(inf, cuerpo_pr, cambiados, cargar_specs(specs_base_ficheros),
-                       specs_head, citas_en_tests(raiz))
+                       specs_head, citas_en_tests(raiz), dependabot)
     check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
-                 specs_head_ficheros, specs_base_ficheros)
+                 specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None)
     check_tests(inf, args.base)
 
     rama, titulo = os.environ.get("PR_BRANCH", ""), os.environ.get("PR_TITLE", "")
-    if rama or titulo:
+    if dependabot:
+        inf.aviso("convenciones", "PR de Dependabot (autor del PR y de sus commits): no se comprueban la rama, el título, la descripción ni el formato de los commits.")
+    elif rama or titulo:
         check_convenciones(inf, rama, titulo, cuerpo_pr)
     check_autoria(inf, titulo, cuerpo_pr, mensajes_commits(args.base))
+    if commits is None:
+        inf.error("commits", "no he podido leer los commits del PR con Git.")
+    elif not dependabot:
+        check_commits(inf, [mensaje for _, mensaje in commits])
     check_historial(inf, {f: specs_head_ficheros[f] for f in cambiados if f in specs_head_ficheros})
     check_adr(inf, {f: (raiz / f).read_text(encoding="utf-8")
                     for f in cambiados if es_adr(f) and (raiz / f).is_file()})
