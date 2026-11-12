@@ -1,6 +1,6 @@
 # Inventario de reglas del workflow (M25)
 
-**Estado:** decisiones tomadas el 2026-11-08 (VIC-17, bloque 2 de `docs/plan-v1.1.md`). De lo que aquí se decide, está aplicada la frase sobre la issue en `plantilla-proyecto/AGENTS.md` y, en el plugin 1.2.0, los hooks de X-01, X-03, REG-83 y REG-49. En el 1.3.0, los de X-02, X-04, X-06, REG-04, REG-40 (pregunta antes de leer un `.env`), REG-43, REG-93 y REG-102. X-10 está diseñado, sin activar, en `docs/consentimiento-con-caducidad.md`.
+**Estado:** decisiones tomadas el 2026-11-08 (VIC-17, bloque 2 de `docs/plan-v1.1.md`). De lo que aquí se decide, está aplicada la frase sobre la issue en `plantilla-proyecto/AGENTS.md` y, en el plugin 1.2.0, los hooks de X-01, X-03, REG-83 y REG-49. En el 1.3.0, los de X-02, X-04, X-06, REG-04, REG-40 (pregunta antes de leer un `.env`), REG-43, REG-93 y REG-102. X-10 está diseñado, sin activar, en `docs/consentimiento-con-caducidad.md`. En el plugin 1.3.1, las decisiones 1 y 4 y REG-103 están en las skills y las plantillas, y `plantilla-proyecto/AGENTS.md` queda como mapa corto (ver "Poda de `AGENTS.md`").
 
 Cada regla de `plantilla-proyecto/AGENTS.md`, `plantilla-proyecto/CLAUDE.md` y las seis skills de `plugin-sdd/skills/`, con su tipo, si se ha incumplido y su destino. Las líneas citadas son las del commit `0402725`.
 
@@ -152,7 +152,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-100 | Lista exacta de lo que cambia tras la última ronda | review:50 | Mecánica | Sí: calc#16, 10 cambios sin lista (obs. 6, M8) | **CI** (nuevo: aviso; bloque 4) |
 | REG-101 | Publicar la línea `Métricas G4` en cada ronda | review:53-71 | Mecánica | No consta desde que existe (wf#15 y #16 la llevan) | **Instrucción** (`review`; el control ya está en `sdd-metricas`) |
 | REG-102 | Quitar el borrador solo sin hallazgos y con la CI en verde | review:75 | Mecánica | Sí: `checks-sdd` quedó cancelado y el agente no lo vio (calc#19, obs. 2; avisos en VIC-12) | **Hook** (`gh pr ready` comprueba los checks, M5, y además conflictos y que la rama local esté subida; sin línea «Métricas G4», pregunta) |
-| REG-103 | Los PR que abre Claude desde el navegador (workflows, `managed-settings`) pasan `sdd-review` por el agente antes de que Víctor los fusione | Regla nueva (2026-11-08); aún sin texto en `review` | Mecánica | Antes de la regla: los PR de REG-52 | **Instrucción** (`review`, por ahora) |
+| REG-103 | Los PR que abre Claude desde el navegador (workflows, `managed-settings`) pasan `sdd-review` por el agente antes de que Víctor los fusione | Regla nueva (2026-11-08); `review:12` desde el plugin 1.3.1 | Mecánica | Antes de la regla: los PR de REG-52 | **Instrucción** (`review`, por ahora) |
 
 ## Controles previstos que no tienen regla escrita
 
@@ -185,10 +185,45 @@ Aparecen en VIC-17 o en las retrospectivas, pero no en `AGENTS.md`, `CLAUDE.md` 
 
 Los PR que abre Claude desde el navegador (workflows, `managed-settings`) pasan `sdd-review` por el agente antes de que Víctor los fusione (REG-103).
 
-## Textos que faltan por alinear
+## Poda de `AGENTS.md` (plugin 1.3.1)
 
-Siguen diciendo lo anterior y no se han cambiado aquí:
+Las líneas de "Antes" son las de `plantilla-proyecto/AGENTS.md` en el commit `dccc13e`, y las de "Ahora", las de las skills del plugin 1.3.1. Las reglas de criterio que salen tienen el mismo texto en su skill o en una plantilla; si la skill no lo recoge entero, la regla se queda en `AGENTS.md` con su texto. Las mecánicas que ya tienen control se quedan como una línea que lo nombra.
 
-- **Decisión 1:** `sdd-plan:51`, `sdd-discover:63` y `docs/plantilla-issue-linear.md:5`.
-- **Decisión 4:** `AGENTS.md:53` y `sdd-plan:43`.
-- **Regla nueva:** `sdd-review`.
+| Regla | Antes | Ahora |
+| --- | --- | --- |
+| REG-01, REG-02, REG-03, REG-05, REG-06 | A:9-14 | Se quedan en "Fuentes de autoridad" (es el mapa; `context` no recoge entero REG-02, REG-05 ni REG-06) |
+| REG-04 | A:11 | Una línea que nombra el hook `guarda-linear.py` |
+| REG-07 | A:15 | `context:25` |
+| REG-08 | A:19 | Se queda en "En cualquier tarea" (`plan:17-21` no pide proponer la spec) |
+| REG-09 | A:20 | `context:17-18` |
+| REG-10 | A:21 | `implement:43,49` y `context:36-40` |
+| REG-11 | A:22 | `plan:27,46` |
+| REG-12 | A:22,45 | CI `riesgo`, nombrada en "Lo que ya comprueba una máquina"; `plan:25-35` |
+| REG-14 | A:26 | `implement:10,20-26` |
+| REG-15 | A:27 | `implement:25` y `plan:29`; la CI (`riesgo`) sube a R2 las dependencias |
+| REG-16 | A:28 | `discover:29-36` y `spec:24-28` |
+| REG-17 | A:29 | Se queda en "En cualquier tarea" |
+| REG-18 | A:45 | CI `mezcla`, nombrada |
+| REG-19 | A:30 | `implement:49` y `spec:90` |
+| REG-20, REG-21 (ADR) | A:31 | `implement:50`, `spec:39` y el comentario de `docs/adr/_plantilla-adr.md` (estado y cuándo crear un ADR) |
+| REG-22 | A:35 | CI `trazabilidad`, nombrada; `implement:32` |
+| REG-23 | A:36,56 | Se queda en "En cualquier tarea" (`implement:72` no dice "relajes controles") |
+| REG-24 a REG-27 | A:37-40 | `implement:51-53,58` |
+| REG-28 | A:41 | Se queda en "En cualquier tarea" |
+| REG-29 | A:45 | `implement:60` y `plan:41` |
+| REG-30, REG-33 | A:11,49,53 | CI `convenciones`, nombrada (con `Fixes`, `Part of` y `Refs`); `plan:40,43` |
+| REG-31 | A:48,50 | El título del PR, CI `convenciones`. El de los commits, sin control hasta M33: se queda la línea "Commits" |
+| REG-32 | A:51-52 | Línea "Commits" (sin control hasta M33) |
+| REG-34 | A:54 | CI `autoria`, nombrada |
+| REG-35 | A:55 | `plan:39` e `implement:66` |
+| REG-36 | A:56 | CI `tests`, nombrada; `implement:64` |
+| REG-37 | A:45 | `implement:61-66` |
+| REG-38, REG-39, REG-40 | A:60-62 | Se quedan en "Lo que no te corresponde" |
+| REG-42 | A:66 | Se queda, en la línea de la issue |
+| REG-43 | A:67 | Hook `guarda-gh.py`, nombrado; `plan:41,47` |
+| REG-44 | A:67 | `plan:46` e `implement:48` |
+| REG-45, REG-46 | A:68 | `implement:54,68` |
+| REG-47 | A:69 | Se queda en "En cualquier tarea" (`implement:54` solo habla de `.tareas/<ID>.md`) |
+| REG-48, REG-49 | A:70 | Se quedan, con el hook `sesion-unica.py` nombrado |
+| REG-102 | — | Hook `guarda-gh.py`, nombrado (`gh pr ready`) |
+| X-01, X-02, X-03, X-04, X-06 | — | Hooks `guarda-git.py` y `guarda-ficheros.py`, nombrados |

@@ -104,7 +104,7 @@ Spec: SPEC-CALC-003/AC-04
 ## 5. Pull requests
 
 - **Título:** el mismo formato que el título de un commit, porque al fusionar por squash es el commit de `main`. GitHub añade `(#N)` al final.
-- **Cuerpo:** la plantilla del repo (`.github/pull_request_template.md`). La primera línea útil es `Fixes VIC-N` en el último PR de una entrega y `Part of VIC-N` en los anteriores; así Linear mueve los estados.
+- **Cuerpo:** la plantilla del repo (`.github/pull_request_template.md`). La primera línea útil es `Fixes VIC-N` en el último PR de una entrega y `Part of VIC-N` en los anteriores; así Linear mueve los estados. `Refs VIC-N` enlaza la issue sin cerrarla, cuando queda una prueba después de publicar.
 - **Mensaje del squash:** en *Settings → General → Pull Requests*, *Default commit message* = **"Pull request title and commit details"**. El commit de `main` recoge entonces como cuerpo los commits de la rama, que ya siguen el formato. Es un ajuste del repo y lo haces tú (ADR-0007).
 - Un PR no mezcla spec y código; unas 400 líneas de código como máximo, sin contar tests ni lockfiles.
 

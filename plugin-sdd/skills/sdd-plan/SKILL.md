@@ -40,7 +40,7 @@ Ante la duda, elige el nivel más alto. Nunca bajes un nivel para ahorrar reviso
 2. **Rama:** desde `main` actualizado, con el formato de `docs/convenciones.md` del workflow: `<tipo>/vic-<N>-<descripcion>`, con el tipo de la etiqueta de la issue (`feat/vic-12-calculo`). Así Linear la enlaza sola. Si la entrega va en varios PR, cambia la descripción (`feat/vic-12-logica`, `feat/vic-12-interfaz`).
 3. **PR borrador,** abierto desde el principio con la plantilla (`gh pr create --draft --body-file .tareas/VIC-N/pr.md`; el hook bloquea un PR sin `--draft` o con el cuerpo en la orden):
    - título en Conventional Commits con el alcance como zona y no como ID (`feat(calculo): …`), sin menciones a Claude (ADR-0007);
-   - "Fixes <ID>" en la descripción, solo en el último PR de la entrega (en los anteriores, "Part of <ID>");
+   - "Fixes <ID>" en la descripción, solo en el último PR de la entrega (en los anteriores, "Part of <ID>"; "Refs <ID>" si la issue no debe cerrarse al fusionar, por ejemplo porque queda una prueba después de publicar);
    - un solo nivel de riesgo marcado;
    - los AC de la entrega en formato `SPEC-XXX-NNN/AC-NN` (la CI los contrasta con la spec de `main` y con los tests);
    - en "Plan y progreso", una lista de pasos verificables, proporcional al cambio. Cada paso dice qué AC cubre o qué comprueba.
@@ -48,6 +48,6 @@ Ante la duda, elige el nivel más alto. Nunca bajes un nivel para ahorrar reviso
 
 ## Lo que no haces
 
-- No modificas la spec ni la issue de Linear.
+- No modificas la spec. La issue de Linear solo la lees y, si hace falta, la comentas: su estado, su descripción y sus etiquetas los cambia la persona.
 - No empiezas a implementar en esta skill: eso es `sdd-implement`.
 - No fusionas ni pides que se salten las reglas de rama.

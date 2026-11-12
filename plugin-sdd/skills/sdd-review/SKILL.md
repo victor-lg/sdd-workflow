@@ -9,6 +9,8 @@ description: Organiza la revisión independiente G4 de un PR de spec o de códig
 
 No revisas tú: organizas la revisión para que la hagan revisores que no han visto cómo se hizo el cambio.
 
+También la organizas para los PR que abre Claude desde el navegador (los que tocan `.github/workflows/` o los ajustes gestionados, que tú no puedes escribir): pasan por esta skill antes de que la persona los fusione. Se revisan como cualquier otro PR; lo que deba corregirse lo corrige quien lo abrió, no tú.
+
 ## 1. Cuántos revisores
 
 | PR | R0 | R1 | R2 |
