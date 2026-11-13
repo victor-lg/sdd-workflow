@@ -23,6 +23,7 @@ SandboxGit con las rutas que ya deniega él (ADR-0008, §6)."""
 import errno
 import os
 import pathlib
+import stat
 import subprocess
 import sys
 import tempfile
@@ -167,21 +168,25 @@ class SandboxGit(unittest.TestCase):
     def test_marca_las_rutas_denegadas_que_no_existen(self):
         # La premisa de MarcadoresDelSandbox (ADR-0008, §6): si el sandbox deja de poner un
         # marcador vacío, la razón para no denegar commondir puede haber cambiado.
-        vistas = [RAIZ / r for r in RUTAS_MARCADAS if (RAIZ / r).exists()]
-        self.assertTrue(vistas, f"el sandbox ya no marca {RUTAS_MARCADAS}: revisa ADR-0008, §6")
-        for ruta in vistas:
-            with self.subTest(ruta=str(ruta.relative_to(RAIZ))):
-                self.assertFalse(ruta.is_dir())
-                self.assertEqual(ruta.stat().st_size, 0)
+        # Un dispositivo, no un fichero vacío que haya quedado de otra sesión (M17).
+        for nombre in RUTAS_MARCADAS:
+            with self.subTest(ruta=nombre):
+                ruta = RAIZ / nombre
+                self.assertTrue(ruta.exists(), f"el sandbox ya no marca {nombre}: revisa ADR-0008, §6")
+                info = ruta.stat()
+                self.assertTrue(stat.S_ISCHR(info.st_mode), f"{nombre} no es el marcador del sandbox")
+                self.assertEqual(info.st_size, 0)
+                with self.assertRaises(PermissionError):
+                    ruta.read_bytes()
                 self.assertIs(se_puede_escribir(ruta, False), False)
 
 
 class MarcadoresDelSandbox(unittest.TestCase):
     def test_commit_switch_y_push_con_cada_marcador(self):
         for caso, ficheros, falla_en in MARCADORES:
-            if any(c is None for c in ficheros.values()) and os.geteuid() == 0:
-                continue  # root lee aunque falte el permiso
             with self.subTest(caso=caso):
+                if any(c is None for c in ficheros.values()) and os.geteuid() == 0:
+                    self.skipTest("root lee aunque falte el permiso")
                 paso, error = simular(ficheros)
                 self.assertEqual(paso, falla_en, error)
                 if falla_en:
