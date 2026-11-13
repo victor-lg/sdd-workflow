@@ -4,6 +4,11 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Piloto de AgentShield (VIC-18, PR 4 de 4):**
+  - `ecc-agentshield` 1.6.0, una vez, en un contenedor de podman sin red, sin credenciales y con una copia de `HEAD` en solo lectura, sobre `entorno/` (y los ajustes gestionados y de usuario, renombrados a `settings.json` porque no los busca), `plugin-sdd/` y `plantilla-proyecto/`.
+  - Medido: menos de 1 s por carpeta y 46 hallazgos, ninguno real (palabras clave en inglés sin contexto). **Descartada**; pasa a "Evaluadas y no aprobadas" en `docs/herramientas.md`.
+  - Queda como seguimiento comprobar si el agente puede reescribir `~/.claude/sdd-metricas.py` (la statusline, fuera del sandbox) con Write o Edit.
+  - `docs/herramientas.md`: los tiempos de la CI se miden en el primer proyecto nuevo creado desde la plantilla, no necesariamente la calculadora.
 - **CI de seguridad, Dependabot y formato de los commits en la plantilla (ADR-0008, VIC-18, PR 3 de 4; plugin 1.4.1):**
   - `plantilla-proyecto/.github/workflows/seguridad.yml`: gitleaks, osv-scanner y Semgrep en cada PR, con las versiones y sumas del registro y la configuración de los escáneres tomada de `main`; osv-scanner, además, el día 1 de cada mes sobre `main` en `osv-mensual.yml` (tarea mensual, M38), aparte para que lanzarla a mano no cambie los checks requeridos de un PR.
     - gitleaks mira solo la historia que se fusionaría (por defecto recorría todas las ramas), ve lo que añade un merge por su cuenta (`--diff-merges=remerge`) y no respeta los `.gitattributes` de la rama (`* diff` en `.git/info/attributes`): las tres cosas, comprobadas con el binario.
