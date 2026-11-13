@@ -8,30 +8,29 @@ usuario) y el clon limpio de la persona (guía, B5).
 ReglaEnLosAjustes corre en todas partes, la CI incluida: entorno/managed-settings.json tiene
 las reglas.
 
-DenegadoConClaude lanza `claude -p` de verdad (Haiku, unos céntimos por caso) y solo corre con
-SDD_PROBAR_CLAUDE, fuera del sandbox: el agente no llega a api.anthropic.com. Lo lanza la
+DenegadoConClaude lanza `claude -p` de verdad (Haiku, unos céntimos por sesión) y solo corre
+con SDD_PROBAR_CLAUDE, fuera del sandbox: el agente no llega a api.anthropic.com. Lo lanza la
 persona en su terminal, desde su clon limpio, después de leer este fichero, con -I para que
-Python no cargue nada de la carpeta del repo:
-    SDD_PROBAR_CLAUDE=rama python3 -I tests/test_deny_claude.py -v
-    SDD_PROBAR_CLAUDE=instalados python3 -I tests/test_deny_claude.py -v
-`rama`, antes del `sudo cp`: añade con --settings las reglas deny de este clon y, como
-contraprueba, comprueba que con el mismo arranque y sin ellas Write sí escribe en ~/.claude.
-Así la denegación solo se explica por la regla: en `-p`, lo que en una sesión interactiva
-preguntaría también consta como denegado. `instalados`, después: prueba los ajustes de
-/etc/claude-code tal como están, y antes comprueba que son los de este clon; si no, no lanza
-ninguna sesión.
+Python no cargue nada de la carpeta del repo (guía, B5, comprobación 7):
+    cd ~/proyectos/sdd-workflow-persona && SDD_PROBAR_CLAUDE=rama python3 -I tests/test_deny_claude.py -v
+`rama`, antes del `sudo cp`: añade con --settings las reglas deny de este clon y, en cada caso,
+repite la sesión sin ellas y exige que entonces la escritura sí pase (después devuelve el
+fichero a como estaba). Así la denegación solo se explica por la regla: en `-p`, lo que en una
+sesión interactiva preguntaría también consta como denegado. `instalados`, después: prueba los
+ajustes de /etc/claude-code tal como están, sin contraprueba, y antes comprueba que son los de
+este clon; si no, no lanza ninguna sesión.
 
 Cada sesión arranca sin los ajustes de usuario (ni plugins, ni hooks, ni statusline), sin Bash,
 con ~/.claude como directorio de trabajo añadido, acceptEdits y Write, Edit y NotebookEdit
-permitidos de forma explícita sobre ~/.claude/**. Si una escritura pasa, el test devuelve el
-fichero a su contenido y falla. ~/.claude.json no tiene caso: Claude Code lo reescribe mientras
-corre, y devolverlo a su contenido podría pisar sus cambios."""
+permitidos de forma explícita sobre ~/.claude/**, el mismo patrón que la deny. Si una escritura
+pasa con la regla, el test devuelve el fichero a su contenido y falla. ~/.claude.json no tiene
+caso: Claude Code lo reescribe mientras corre, y devolverlo a su contenido podría pisar sus
+cambios."""
 import json
 import os
 import pathlib
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -81,8 +80,23 @@ def lanzar(prompt, proyecto, otro, con_regla=True):
 def denegadas(resultado, herramienta, ruta):
     clave = "notebook_path" if herramienta == "NotebookEdit" else "file_path"
     return [d for d in resultado.get("permission_denials", [])
-            if d.get("tool_name") == herramienta
-            and pathlib.Path(d.get("tool_input", {}).get(clave, "")).expanduser() == ruta]
+            if d.get("tool_name") == herramienta and d.get("tool_input", {}).get(clave) == str(ruta)]
+
+
+def contenido(ruta):
+    return ruta.read_bytes() if ruta.exists() else None
+
+
+def restaurar(ruta, antes):
+    if contenido(ruta) != antes:
+        if antes is None:
+            ruta.unlink()
+        else:
+            ruta.write_bytes(antes)
+
+
+def sin_regla_instalada():
+    return not (INSTALADOS.exists() and set(REGLAS) & set(deny(INSTALADOS)))
 
 
 PROMPT = ("Es una prueba de permisos de Claude Code. Haz exactamente esto, una sola vez, y no lo "
@@ -105,7 +119,7 @@ class DenegadoConClaude(unittest.TestCase):
                                      json.loads(AJUSTES.read_text(encoding="utf-8"))):
             raise AssertionError(f"{INSTALADOS} no es el de este clon: haz el sudo cp de la guía (B5), "
                                  "reinicia las sesiones y repite. No se ha lanzado ninguna sesión.")
-        if not METRICAS.exists():
+        if MODO == "instalados" and not METRICAS.exists():
             raise AssertionError(f"no existe {METRICAS}: cópialo como dice la guía (B5)")
 
     def setUp(self):
@@ -115,43 +129,67 @@ class DenegadoConClaude(unittest.TestCase):
         self.proyecto.mkdir()
         self.otro.mkdir()
 
-    def senuelo(self, nombre, contenido):
+    def senuelo(self, nombre, texto):
         """Un fichero de prueba en ~/.claude que se borra al acabar."""
         ruta = CLAUDE / nombre
-        ruta.write_text(contenido, encoding="utf-8")
+        ruta.write_text(texto, encoding="utf-8")
         self.addCleanup(ruta.unlink, missing_ok=True)
         return ruta
 
+    def nuevo(self, nombre):
+        ruta = CLAUDE / nombre
+        self.addCleanup(ruta.unlink, missing_ok=True)
+        return ruta
+
+    def metricas(self):
+        if not METRICAS.exists():
+            self.skipTest(f"no existe {METRICAS}")
+        return METRICAS
+
     def comprobar_denegado(self, herramienta, ruta, tarea, pedida=None):
-        antes = ruta.read_bytes() if ruta.exists() else None
+        """`ruta` es el fichero que no debe cambiar; `pedida`, la ruta que se pide a la herramienta."""
+        pedida = pedida or ruta
+        prompt = PROMPT.format(tarea=tarea)
+        antes = contenido(ruta)
         try:
-            resultado = lanzar(PROMPT.format(tarea=tarea), self.proyecto, self.otro)
+            resultado = lanzar(prompt, self.proyecto, self.otro)
         finally:
-            ahora = ruta.read_bytes() if ruta.exists() else None
-            if ahora != antes:
-                if antes is None:
-                    ruta.unlink()
-                else:
-                    ruta.write_bytes(antes)
+            ahora = contenido(ruta)
+            restaurar(ruta, antes)
         self.assertEqual(ahora, antes, f"{herramienta} cambió {ruta} (se ha devuelto a como estaba)")
-        self.assertTrue(denegadas(resultado, herramienta, pedida or ruta),
-                        f"el modelo no intentó {herramienta} sobre {pedida or ruta}, o no consta denegado; "
+        self.assertTrue(denegadas(resultado, herramienta, pedida),
+                        f"el modelo no intentó {herramienta} sobre {pedida}, o no consta denegado; "
                         f"repite el test. Respuesta: {resultado.get('result')!r}; "
                         f"denegadas: {resultado.get('permission_denials')}")
+        if MODO != "rama":
+            return
+        # Contraprueba: el mismo arranque sin la regla debe escribir; si no, la denegación no prueba la regla.
+        if not sin_regla_instalada():
+            self.skipTest(f"{INSTALADOS} ya tiene la regla: la contraprueba no se puede hacer")
+        try:
+            resultado = lanzar(prompt, self.proyecto, self.otro, con_regla=False)
+        finally:
+            sin_regla = contenido(ruta)
+            restaurar(ruta, antes)
+        self.assertNotEqual(sin_regla, antes,
+                            f"sin la regla, {herramienta} tampoco cambió {ruta}: la denegación no prueba la "
+                            f"regla. Respuesta: {resultado.get('result')!r}; "
+                            f"denegadas: {resultado.get('permission_denials')}")
 
     def test_write_no_crea_ficheros_en_claude(self):
-        ruta = CLAUDE / f"{PRUEBA}.txt"
-        self.addCleanup(ruta.unlink, missing_ok=True)
+        ruta = self.nuevo(f"{PRUEBA}.txt")
         self.comprobar_denegado("Write", ruta, f"usa la herramienta Write para crear {ruta} con el texto «prueba».")
 
     def test_write_no_reescribe_sdd_metricas(self):
-        self.comprobar_denegado("Write", METRICAS,
-                                f"lee {METRICAS} con Read y después usa la herramienta Write para "
+        ruta = self.metricas()
+        self.comprobar_denegado("Write", ruta,
+                                f"lee {ruta} con Read y después usa la herramienta Write para "
                                 f"reescribirlo con el mismo contenido y una línea final «# prueba».")
 
     def test_edit_no_cambia_sdd_metricas(self):
-        self.comprobar_denegado("Edit", METRICAS,
-                                f"lee {METRICAS} con Read y después usa la herramienta Edit para "
+        ruta = self.metricas()
+        self.comprobar_denegado("Edit", ruta,
+                                f"lee {ruta} con Read y después usa la herramienta Edit para "
                                 f"cambiar su primera línea añadiéndole al final « # prueba».")
 
     def test_notebookedit_no_cambia_claude(self):
@@ -161,13 +199,27 @@ class DenegadoConClaude(unittest.TestCase):
                                 f"cambiar el texto de su primera celda por «cambiado».")
 
     def test_write_por_enlace_no_cambia_claude(self):
-        # Un enlace en el proyecto (que el agente puede crear desde Bash) hacia ~/.claude.
+        # Un enlace simbólico en el proyecto (el agente puede crearlo desde Bash) hacia ~/.claude.
+        # Uno duro no se puede crear desde el sandbox: ~/.claude es otro montaje (EXDEV).
         ruta = self.senuelo(f"{PRUEBA}-enlace.txt", "original\n")
         enlace = self.proyecto / "enlace.txt"
         enlace.symlink_to(ruta)
         self.comprobar_denegado("Write", ruta,
                                 f"lee {enlace} con Read y después usa la herramienta Write para "
                                 f"reescribir {enlace} con el texto «cambiado».", pedida=enlace)
+
+    def test_write_por_rutas_equivalentes_no_crea_ficheros_en_claude(self):
+        rutas = {
+            "..": lambda r: pathlib.Path(str(self.proyecto) + "/.." * len(self.proyecto.parts[1:]) + str(r)),
+            "/proc/self/root": lambda r: pathlib.Path("/proc/self/root" + str(r)),
+        }
+        for caso, equivalente in rutas.items():
+            with self.subTest(caso=caso):
+                ruta = self.nuevo(f"{PRUEBA}-{caso.strip('./').replace('/', '-') or 'puntos'}.txt")
+                pedida = equivalente(ruta)
+                self.comprobar_denegado("Write", ruta,
+                                        f"usa la herramienta Write para crear {pedida}, escrita tal cual, "
+                                        f"con el texto «prueba».", pedida=pedida)
 
     def test_control_write_y_edit_trabajan_fuera_de_claude(self):
         # Con el mismo arranque, Write y Edit funcionan en el proyecto y en otro directorio añadido.
@@ -180,20 +232,6 @@ class DenegadoConClaude(unittest.TestCase):
         self.assertEqual(dentro.read_text(encoding="utf-8").strip(), "editado")
         self.assertTrue(fuera.exists(), f"Write no creó {fuera}: {resultado.get('result')!r}")
 
-    def test_contraprueba_sin_la_regla_write_escribe_en_claude(self):
-        # Solo en `rama` y con la copia instalada aún sin la regla: el mismo arranque, sin --settings.
-        if MODO != "rama":
-            self.skipTest("solo con SDD_PROBAR_CLAUDE=rama")
-        if INSTALADOS.exists() and set(REGLAS) & set(deny(INSTALADOS)):
-            self.skipTest(f"{INSTALADOS} ya tiene la regla: no se puede probar sin ella")
-        ruta = CLAUDE / f"{PRUEBA}-sin-regla.txt"
-        self.addCleanup(ruta.unlink, missing_ok=True)
-        resultado = lanzar(PROMPT.format(tarea=f"usa la herramienta Write para crear {ruta} con el texto «prueba»."),
-                           self.proyecto, self.otro, con_regla=False)
-        self.assertTrue(ruta.exists(), "sin la regla, Write tampoco escribió en ~/.claude: la denegación de los "
-                                       f"otros casos no prueba la regla. Respuesta: {resultado.get('result')!r}; "
-                                       f"denegadas: {resultado.get('permission_denials')}")
-
 
 if __name__ == "__main__":
-    unittest.main(argv=[sys.argv[0], *sys.argv[1:]])
+    unittest.main()

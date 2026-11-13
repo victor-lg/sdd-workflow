@@ -210,32 +210,38 @@ claude          # dentro: /login, y después /exit
 
 Las claves de seguridad van en los **ajustes gestionados** (`/etc/claude-code/managed-settings.json`). Pertenecen a root, así que ni el agente ni un repo pueden relajarlas. Además, ahí `allowUnsandboxedCommands: false` hace que el sandbox sea obligatorio: Claude Code ignora lo que un `.claude/settings.json` de un repo intente abrir.
 
-**Copia siempre desde tu clon limpio de `main`, nunca desde `~/proyectos/sdd-workflow`.** Esa es la copia del agente: su árbol de trabajo lo escribe él desde el sandbox, y lo que copies de ahí lo ejecutas tú fuera del sandbox (la línea de estado) o como root (`sudo cp`). Es la misma regla que con lefthook (B7). El clon limpio se crea una vez, con tu cuenta y fuera de Claude Code; el agente no trabaja en él, y los ajustes gestionados le deniegan Write y Edit ahí:
+**Copia siempre desde tu clon limpio de `main`, nunca desde `~/proyectos/sdd-workflow`.** Esa es la copia del agente: su árbol de trabajo lo escribe él desde el sandbox, y lo que copies de ahí lo ejecutas tú fuera del sandbox (la línea de estado) o como root (`sudo cp`). Es la misma idea que con lefthook (B7), con una diferencia: aquí el clon no es nuevo cada vez, sino uno permanente, y lo compensan la comprobación de abajo y una regla `deny` de los ajustes gestionados, que le niega al agente Write y Edit en él. El clon se crea una vez, con tu cuenta y fuera de Claude Code, y el agente no trabaja en él. Su ruta, `~/proyectos/sdd-workflow-persona`, está fijada en esa regla: si usas otra, cámbiala también en `entorno/managed-settings.json`.
 
 ```bash
 gh repo clone tu-usuario/sdd-workflow ~/proyectos/sdd-workflow-persona
 ```
 
-Cada vez que copies (ahora y cuando cambie algo de `entorno/` en `main`), primero ponlo al día. Mira antes en github.com que los cambios de `entorno/` pasaron por un PR que aprobaste. `git pull` conserva los cambios locales sin commit, así que la última orden comprueba que el clon está limpio y que `HEAD` es `origin/main`: si no escribe `limpio`, para y mira qué cambió.
+Cada vez que copies (ahora y cuando cambie algo de `entorno/` en `main`), en este orden:
 
-```bash
-cd ~/proyectos/sdd-workflow-persona && git switch main && git pull
-test -z "$(git status --porcelain)" && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" && echo limpio
-```
+1. Mira en github.com que los cambios de `entorno/` pasaron por un PR que aprobaste.
+2. Pon el clon al día y comprueba que está limpio. `git pull` conserva los cambios locales sin commit, así que la orden comprueba además que no hay ninguno y que `HEAD` es `origin/main`. Si no escribe `limpio`, para y mira qué cambió:
 
-Con `limpio`:
+   ```bash
+   cd ~/proyectos/sdd-workflow-persona && git switch main && git pull && test -z "$(git status --porcelain)" && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" && echo limpio
+   ```
 
-```bash
-sudo mkdir -p /etc/claude-code
-sudo cp entorno/managed-settings.json /etc/claude-code/
-sudo chmod 644 /etc/claude-code/managed-settings.json
-mkdir -p ~/.claude
-cp entorno/user-settings.json ~/.claude/settings.json
-cp entorno/sdd-metricas.py ~/.claude/
-chmod 644 ~/.claude/sdd-metricas.py
-```
+3. Si el cambio toca las reglas `deny` de Write y Edit, y también la primera vez, lanza la comprobación 7 en modo `rama` **antes de copiar**: después ya no se puede probar sin la regla.
+4. Copia. La orden repite la comprobación y no copia nada si falla, el `cd` incluido:
 
-Después, reinicia las sesiones de Claude Code abiertas: los ajustes gestionados se leen al arrancar.
+   ```bash
+   cd ~/proyectos/sdd-workflow-persona && test -z "$(git status --porcelain)" && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" \
+     && sudo mkdir -p /etc/claude-code \
+     && sudo cp ~/proyectos/sdd-workflow-persona/entorno/managed-settings.json /etc/claude-code/ \
+     && sudo chmod 644 /etc/claude-code/managed-settings.json \
+     && mkdir -p ~/.claude \
+     && cp ~/proyectos/sdd-workflow-persona/entorno/user-settings.json ~/.claude/settings.json \
+     && cp ~/proyectos/sdd-workflow-persona/entorno/sdd-metricas.py ~/.claude/ \
+     && chmod 644 ~/.claude/sdd-metricas.py \
+     && echo copiado
+   ```
+
+5. Reinicia las sesiones de Claude Code abiertas: los ajustes gestionados se leen al arrancar.
+6. Si el cambio toca las reglas `deny` de Write y Edit, lanza la comprobación 7 en modo `instalados`.
 
 Qué hace cada fichero:
 
@@ -280,16 +286,20 @@ Qué hace cada fichero:
    - pide a Claude que ejecute `git add .` tal cual, sin `cd` ni `git -C` delante: debe quedar denegado por los ajustes de permisos, y `git status --short` debe seguir mostrando `?? a.txt`;
    - pide `git add a.txt`, que sí debe funcionar (`A  a.txt`);
    - al acabar, sal de la sesión, ejecuta `cd && rm -rf "$d"` y, si lo apagaste, `claude plugin enable sdd@sdd-workflow`.
-7. **`deny` de Write y Edit sobre `~/.claude`** (VIC-20), en una terminal normal, desde tu clon limpio y después de leer `tests/test_deny_claude.py`:
+7. **`deny` de Write y Edit sobre `~/.claude`** (VIC-20), en una terminal normal, desde tu clon limpio y después de leer `tests/test_deny_claude.py`. Dos modos, en el orden de arriba (pasos 3 y 6 de la copia):
 
    ```bash
-   cd ~/proyectos/sdd-workflow-persona
-   SDD_PROBAR_CLAUDE=instalados python3 -I tests/test_deny_claude.py -v
+   # Antes del sudo cp:
+   cd ~/proyectos/sdd-workflow-persona && SDD_PROBAR_CLAUDE=rama python3 -I tests/test_deny_claude.py -v
+   # Después del sudo cp y de reiniciar:
+   cd ~/proyectos/sdd-workflow-persona && SDD_PROBAR_CLAUDE=instalados python3 -I tests/test_deny_claude.py -v
    ```
 
-   Antes de nada comprueba que `/etc/claude-code/managed-settings.json` es el de tu clon; si no, falla sin lanzar ninguna sesión. Después lanza seis sesiones cortas de `claude -p` con Haiku (unos céntimos), sin tus ajustes de usuario ni Bash, en las que Write, Edit y NotebookEdit están permitidos de forma explícita sobre `~/.claude/**`. Comprueba que no crean ni cambian ficheros en `~/.claude` (`sdd-metricas.py` incluido, también a través de un enlace simbólico desde el proyecto) y que Write y Edit siguen trabajando fuera de `~/.claude`. Si alguna escritura pasa, el test devuelve el fichero a como estaba y falla. Si un caso falla porque el modelo no intentó la escritura, repítelo. `-I` evita que Python cargue nada de la carpeta del repo.
+   Lanza sesiones cortas de `claude -p` con Haiku (unos céntimos cada una), sin tus ajustes de usuario ni Bash, en las que Write, Edit y NotebookEdit están permitidos de forma explícita sobre `~/.claude/**`. Comprueba que no crean ni cambian ficheros en `~/.claude` (`sdd-metricas.py` incluido, también a través de un enlace simbólico desde el proyecto y con rutas equivalentes, con `..` y con `/proc/self/root`) y que Write y Edit siguen trabajando fuera de `~/.claude`. Si alguna escritura pasa, el test devuelve el fichero a como estaba y falla. Si un caso falla porque el modelo no intentó la escritura, repítelo. `-I` evita que Python cargue nada de la carpeta del repo.
+   - `rama` añade la regla de tu clon con `--settings` y, en cada caso, repite la sesión sin ella y exige que entonces la escritura sí pase (después devuelve el fichero a como estaba). Así se ve que lo que la para es la regla, y no que Claude Code preguntaría (en `claude -p`, preguntar también consta como denegado). Si `/etc/claude-code` ya tiene la regla, la contraprueba se salta.
+   - `instalados` comprueba antes de nada que `/etc/claude-code/managed-settings.json` es el de tu clon; si no, falla sin lanzar ninguna sesión.
 
-   Que la denegación se deba a la regla, y no a que Claude Code preguntaría, se comprueba una vez antes del `sudo cp` con `SDD_PROBAR_CLAUDE=rama`: con el mismo arranque y sin la regla, Write sí escribe en `~/.claude`.
+   Además, en una sesión nueva, `/doctor` no debe avisar de reglas de permisos no válidas en los ajustes gestionados.
 
 **Si un proyecto necesita otro dominio** (por ejemplo, para descargar un navegador de pruebas), se añade a `allowedDomains` editando el fichero con `sudo`. Es un cambio deliberado: anótalo en el `CHANGELOG`.
 
