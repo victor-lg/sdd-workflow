@@ -2,8 +2,8 @@
 (ADR-0008, §4 y §5; VIC-18). El diseño de lefthook se apoya en que .git/hooks y
 .git/config quedan en solo lectura; si eso cambia, este test falla.
 
-Solo tiene sentido dentro del sandbox de Claude Code, que marca SANDBOX_RUNTIME. Fuera
-(la CI, la persona en su terminal) se salta. Lo lanza el agente:
+SandboxGit solo tiene sentido dentro del sandbox de Claude Code, que marca SANDBOX_RUNTIME.
+Fuera (la CI, la persona en su terminal) se salta. Lo lanza el agente:
     python3 -m unittest tests.test_sandbox_git -v
 o, para la tabla que va al PR:
     python3 tests/test_sandbox_git.py
@@ -14,11 +14,12 @@ No usa `test -w`, que en un montaje de solo lectura puede no coincidir con lo qu
 escribir.
 
 MarcadoresDelSandbox (VIC-19) corre en todas partes: explica por qué no se deniegan
-.git/commondir, .git/modules ni .git/worktrees. En Linux, el sandbox deniega una ruta que
-no existe con un fichero vacío de solo lectura mientras corre cada orden; aquí se simula
-ese fichero en un repo desechable dentro de .tareas/ y se prueban commit, switch y push
-contra un remoto local. Si Git cambia y el commondir vacío deja de romperlo, falla y toca
-revisar la decisión (ADR-0008, §6)."""
+.git/commondir, .git/modules ni .git/worktrees. El sandbox deniega una ruta que no existe
+poniendo ahí un marcador vacío: dentro, un dispositivo de 0 bytes que no se puede leer;
+fuera queda un fichero vacío (M17). Aquí se simulan los dos en un repo desechable dentro
+de .tareas/ y se prueban commit, switch y push contra un remoto local. Si Git cambia y el
+commondir vacío deja de romperlo, falla. Que el sandbox siga marcando así lo mira
+SandboxGit con las rutas que ya deniega él (ADR-0008, §6)."""
 import errno
 import os
 import pathlib
@@ -83,10 +84,15 @@ def informe(raiz=RAIZ):
             for nombre, carpeta, necesita in RUTAS]
 
 
-# (caso, ficheros que se ponen en el directorio de Git, paso en el que falla o None)
+# Rutas que el sandbox ya deniega sin que existan: dentro, aparecen como marcador vacío.
+RUTAS_MARCADAS = [".gitmodules", ".git/config.lock"]
+
+# (caso, ficheros que se ponen en el directorio de Git, paso en el que falla o None).
+# Contenido None: fichero vacío que no se puede leer, como el marcador dentro del sandbox.
 MARCADORES = [
     ("sin marcador", {}, None),
     ("commondir vacío", {"commondir": ""}, "status"),
+    ("commondir sin lectura", {"commondir": None}, "status"),
     # La alternativa descartada: un commondir real que apunta al propio .git (ADR-0008, §6).
     ("commondir = .", {"commondir": ".\n"}, None),
     ("modules vacío", {"modules": ""}, None),
@@ -102,12 +108,15 @@ PASOS = [
 WORKTREE = [("worktree add", ["worktree", "add", "--quiet", "../otra", "-b", "otra"])]
 
 
-def _git(cwd, *args):
-    # Sin la configuración de la persona ni la del sistema, para que solo cuente el repo.
-    entorno = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+def _git(cwd, *args, check=False):
+    # Sin las variables GIT_* heredadas (un hook exporta GIT_INDEX_FILE, por ejemplo) ni la
+    # configuración de la persona o del sistema, y sin subir hasta el repo real.
+    entorno = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    entorno.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                   GIT_CEILING_DIRECTORIES=str(RAIZ / ".tareas"))
     return subprocess.run(["git", "-c", "user.name=prueba", "-c", "user.email=prueba@ejemplo.invalid",
                            "-c", "init.defaultBranch=main", *args],
-                          cwd=cwd, env=entorno, capture_output=True, text=True)
+                          cwd=cwd, env=entorno, capture_output=True, text=True, check=check)
 
 
 def simular(ficheros, pasos=PASOS):
@@ -117,12 +126,15 @@ def simular(ficheros, pasos=PASOS):
     base.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="sdd-prueba-git-", dir=base) as tmp:
         tmp = pathlib.Path(tmp)
-        _git(tmp, "init", "--quiet", "--bare", "remoto.git")
-        _git(tmp, "init", "--quiet", "repo")
+        _git(tmp, "init", "--quiet", "--bare", "remoto.git", check=True)
+        _git(tmp, "init", "--quiet", "repo", check=True)
         repo = tmp / "repo"
-        _git(repo, "commit", "--allow-empty", "--quiet", "-m", "inicio")
+        _git(repo, "commit", "--allow-empty", "--quiet", "-m", "inicio", check=True)
         for nombre, contenido in ficheros.items():
-            (repo / ".git" / nombre).write_text(contenido)
+            ruta = repo / ".git" / nombre
+            ruta.write_text(contenido or "")
+            if contenido is None:
+                ruta.chmod(0)
         for paso, args in pasos:
             r = _git(repo, *args)
             if r.returncode:
@@ -152,10 +164,23 @@ class SandboxGit(unittest.TestCase):
         git = directorio_git()
         self.assertEqual([p for p in git.rglob(".sdd-prueba-escritura-*")], [])
 
+    def test_marca_las_rutas_denegadas_que_no_existen(self):
+        # La premisa de MarcadoresDelSandbox (ADR-0008, §6): si el sandbox deja de poner un
+        # marcador vacío, la razón para no denegar commondir puede haber cambiado.
+        vistas = [RAIZ / r for r in RUTAS_MARCADAS if (RAIZ / r).exists()]
+        self.assertTrue(vistas, f"el sandbox ya no marca {RUTAS_MARCADAS}: revisa ADR-0008, §6")
+        for ruta in vistas:
+            with self.subTest(ruta=str(ruta.relative_to(RAIZ))):
+                self.assertFalse(ruta.is_dir())
+                self.assertEqual(ruta.stat().st_size, 0)
+                self.assertIs(se_puede_escribir(ruta, False), False)
+
 
 class MarcadoresDelSandbox(unittest.TestCase):
     def test_commit_switch_y_push_con_cada_marcador(self):
         for caso, ficheros, falla_en in MARCADORES:
+            if any(c is None for c in ficheros.values()) and os.geteuid() == 0:
+                continue  # root lee aunque falte el permiso
             with self.subTest(caso=caso):
                 paso, error = simular(ficheros)
                 self.assertEqual(paso, falla_en, error)
@@ -165,7 +190,9 @@ class MarcadoresDelSandbox(unittest.TestCase):
     def test_worktrees_vacio_rompe_git_worktree(self):
         # La plantilla usa git worktree para el trabajo en paralelo (AGENTS.md).
         self.assertEqual(simular({}, PASOS + WORKTREE)[0], None)
-        self.assertEqual(simular({"worktrees": ""}, PASOS + WORKTREE)[0], "worktree add")
+        paso, error = simular({"worktrees": ""}, PASOS + WORKTREE)
+        self.assertEqual(paso, "worktree add", error)
+        self.assertIn("worktrees", error)
 
 
 if __name__ == "__main__":
