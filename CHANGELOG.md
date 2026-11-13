@@ -4,6 +4,10 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Escritura del agente en `.git` (VIC-19): no se deniega más.**
+  - `entorno/managed-settings.json` no cambia. En Linux, el sandbox deniega una ruta que no existe con un fichero vacío mientras corre cada orden, y con un `.git/commondir` vacío Git no arranca. Denegar `.git/worktrees` rompe `git worktree add`, y denegar `.git/modules` no cierra las vías del árbol de trabajo.
+  - `tests/test_sandbox_git.py` simula esos ficheros en un repo de usar y tirar y prueba commit, switch y push contra un remoto local (corre también en la CI).
+  - ADR-0008, §6: el límite, la alternativa descartada (`commondir` con `.`) y la comprobación pendiente de los repos anidados. Contra `commondir` siguen la regla para la persona y `guarda-saltos.py`. La guía (B7), al día.
 - **Piloto de AgentShield (VIC-18, PR 4 de 4):**
   - `ecc-agentshield` 1.6.0, una vez, en un contenedor de podman sin red, sin credenciales y con una copia de `HEAD` en solo lectura, sobre `entorno/` (y los ajustes gestionados y de usuario, renombrados a `settings.json` porque no los busca), `plugin-sdd/` y `plantilla-proyecto/`.
   - Medido: menos de 1 s por carpeta y 46 hallazgos, ninguno accionable tal como los propone (palabras clave en inglés sin contexto). **Descartada**; pasa a "Evaluadas y no aprobadas" en `docs/herramientas.md`.

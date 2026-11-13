@@ -87,5 +87,13 @@ Se elevan a norma estos criterios para cualquier herramienta de terceros:
 ## 6. Seguimiento
 
 - Fijar en los ajustes gestionados la denegación de escritura de `.git/hooks` y `.git/config`, si el sandbox lo permite (lo decide la persona: `entorno/managed-settings.json`).
-- Comprobar si el resto de `.git` escribible (por ejemplo `.git/modules/<sub>/config` o sus hooks) permite ejecutar código en una orden de Git de la persona, con o sin lefthook. Es un riesgo previo a este ADR; si se confirma, se trata en su propia issue.
+- **`.git/commondir`, `.git/modules` y `.git/worktrees` no se deniegan (VIC-19, 2026-11-13).** En Linux, el sandbox deniega una ruta que no existe poniendo ahí un fichero vacío de solo lectura mientras corre cada orden. Comprobado con Git 2.43 en un repo de usar y tirar, que simula ese fichero (`tests/test_sandbox_git.py`):
+  - con un `commondir` vacío, Git no arranca (`fatal: failed to read .git/commondir`), ni siquiera `git status`;
+  - con `modules` o `worktrees` vacíos, commit, switch y push funcionan, pero con `worktrees` falla `git worktree add`, que la plantilla usa para el trabajo en paralelo. Si la carpeta ya existiera, la denegación dejaría en solo lectura el directorio de Git de cada worktree;
+  - en Linux, `denyWrite` solo admite rutas literales, y la documentación no dice contra qué carpeta se resuelve una ruta relativa en los ajustes gestionados.
+
+  Se descartó que la persona cree en cada copia un `commondir` con `.` (apunta al propio `.git`, y así Git funciona) y denegar ese fichero: protege solo las copias que se nombren con su ruta absoluta, cada copia nueva pide un PR R2 y un paso a mano, y deja Git en un estado poco habitual. Además no cierra las vías del árbol de trabajo (punto siguiente).
+
+  **Límite que se acepta:** contra `commondir` quedan la regla para la persona de la sección 3 y `guarda-saltos.py` como segunda capa, que no ve lo que se escribe desde un script. Si cambia cómo deniega el sandbox una ruta que no existe, o si Git deja de fallar con un `commondir` vacío, el test lo marca y se revisa.
+- Comprobar si el resto de `.git` escribible, o un repo anidado en el árbol de trabajo (por ejemplo, en la ruta de un submódulo), permite ejecutar código en una orden de Git de la persona, con o sin lefthook. Sin comprobar; denegar `.git/modules` no lo cerraría, porque el agente puede escribir el árbol de trabajo. Es un riesgo previo a este ADR; si se confirma, se trata en su propia issue.
 - Si lefthook añade otra vía de configuración o de salto, se trata como subida de versión: se lee y se actualizan el registro y el hook del plugin.

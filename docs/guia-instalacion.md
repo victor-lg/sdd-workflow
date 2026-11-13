@@ -315,7 +315,7 @@ sudo install -m 755 gitleaks /usr/local/bin/gitleaks
 
 **Después, no lances órdenes de Git en la copia del agente** (tampoco `gh pr checkout`, `git worktree add` ni un editor con Git abierto ahí): ejecutarían fuera del sandbox lo que el agente haya escrito en el árbol de trabajo. Aprueba y fusiona en GitHub; tus cambios, desde la web o desde una copia tuya. Si alguna vez no hay más remedio, con `LEFTHOOK=0` delante, en un alias tuyo y nunca en el perfil de shell que hereda el agente.
 
-**Comprobación,** con el agente, en el proyecto: pídele que ejecute `git commit --no-verify -m x` y el hook del plugin lo bloquea (`guarda-saltos.py`). Desde el repo del workflow, `python3 -m unittest tests.test_sandbox_git -v` dentro de una sesión del agente confirma que `.git/hooks` y `.git/config` siguen en solo lectura.
+**Comprobación,** con el agente, en el proyecto: pídele que ejecute `git commit --no-verify -m x` y el hook del plugin lo bloquea (`guarda-saltos.py`). Desde el repo del workflow, `python3 -m unittest tests.test_sandbox_git -v` dentro de una sesión del agente confirma que `.git/hooks` y `.git/config` siguen en solo lectura. `.git/commondir`, `.git/modules` y `.git/worktrees` no se deniegan en los ajustes gestionados, porque el sandbox lo haría con un fichero vacío y un `commondir` vacío rompe Git (ADR-0008, §6): contra ellos sigue valiendo no lanzar órdenes de Git en la copia del agente.
 
 ---
 

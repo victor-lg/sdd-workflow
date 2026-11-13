@@ -11,12 +11,20 @@ o, para la tabla que va al PR:
 Prueba escribiendo de verdad, sin cambiar nada: en las carpetas, crea y borra un fichero
 con un nombre propio; en los ficheros, los abre para añadir y los cierra sin escribir.
 No usa `test -w`, que en un montaje de solo lectura puede no coincidir con lo que pasa al
-escribir."""
+escribir.
+
+MarcadoresDelSandbox (VIC-19) corre en todas partes: explica por qué no se deniegan
+.git/commondir, .git/modules ni .git/worktrees. En Linux, el sandbox deniega una ruta que
+no existe con un fichero vacío de solo lectura mientras corre cada orden; aquí se simula
+ese fichero en un repo desechable dentro de .tareas/ y se prueban commit, switch y push
+contra un remoto local. Si Git cambia y el commondir vacío deja de romperlo, falla y toca
+revisar la decisión (ADR-0008, §6)."""
 import errno
 import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 import unittest
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
@@ -36,6 +44,7 @@ RUTAS = [
     ("modules", True, None),
     ("worktrees", True, None),
     # G4 del PR #30: si se puede crear, desvía config y hooks a otro directorio (ADR-0008, §6).
+    # No se deniega: el sandbox pondría un commondir vacío y Git no arranca (VIC-19).
     ("commondir", False, None),
     ("", True, None),
 ]
@@ -74,6 +83,53 @@ def informe(raiz=RAIZ):
             for nombre, carpeta, necesita in RUTAS]
 
 
+# (caso, ficheros que se ponen en el directorio de Git, paso en el que falla o None)
+MARCADORES = [
+    ("sin marcador", {}, None),
+    ("commondir vacío", {"commondir": ""}, "status"),
+    # La alternativa descartada: un commondir real que apunta al propio .git (ADR-0008, §6).
+    ("commondir = .", {"commondir": ".\n"}, None),
+    ("modules vacío", {"modules": ""}, None),
+    ("worktrees vacío", {"worktrees": ""}, None),
+]
+PASOS = [
+    ("status", ["status", "--short"]),
+    ("switch", ["switch", "-c", "sdd-prueba"]),
+    ("commit", ["commit", "--allow-empty", "-m", "prueba"]),
+    ("push", ["push", "--quiet", "../remoto.git", "sdd-prueba"]),
+    ("switch de vuelta", ["switch", "main"]),
+]
+WORKTREE = [("worktree add", ["worktree", "add", "--quiet", "../otra", "-b", "otra"])]
+
+
+def _git(cwd, *args):
+    # Sin la configuración de la persona ni la del sistema, para que solo cuente el repo.
+    entorno = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+    return subprocess.run(["git", "-c", "user.name=prueba", "-c", "user.email=prueba@ejemplo.invalid",
+                           "-c", "init.defaultBranch=main", *args],
+                          cwd=cwd, env=entorno, capture_output=True, text=True)
+
+
+def simular(ficheros, pasos=PASOS):
+    """Crea un repo con un commit y un remoto local en .tareas/, pone `ficheros` en su
+    directorio de Git y prueba los pasos. Devuelve (paso que falla o None, error)."""
+    base = RAIZ / ".tareas"
+    base.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="sdd-prueba-git-", dir=base) as tmp:
+        tmp = pathlib.Path(tmp)
+        _git(tmp, "init", "--quiet", "--bare", "remoto.git")
+        _git(tmp, "init", "--quiet", "repo")
+        repo = tmp / "repo"
+        _git(repo, "commit", "--allow-empty", "--quiet", "-m", "inicio")
+        for nombre, contenido in ficheros.items():
+            (repo / ".git" / nombre).write_text(contenido)
+        for paso, args in pasos:
+            r = _git(repo, *args)
+            if r.returncode:
+                return paso, r.stderr.strip()
+    return None, ""
+
+
 def tabla(filas):
     texto = {True: "sí", False: "no", "crear": "no existe; se puede crear", None: "no existe"}
     lineas = ["| Ruta | ¿Se puede escribir? | ADR-0008 |", "| --- | --- | --- |"]
@@ -95,6 +151,21 @@ class SandboxGit(unittest.TestCase):
     def test_no_deja_rastro(self):
         git = directorio_git()
         self.assertEqual([p for p in git.rglob(".sdd-prueba-escritura-*")], [])
+
+
+class MarcadoresDelSandbox(unittest.TestCase):
+    def test_commit_switch_y_push_con_cada_marcador(self):
+        for caso, ficheros, falla_en in MARCADORES:
+            with self.subTest(caso=caso):
+                paso, error = simular(ficheros)
+                self.assertEqual(paso, falla_en, error)
+                if falla_en:
+                    self.assertIn("commondir", error)
+
+    def test_worktrees_vacio_rompe_git_worktree(self):
+        # La plantilla usa git worktree para el trabajo en paralelo (AGENTS.md).
+        self.assertEqual(simular({}, PASOS + WORKTREE)[0], None)
+        self.assertEqual(simular({"worktrees": ""}, PASOS + WORKTREE)[0], "worktree add")
 
 
 if __name__ == "__main__":
