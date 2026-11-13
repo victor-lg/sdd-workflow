@@ -40,7 +40,7 @@ INSTALADOS = pathlib.Path("/etc/claude-code/managed-settings.json")
 REGLAS = ["Write(~/.claude/**)", "Edit(~/.claude/**)"]
 OTRAS_REGLAS = ["Write(~/.claude.json)", "Edit(~/.claude.json)",
                 "Write(~/proyectos/sdd-workflow-persona/**)", "Edit(~/proyectos/sdd-workflow-persona/**)"]
-PERMITIDAS = ["Read", *REGLAS, "NotebookEdit(~/.claude/**)"]
+PERMITIDAS = ["Read(~/.claude/**)", *REGLAS, "NotebookEdit(~/.claude/**)"]
 
 MODO = os.environ.get("SDD_PROBAR_CLAUDE", "")
 DENTRO = bool(os.environ.get("SANDBOX_RUNTIME"))
