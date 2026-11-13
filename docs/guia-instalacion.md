@@ -210,15 +210,26 @@ claude          # dentro: /login, y después /exit
 
 Las claves de seguridad van en los **ajustes gestionados** (`/etc/claude-code/managed-settings.json`). Pertenecen a root, así que ni el agente ni un repo pueden relajarlas. Además, ahí `allowUnsandboxedCommands: false` hace que el sandbox sea obligatorio: Claude Code ignora lo que un `.claude/settings.json` de un repo intente abrir.
 
+**Copia siempre desde tu clon limpio de `main`, nunca desde `~/proyectos/sdd-workflow`.** Esa es la copia del agente: su árbol de trabajo lo escribe él desde el sandbox, y lo que copies de ahí lo ejecutas tú fuera del sandbox (la línea de estado) o como root (`sudo cp`). Es la misma regla que con lefthook (B7). El clon limpio se crea una vez, con tu cuenta y fuera de Claude Code, y el agente no trabaja en él:
+
 ```bash
+gh repo clone tu-usuario/sdd-workflow ~/proyectos/sdd-workflow-persona
+```
+
+Cada vez que copies (ahora y cuando cambie algo de `entorno/` en `main`), primero ponlo al día. Mira antes en github.com que los cambios de `entorno/` pasaron por un PR que aprobaste:
+
+```bash
+cd ~/proyectos/sdd-workflow-persona && git switch main && git pull
 sudo mkdir -p /etc/claude-code
-sudo cp ~/proyectos/sdd-workflow/entorno/managed-settings.json /etc/claude-code/
+sudo cp entorno/managed-settings.json /etc/claude-code/
 sudo chmod 644 /etc/claude-code/managed-settings.json
 mkdir -p ~/.claude
-cp ~/proyectos/sdd-workflow/entorno/user-settings.json ~/.claude/settings.json
-cp ~/proyectos/sdd-workflow/entorno/sdd-metricas.py ~/.claude/
+cp entorno/user-settings.json ~/.claude/settings.json
+cp entorno/sdd-metricas.py ~/.claude/
 chmod 644 ~/.claude/sdd-metricas.py
 ```
+
+Después, reinicia las sesiones de Claude Code abiertas: los ajustes gestionados se leen al arrancar.
 
 Qué hace cada fichero:
 
@@ -227,6 +238,7 @@ Qué hace cada fichero:
   - red solo hacia GitHub y los registros npm y PyPI, sin preguntar por otros dominios;
   - credenciales (`~/.ssh`, `~/.aws`, la clave de Go, los tokens de Claude Code) ocultas a los comandos;
   - reglas `deny` para que la herramienta Read tampoco las lea;
+  - `deny` de Write y Edit sobre `~/.claude/**` (VIC-20): ahí está lo que Claude Code ejecuta fuera del sandbox con tus permisos (la línea de estado, los hooks y la statusline de `~/.claude/settings.json`, el código de los plugins). Desde Bash el sandbox ya no deja escribir ahí, pero Write y Edit no pasan por el sandbox. **Consecuencia:** el agente no puede guardar su memoria automática (`~/.claude/projects/<proyecto>/memory/`) ni el fichero del plan en modo plan (`~/.claude/plans/`); la deny no admite excepciones. La memoria que ya existe se sigue leyendo, y la puedes editar tú fuera de Claude Code. Si te propone guardar algo, cópialo tú o, si es del proyecto, que vaya al repo en un PR;
   - `deny` de `git add -A`, `git add --all` y `git add .`, solo en esas formas literales (las demás, como `git add -- .`, dependen del hook del plugin);
   - `ask` al añadir dependencias;
   - el modo "saltarse permisos" desactivado.
@@ -237,9 +249,9 @@ Qué hace cada fichero:
   - repo, rama e issue de Linear deducida de la rama;
   - del transcript de la sesión, solo recuentos: intervenciones humanas (cada mensaje que escribes, el primero incluido), rondas y hallazgos de G4 y la última mutación. Estos dos salen de las líneas `Métricas G4: …` y `Métricas mutación: …` que `sdd-review` y `sdd-implement` publican en comentarios del PR; solo se leen de la entrada de las llamadas a `gh pr comment` que no fallan ni rechazas, y se atribuyen a la issue de la rama en la que se escribieron. Son autodeclaradas: el agente las escribe y nada las comprueba. Si una issue usó una de las dos skills y no hay ninguna línea, el resumen la marca con "⚠ sin línea".
 
-  No guarda la conversación: el transcript se lee por partes y del fichero solo quedan su nombre, hasta qué byte se leyó y el principio del uuid de cada mensaje tuyo (al reanudar una sesión, Claude Code copia los mensajes con el mismo uuid, y así no cuentan dos veces). Corre fuera del sandbox porque lo lanza Claude Code, no el agente, y el agente no puede modificarlo, porque su sandbox no escribe en `~/.claude`. Si actualizas el repo del workflow, vuelve a copiarlo con las dos órdenes `cp` y `chmod` de arriba.
+  No guarda la conversación: el transcript se lee por partes y del fichero solo quedan su nombre, hasta qué byte se leyó y el principio del uuid de cada mensaje tuyo (al reanudar una sesión, Claude Code copia los mensajes con el mismo uuid, y así no cuentan dos veces). Corre fuera del sandbox porque lo lanza Claude Code, no el agente, y el agente no puede modificarlo: su sandbox no escribe en `~/.claude`, y Write y Edit tienen la `deny` de arriba. Si cambia en `main`, vuelve a copiarlo desde tu clon limpio con las órdenes de arriba.
 
-  `entorno/resumen-metricas.py <carpeta> [desde AAAA-MM-DD] [--defectos <csv>]` saca las tablas por sesión y por issue para el registro del recorrido. Los defectos escapados (M10) vienen de Linear, no de las sesiones: las issues con la etiqueta `defecto-escapado`. Pásalas en un CSV con las columnas `issue` y `origen` (la issue cuya entrega dejó pasar el defecto), exportado de Linear o anotado en `historial/defectos-escapados.csv`. La exportación de Linear no trae `origen`: añade la columna a mano. Si el CSV trae `Labels`, solo cuentan las filas con `defecto-escapado`, y cada defecto cuenta una vez.
+  `entorno/resumen-metricas.py <carpeta> [desde AAAA-MM-DD] [--defectos <csv>]`, lanzado desde tu clon limpio, saca las tablas por sesión y por issue para el registro del recorrido. Los defectos escapados (M10) vienen de Linear, no de las sesiones: las issues con la etiqueta `defecto-escapado`. Pásalas en un CSV con las columnas `issue` y `origen` (la issue cuya entrega dejó pasar el defecto), exportado de Linear o anotado en `historial/defectos-escapados.csv`. La exportación de Linear no trae `origen`: añade la columna a mano. Si el CSV trae `Labels`, solo cuentan las filas con `defecto-escapado`, y cada defecto cuenta una vez.
 
 **Comprobación** (abre `claude` dentro de `~/proyectos/sdd-workflow`):
 
@@ -262,6 +274,14 @@ Qué hace cada fichero:
    - pide a Claude que ejecute `git add .` tal cual, sin `cd` ni `git -C` delante: debe quedar denegado por los ajustes de permisos, y `git status --short` debe seguir mostrando `?? a.txt`;
    - pide `git add a.txt`, que sí debe funcionar (`A  a.txt`);
    - al acabar, sal de la sesión, ejecuta `cd && rm -rf "$d"` y, si lo apagaste, `claude plugin enable sdd@sdd-workflow`.
+7. **`deny` de Write y Edit sobre `~/.claude`** (VIC-20), en una terminal normal, desde tu clon limpio y después de leer `tests/test_deny_claude.py`:
+
+   ```bash
+   cd ~/proyectos/sdd-workflow-persona
+   SDD_PROBAR_CLAUDE=instalados python3 -m unittest tests.test_deny_claude -v
+   ```
+
+   Lanza cuatro sesiones cortas de `claude -p` con Haiku (unos céntimos), sin tus ajustes de usuario, en las que Write y Edit están permitidos de forma explícita sobre `~/.claude/**`. Write no crea un fichero en `~/.claude`, Write y Edit no cambian `~/.claude/sdd-metricas.py`, y el control escribe en una carpeta de prueba. Si alguna escritura pasa, el test devuelve el fichero a como estaba y falla. `test_la_copia_instalada_es_la_del_repo` falla si `/etc/claude-code/managed-settings.json` no es el de tu clon. Si un caso falla porque el modelo no intentó la escritura, repítelo.
 
 **Si un proyecto necesita otro dominio** (por ejemplo, para descargar un navegador de pruebas), se añade a `allowedDomains` editando el fichero con `sudo`. Es un cambio deliberado: anótalo en el `CHANGELOG`.
 
@@ -423,9 +443,11 @@ No bloquea el primer recorrido: todo puede hacerse con el perfil Claude.
    mkdir -p ~/.config/opencode-go
    install -m 600 /dev/null ~/.config/opencode-go/api-key
    nano ~/.config/opencode-go/api-key      # pega la clave y guarda
-   echo 'source ~/proyectos/sdd-workflow/entorno/claude-go.sh' >> ~/.bashrc
+   echo 'source ~/proyectos/sdd-workflow-persona/entorno/claude-go.sh' >> ~/.bashrc
    source ~/.bashrc
    ```
+
+   El `source` va desde tu clon limpio (B5): `~/.bashrc` lo ejecuta tu shell, fuera del sandbox, y la copia del agente la escribe él. Si tu `~/.bashrc` ya apuntaba a `~/proyectos/sdd-workflow/entorno/claude-go.sh`, cámbialo.
 3. Abre una sesión con `claude-go` (modelo ligero por defecto) o `claude-go minimax-m3`. La primera vez, Claude Code pregunta si usar la clave detectada: acepta.
 
 **Comprobación:**

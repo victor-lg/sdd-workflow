@@ -4,6 +4,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Lo que se ejecuta fuera del sandbox (VIC-20). Cambia `entorno/managed-settings.json`: hace falta el `sudo cp` (desde el clon limpio) y reiniciar las sesiones.**
+  - `entorno/managed-settings.json`: `deny` de `Write(~/.claude/**)` y `Edit(~/.claude/**)`. Ahí están la línea de estado (`~/.claude/sdd-metricas.py`), los hooks y la statusline de `~/.claude/settings.json` y el código de los plugins, que Claude Code ejecuta fuera del sandbox. **Consecuencia:** el agente ya no puede escribir su memoria automática (`~/.claude/projects/<proyecto>/memory/`) ni el plan del modo plan (`~/.claude/plans/`); decisión de Víctor.
+  - Guía: B5 copia los ajustes y `sdd-metricas.py` desde un clon limpio de `main` (`~/proyectos/sdd-workflow-persona`, tras `git switch main && git pull`), no desde la copia del agente; F carga `claude-go.sh` desde ese clon. Nuevo paso de comprobación (B5, 7).
+  - `tests/test_deny_claude.py`: comprueba las dos reglas y que la copia de `/etc/claude-code` es la del repo (corre en la CI, donde se salta la segunda). Con `SDD_PROBAR_CLAUDE`, la persona lanza `claude -p` con Write y Edit permitidos de forma explícita sobre `~/.claude/**` y comprueba que la regla los deniega sobre `~/.claude/sdd-metricas.py` y sobre un fichero nuevo, y que Write sigue escribiendo fuera de `~/.claude`.
+  - `docs/herramientas.md`: qué se ejecuta fuera del sandbox desde rutas que el agente escribe y qué lo protege; cierra lo pendiente del piloto de AgentShield.
+
 - **Escritura del agente en `.git` (VIC-19): no se deniega más.**
   - `entorno/managed-settings.json` no cambia. El sandbox deniega una ruta que no existe con un marcador vacío (según su documentación y lo que hace con sus propias rutas; no se ha probado con la regla aplicada), y con un `.git/commondir` vacío o ilegible Git no arranca. Denegar `.git/worktrees` rompe `git worktree add`; los repos anidados (`.git/modules` y el árbol de trabajo) pasan a VIC-23.
   - `tests/test_sandbox_git.py`:

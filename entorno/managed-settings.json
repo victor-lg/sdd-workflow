@@ -12,6 +12,8 @@
       "Read(~/.config/opencode-go/**)",
       "Read(~/.claude/.credentials.json)",
       "Read(~/.claude.json)",
+      "Write(~/.claude/**)",
+      "Edit(~/.claude/**)",
       "Bash(git add -A)",
       "Bash(git add -A *)",
       "Bash(git add --all)",
