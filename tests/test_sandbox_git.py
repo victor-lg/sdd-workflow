@@ -24,6 +24,7 @@ apunta a otro directorio de Git con su propio config y hooks (docs/herramientas.
 import errno
 import os
 import pathlib
+import shlex
 import stat
 import subprocess
 import sys
@@ -170,6 +171,8 @@ class SandboxGit(unittest.TestCase):
         # La premisa de MarcadoresDelSandbox (docs/herramientas.md): si el sandbox deja de poner un
         # marcador vacío, la razón para no denegar commondir puede haber cambiado.
         # Un dispositivo, no un fichero vacío que haya quedado de otra sesión (M17).
+        if not (RAIZ / ".git").is_dir():
+            self.skipTest("en un worktree no se sabe qué rutas marca el sandbox")
         for nombre in RUTAS_MARCADAS:
             with self.subTest(ruta=nombre):
                 ruta = RAIZ / nombre
@@ -180,6 +183,13 @@ class SandboxGit(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     ruta.read_bytes()
                 self.assertIs(se_puede_escribir(ruta, False), False)
+
+    def test_git_es_punto_de_montaje(self):
+        # Mover .git y dejar un fichero .git en su sitio desviaría config y hooks como
+        # commondir; rename(2) no mueve un punto de montaje (EBUSY).
+        with open("/proc/self/mountinfo") as f:
+            montajes = {linea.split()[4] for linea in f}
+        self.assertIn(str(directorio_git()), montajes)
 
 
 class MarcadoresDelSandbox(unittest.TestCase):
@@ -208,15 +218,18 @@ class MarcadoresDelSandbox(unittest.TestCase):
                 f.write("[sdd]\n\tprueba = ajeno\n")
             marca = tmp / "hook-ajeno-ejecutado"
             hook = ajeno / "hooks" / "pre-commit"
-            hook.write_text(f"#!/bin/sh\ntouch '{marca}'\n")
+            hook.write_text(f"#!/bin/sh\ntouch {shlex.quote(str(marca))}\n")
             hook.chmod(0o755)
             (repo / ".git" / "commondir").write_text(f"{ajeno}\n")
 
             self.assertEqual(_git(repo, "config", "--get", "sdd.prueba").stdout.strip(), "ajeno")
             r = _git(repo, "commit", "--allow-empty", "--quiet", "-m", "prueba")
             self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stderr, "", "Git avisó de algo")
             self.assertTrue(marca.exists(), "el pre-commit del otro directorio no se ejecutó")
-            self.assertTrue((ajeno / "refs" / "heads" / "main").exists(), "el commit no fue a las refs del otro")
+            # La ref y el objeto del commit quedan en el otro directorio.
+            otro = _git(ajeno.parent, "rev-parse", "--verify", "--quiet", "refs/heads/main^{commit}")
+            self.assertEqual(otro.returncode, 0, "el commit no fue al otro directorio")
 
     def test_worktrees_vacio_rompe_git_worktree(self):
         # La plantilla usa git worktree para el trabajo en paralelo (AGENTS.md).

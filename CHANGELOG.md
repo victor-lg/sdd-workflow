@@ -5,12 +5,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 ## v1.1 — en curso
 
 - **Escritura del agente en `.git` (VIC-19): no se deniega más.**
-  - `entorno/managed-settings.json` no cambia. El sandbox deniega una ruta que no existe con un marcador vacío, y con un `.git/commondir` vacío o ilegible Git no arranca. Denegar `.git/worktrees` rompe `git worktree add`; los repos anidados (`.git/modules` y el árbol de trabajo) pasan a VIC-23.
+  - `entorno/managed-settings.json` no cambia. El sandbox deniega una ruta que no existe con un marcador vacío (según su documentación y lo que hace con sus propias rutas; no se ha probado con la regla aplicada), y con un `.git/commondir` vacío o ilegible Git no arranca. Denegar `.git/worktrees` rompe `git worktree add`; los repos anidados (`.git/modules` y el árbol de trabajo) pasan a VIC-23.
   - `tests/test_sandbox_git.py`:
     - simula el marcador (vacío y sin permiso de lectura) en un repo de usar y tirar y prueba commit, switch y push contra un remoto local; corre también en la CI;
     - prueba un `commondir` que apunta a otro directorio de Git con su propio `config` y `hooks/pre-commit`: Git toma de ahí configuración, hooks, refs y objetos sin avisar, y `git commit` ejecuta ese pre-commit;
-    - dentro del sandbox, comprueba que las rutas que este ya deniega sin que existan siguen siendo un marcador vacío.
-  - `docs/herramientas.md`: el resultado, la alternativa descartada (`commondir` con `.`) y los controles que quedan contra `commondir` (la regla para la persona y `guarda-saltos.py`). ADR-0008 no cambia: su §6 ya dejaba este seguimiento condicionado a lo que permitiera el sandbox. La guía (B7), al día.
+    - dentro del sandbox, comprueba que las rutas que este ya deniega sin que existan siguen siendo un marcador vacío y que `.git` es un punto de montaje, que no se puede mover.
+  - `docs/herramientas.md`: el resultado, la alternativa descartada (`commondir` con `.`) y los controles que quedan contra `commondir` (la regla para la persona y `guarda-saltos.py`). La guía (B7) pide comprobar que no existe `.git/commondir` antes de la excepción con `LEFTHOOK=0`, que no lo evita. ADR-0008 no cambia: su §6 ya dejaba este seguimiento condicionado a lo que permitiera el sandbox.
 
 - **Piloto de AgentShield (VIC-18, PR 4 de 4):**
   - `ecc-agentshield` 1.6.0, una vez, en un contenedor de podman sin red, sin credenciales y con una copia de `HEAD` en solo lectura, sobre `entorno/` (y los ajustes gestionados y de usuario, renombrados a `settings.json` porque no los busca), `plugin-sdd/` y `plantilla-proyecto/`.
