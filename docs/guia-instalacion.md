@@ -295,11 +295,11 @@ Qué hace cada fichero:
    cd ~/proyectos/sdd-workflow-persona && SDD_PROBAR_CLAUDE=instalados python3 -I tests/test_deny_claude.py -v
    ```
 
-   Lanza sesiones cortas de `claude -p` con Haiku (unos céntimos cada una), sin tus ajustes de usuario ni Bash, en las que Write, Edit y NotebookEdit están permitidos de forma explícita sobre `~/.claude/**`. Comprueba que no crean ni cambian ficheros en `~/.claude` (`sdd-metricas.py` incluido, también a través de un enlace simbólico desde el proyecto y con rutas equivalentes, con `..` y con `/proc/self/root`) y que Write y Edit siguen trabajando fuera de `~/.claude`. Si alguna escritura pasa, el test devuelve el fichero a como estaba y falla. Si un caso falla porque el modelo no intentó la escritura, repítelo. `-I` evita que Python cargue nada de la carpeta del repo.
+   Lanza sesiones cortas de `claude -p` con Haiku (unos céntimos cada una), sin tus ajustes de usuario ni Bash, en las que Write, Edit y NotebookEdit están permitidos de forma explícita sobre `~/.claude/**`. Comprueba que no crean ni cambian ficheros en `~/.claude` (`sdd-metricas.py` incluido, también a través de enlaces simbólicos desde el proyecto y con rutas equivalentes, con `..` y con `/proc/self/root`) y que Write y Edit siguen trabajando fuera de `~/.claude`. Si alguna escritura pasa, el test devuelve el fichero a como estaba y falla. Si un caso falla porque el modelo no intentó la escritura, repítelo. En modo `rama`, la contraprueba cambia de verdad `~/.claude/sdd-metricas.py` y lo devuelve a como estaba; si el test se corta a medias, vuelve a copiarlo (paso 4). `-I` evita que Python cargue nada de la carpeta del repo.
    - `rama` añade la regla de tu clon con `--settings` y, en cada caso, repite la sesión sin ella y exige que entonces la escritura sí pase (después devuelve el fichero a como estaba). Así se ve que lo que la para es la regla, y no que Claude Code preguntaría (en `claude -p`, preguntar también consta como denegado). Si `/etc/claude-code` ya tiene la regla, la contraprueba se salta.
    - `instalados` comprueba antes de nada que `/etc/claude-code/managed-settings.json` es el de tu clon; si no, falla sin lanzar ninguna sesión.
 
-   Además, en una sesión nueva, `/doctor` no debe avisar de reglas de permisos no válidas en los ajustes gestionados.
+   Además, en una sesión nueva, `/doctor` no debe avisar de reglas de permisos no válidas en los ajustes gestionados, y en una sesión normal, con el plugin, el agente sigue creando y editando ficheros del proyecto.
 
 **Si un proyecto necesita otro dominio** (por ejemplo, para descargar un navegador de pruebas), se añade a `allowedDomains` editando el fichero con `sudo`. Es un cambio deliberado: anótalo en el `CHANGELOG`.
 

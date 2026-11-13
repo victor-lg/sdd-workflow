@@ -20,9 +20,9 @@ sesión interactiva preguntaría también consta como denegado. `instalados`, de
 ajustes de /etc/claude-code tal como están, sin contraprueba, y antes comprueba que son los de
 este clon; si no, no lanza ninguna sesión.
 
-Cada sesión arranca sin los ajustes de usuario (ni plugins, ni hooks, ni statusline), sin Bash,
-con ~/.claude como directorio de trabajo añadido, acceptEdits y Write, Edit y NotebookEdit
-permitidos de forma explícita sobre ~/.claude/**, el mismo patrón que la deny. Si una escritura
+Cada sesión arranca sin los ajustes de usuario (ni plugins, ni hooks, ni statusline), solo con Read,
+Write, Edit y NotebookEdit, con ~/.claude como directorio de trabajo añadido, acceptEdits y esas tres
+permitidas de forma explícita sobre ~/.claude/**, el mismo patrón que la deny. Si una escritura
 pasa con la regla, el test devuelve el fichero a su contenido y falla. ~/.claude.json no tiene
 caso: Claude Code lo reescribe mientras corre, y devolverlo a su contenido podría pisar sus
 cambios."""
@@ -67,8 +67,8 @@ def lanzar(prompt, proyecto, otro, con_regla=True):
              "--setting-sources", "project", "--strict-mcp-config",
              "--permission-mode", "acceptEdits",
              "--add-dir", str(CLAUDE), str(otro),
-             "--allowedTools", *PERMITIDAS,
-             "--disallowedTools", "Bash"]
+             "--tools", "Read,Write,Edit,NotebookEdit",
+             "--allowedTools", *PERMITIDAS]
     if MODO == "rama" and con_regla:
         orden += ["--settings", json.dumps({"permissions": {"deny": deny(AJUSTES)}})]
     r = subprocess.run(orden, input=prompt, cwd=proyecto, capture_output=True, text=True, timeout=300)
@@ -207,6 +207,21 @@ class DenegadoConClaude(unittest.TestCase):
         self.comprobar_denegado("Write", ruta,
                                 f"lee {enlace} con Read y después usa la herramienta Write para "
                                 f"reescribir {enlace} con el texto «cambiado».", pedida=enlace)
+
+    def test_write_por_enlace_a_fichero_nuevo_no_crea_ficheros_en_claude(self):
+        ruta = self.nuevo(f"{PRUEBA}-enlace-nuevo.txt")
+        enlace = self.proyecto / "nuevo.txt"
+        enlace.symlink_to(ruta)
+        self.comprobar_denegado("Write", ruta,
+                                f"usa la herramienta Write para crear {enlace} con el texto «prueba».", pedida=enlace)
+
+    def test_write_por_enlace_a_directorio_no_crea_ficheros_en_claude(self):
+        ruta = self.nuevo(f"{PRUEBA}-por-directorio.txt")
+        enlace = self.proyecto / "d"
+        enlace.symlink_to(CLAUDE, target_is_directory=True)
+        pedida = enlace / ruta.name
+        self.comprobar_denegado("Write", ruta,
+                                f"usa la herramienta Write para crear {pedida} con el texto «prueba».", pedida=pedida)
 
     def test_write_por_rutas_equivalentes_no_crea_ficheros_en_claude(self):
         rutas = {
