@@ -6,7 +6,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 - **Piloto de AgentShield (VIC-18, PR 4 de 4):**
   - `ecc-agentshield` 1.6.0, una vez, en un contenedor de podman sin red, sin credenciales y con una copia de `HEAD` en solo lectura, sobre `entorno/` (y los ajustes gestionados y de usuario, renombrados a `settings.json` porque no los busca), `plugin-sdd/` y `plantilla-proyecto/`.
-  - Medido: menos de 1 s por carpeta y 46 hallazgos, ninguno correcto tal como los formula (palabras clave en inglés sin contexto). **Descartada**; pasa a "Evaluadas y no aprobadas" en `docs/herramientas.md`.
+  - Medido: menos de 1 s por carpeta y 46 hallazgos, ninguno accionable tal como los propone (palabras clave en inglés sin contexto). **Descartada**; pasa a "Evaluadas y no aprobadas" en `docs/herramientas.md`.
   - Uno apuntó a un riesgo real, anterior a este PR, que queda pendiente para una issue propia: la statusline ejecuta `~/.claude/sdd-metricas.py` fuera del sandbox, y la guía (B5) copia ese script y los ajustes gestionados desde la copia del agente, no desde un clon limpio de `main`.
   - `docs/herramientas.md`: los tiempos de la CI se miden en el primer proyecto nuevo creado desde la plantilla, no necesariamente la calculadora.
 - **CI de seguridad, Dependabot y formato de los commits en la plantilla (ADR-0008, VIC-18, PR 3 de 4; plugin 1.4.1):**
