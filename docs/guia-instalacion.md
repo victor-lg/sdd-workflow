@@ -210,16 +210,22 @@ claude          # dentro: /login, y después /exit
 
 Las claves de seguridad van en los **ajustes gestionados** (`/etc/claude-code/managed-settings.json`). Pertenecen a root, así que ni el agente ni un repo pueden relajarlas. Además, ahí `allowUnsandboxedCommands: false` hace que el sandbox sea obligatorio: Claude Code ignora lo que un `.claude/settings.json` de un repo intente abrir.
 
-**Copia siempre desde tu clon limpio de `main`, nunca desde `~/proyectos/sdd-workflow`.** Esa es la copia del agente: su árbol de trabajo lo escribe él desde el sandbox, y lo que copies de ahí lo ejecutas tú fuera del sandbox (la línea de estado) o como root (`sudo cp`). Es la misma regla que con lefthook (B7). El clon limpio se crea una vez, con tu cuenta y fuera de Claude Code, y el agente no trabaja en él:
+**Copia siempre desde tu clon limpio de `main`, nunca desde `~/proyectos/sdd-workflow`.** Esa es la copia del agente: su árbol de trabajo lo escribe él desde el sandbox, y lo que copies de ahí lo ejecutas tú fuera del sandbox (la línea de estado) o como root (`sudo cp`). Es la misma regla que con lefthook (B7). El clon limpio se crea una vez, con tu cuenta y fuera de Claude Code; el agente no trabaja en él, y los ajustes gestionados le deniegan Write y Edit ahí:
 
 ```bash
 gh repo clone tu-usuario/sdd-workflow ~/proyectos/sdd-workflow-persona
 ```
 
-Cada vez que copies (ahora y cuando cambie algo de `entorno/` en `main`), primero ponlo al día. Mira antes en github.com que los cambios de `entorno/` pasaron por un PR que aprobaste:
+Cada vez que copies (ahora y cuando cambie algo de `entorno/` en `main`), primero ponlo al día. Mira antes en github.com que los cambios de `entorno/` pasaron por un PR que aprobaste. `git pull` conserva los cambios locales sin commit, así que la última orden comprueba que el clon está limpio y que `HEAD` es `origin/main`: si no escribe `limpio`, para y mira qué cambió.
 
 ```bash
 cd ~/proyectos/sdd-workflow-persona && git switch main && git pull
+test -z "$(git status --porcelain)" && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" && echo limpio
+```
+
+Con `limpio`:
+
+```bash
 sudo mkdir -p /etc/claude-code
 sudo cp entorno/managed-settings.json /etc/claude-code/
 sudo chmod 644 /etc/claude-code/managed-settings.json
@@ -238,7 +244,7 @@ Qué hace cada fichero:
   - red solo hacia GitHub y los registros npm y PyPI, sin preguntar por otros dominios;
   - credenciales (`~/.ssh`, `~/.aws`, la clave de Go, los tokens de Claude Code) ocultas a los comandos;
   - reglas `deny` para que la herramienta Read tampoco las lea;
-  - `deny` de Write y Edit sobre `~/.claude/**` (VIC-20): ahí está lo que Claude Code ejecuta fuera del sandbox con tus permisos (la línea de estado, los hooks y la statusline de `~/.claude/settings.json`, el código de los plugins). Desde Bash el sandbox ya no deja escribir ahí, pero Write y Edit no pasan por el sandbox. **Consecuencia:** el agente no puede guardar su memoria automática (`~/.claude/projects/<proyecto>/memory/`) ni el fichero del plan en modo plan (`~/.claude/plans/`); la deny no admite excepciones. La memoria que ya existe se sigue leyendo, y la puedes editar tú fuera de Claude Code. Si te propone guardar algo, cópialo tú o, si es del proyecto, que vaya al repo en un PR;
+  - `deny` de Write y Edit sobre `~/.claude/**` (VIC-20): ahí está lo que Claude Code ejecuta fuera del sandbox con tus permisos (la línea de estado, los hooks y la statusline de `~/.claude/settings.json`, el código de los plugins). Desde Bash el sandbox ya no deja escribir ahí, pero Write y Edit no pasan por el sandbox. También sobre `~/.claude.json` (los servidores MCP de usuario) y sobre tu clon limpio (`~/proyectos/sdd-workflow-persona/**`). **Consecuencia:** el agente no puede guardar su memoria automática (`~/.claude/projects/<proyecto>/memory/`) ni el fichero del plan en modo plan (`~/.claude/plans/`); la deny no admite excepciones. La memoria que ya existe se sigue leyendo, y la puedes editar tú fuera de Claude Code. Si te propone guardar algo, cópialo tú o, si es del proyecto, que vaya al repo en un PR;
   - `deny` de `git add -A`, `git add --all` y `git add .`, solo en esas formas literales (las demás, como `git add -- .`, dependen del hook del plugin);
   - `ask` al añadir dependencias;
   - el modo "saltarse permisos" desactivado.
@@ -278,10 +284,12 @@ Qué hace cada fichero:
 
    ```bash
    cd ~/proyectos/sdd-workflow-persona
-   SDD_PROBAR_CLAUDE=instalados python3 -m unittest tests.test_deny_claude -v
+   SDD_PROBAR_CLAUDE=instalados python3 -I tests/test_deny_claude.py -v
    ```
 
-   Lanza cuatro sesiones cortas de `claude -p` con Haiku (unos céntimos), sin tus ajustes de usuario, en las que Write y Edit están permitidos de forma explícita sobre `~/.claude/**`. Write no crea un fichero en `~/.claude`, Write y Edit no cambian `~/.claude/sdd-metricas.py`, y el control escribe en una carpeta de prueba. Si alguna escritura pasa, el test devuelve el fichero a como estaba y falla. `test_la_copia_instalada_es_la_del_repo` falla si `/etc/claude-code/managed-settings.json` no es el de tu clon. Si un caso falla porque el modelo no intentó la escritura, repítelo.
+   Antes de nada comprueba que `/etc/claude-code/managed-settings.json` es el de tu clon; si no, falla sin lanzar ninguna sesión. Después lanza seis sesiones cortas de `claude -p` con Haiku (unos céntimos), sin tus ajustes de usuario ni Bash, en las que Write, Edit y NotebookEdit están permitidos de forma explícita sobre `~/.claude/**`. Comprueba que no crean ni cambian ficheros en `~/.claude` (`sdd-metricas.py` incluido, también a través de un enlace simbólico desde el proyecto) y que Write y Edit siguen trabajando fuera de `~/.claude`. Si alguna escritura pasa, el test devuelve el fichero a como estaba y falla. Si un caso falla porque el modelo no intentó la escritura, repítelo. `-I` evita que Python cargue nada de la carpeta del repo.
+
+   Que la denegación se deba a la regla, y no a que Claude Code preguntaría, se comprueba una vez antes del `sudo cp` con `SDD_PROBAR_CLAUDE=rama`: con el mismo arranque y sin la regla, Write sí escribe en `~/.claude`.
 
 **Si un proyecto necesita otro dominio** (por ejemplo, para descargar un navegador de pruebas), se añade a `allowedDomains` editando el fichero con `sudo`. Es un cambio deliberado: anótalo en el `CHANGELOG`.
 
