@@ -19,7 +19,8 @@ poniendo ahí un marcador vacío: dentro, un dispositivo de 0 bytes que no se pu
 fuera queda un fichero vacío (M17). Aquí se simulan los dos en un repo desechable dentro
 de .tareas/ y se prueban commit, switch y push contra un remoto local. Si Git cambia y el
 commondir vacío deja de romperlo, falla. Que el sandbox siga marcando así lo mira
-SandboxGit con las rutas que ya deniega él (ADR-0008, §6)."""
+SandboxGit con las rutas que ya deniega él. También mide qué hace Git con un commondir que
+apunta a otro directorio de Git con su propio config y hooks (docs/herramientas.md)."""
 import errno
 import os
 import pathlib
@@ -94,7 +95,7 @@ MARCADORES = [
     ("sin marcador", {}, None),
     ("commondir vacío", {"commondir": ""}, "status"),
     ("commondir sin lectura", {"commondir": None}, "status"),
-    # La alternativa descartada: un commondir real que apunta al propio .git (ADR-0008, §6).
+    # La alternativa descartada: un commondir real que apunta al propio .git (docs/herramientas.md).
     ("commondir = .", {"commondir": ".\n"}, None),
     ("modules vacío", {"modules": ""}, None),
     ("worktrees vacío", {"worktrees": ""}, None),
@@ -166,13 +167,13 @@ class SandboxGit(unittest.TestCase):
         self.assertEqual([p for p in git.rglob(".sdd-prueba-escritura-*")], [])
 
     def test_marca_las_rutas_denegadas_que_no_existen(self):
-        # La premisa de MarcadoresDelSandbox (ADR-0008, §6): si el sandbox deja de poner un
+        # La premisa de MarcadoresDelSandbox (docs/herramientas.md): si el sandbox deja de poner un
         # marcador vacío, la razón para no denegar commondir puede haber cambiado.
         # Un dispositivo, no un fichero vacío que haya quedado de otra sesión (M17).
         for nombre in RUTAS_MARCADAS:
             with self.subTest(ruta=nombre):
                 ruta = RAIZ / nombre
-                self.assertTrue(ruta.exists(), f"el sandbox ya no marca {nombre}: revisa ADR-0008, §6")
+                self.assertTrue(ruta.exists(), f"el sandbox ya no marca {nombre}: revisa la decisión de VIC-19 en docs/herramientas.md")
                 info = ruta.stat()
                 self.assertTrue(stat.S_ISCHR(info.st_mode), f"{nombre} no es el marcador del sandbox")
                 self.assertEqual(info.st_size, 0)
@@ -191,6 +192,31 @@ class MarcadoresDelSandbox(unittest.TestCase):
                 self.assertEqual(paso, falla_en, error)
                 if falla_en:
                     self.assertIn("commondir", error)
+
+    def test_commondir_a_otro_directorio_toma_su_config_y_sus_hooks(self):
+        # Lo que el agente podría hacer si escribe commondir: Git no avisa, toma config, hooks,
+        # refs y objetos del otro directorio y ejecuta su pre-commit.
+        base = RAIZ / ".tareas"
+        base.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="sdd-prueba-git-", dir=base) as tmp:
+            tmp = pathlib.Path(tmp)
+            _git(tmp, "init", "--quiet", "ajeno", check=True)
+            _git(tmp, "init", "--quiet", "repo", check=True)
+            repo, ajeno = tmp / "repo", tmp / "ajeno" / ".git"
+            _git(repo, "commit", "--allow-empty", "--quiet", "-m", "inicio", check=True)
+            with open(ajeno / "config", "a") as f:
+                f.write("[sdd]\n\tprueba = ajeno\n")
+            marca = tmp / "hook-ajeno-ejecutado"
+            hook = ajeno / "hooks" / "pre-commit"
+            hook.write_text(f"#!/bin/sh\ntouch '{marca}'\n")
+            hook.chmod(0o755)
+            (repo / ".git" / "commondir").write_text(f"{ajeno}\n")
+
+            self.assertEqual(_git(repo, "config", "--get", "sdd.prueba").stdout.strip(), "ajeno")
+            r = _git(repo, "commit", "--allow-empty", "--quiet", "-m", "prueba")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue(marca.exists(), "el pre-commit del otro directorio no se ejecutó")
+            self.assertTrue((ajeno / "refs" / "heads" / "main").exists(), "el commit no fue a las refs del otro")
 
     def test_worktrees_vacio_rompe_git_worktree(self):
         # La plantilla usa git worktree para el trabajo en paralelo (AGENTS.md).

@@ -5,9 +5,13 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 ## v1.1 — en curso
 
 - **Escritura del agente en `.git` (VIC-19): no se deniega más.**
-  - `entorno/managed-settings.json` no cambia. En Linux, el sandbox deniega una ruta que no existe con un fichero vacío mientras corre cada orden, y con un `.git/commondir` vacío Git no arranca. Denegar `.git/worktrees` rompe `git worktree add`, y denegar `.git/modules` no cierra las vías del árbol de trabajo.
-  - `tests/test_sandbox_git.py` simula esos ficheros (vacío y sin permiso de lectura) en un repo de usar y tirar y prueba commit, switch y push contra un remoto local; corre también en la CI. Dentro del sandbox comprueba además que las rutas que este ya deniega sin que existan siguen apareciendo como marcador vacío.
-  - ADR-0008, §6: el límite, la alternativa descartada (`commondir` con `.`) y la comprobación pendiente de los repos anidados. Contra `commondir` siguen la regla para la persona y `guarda-saltos.py`. La guía (B7), al día.
+  - `entorno/managed-settings.json` no cambia. El sandbox deniega una ruta que no existe con un marcador vacío, y con un `.git/commondir` vacío o ilegible Git no arranca. Denegar `.git/worktrees` rompe `git worktree add`; los repos anidados (`.git/modules` y el árbol de trabajo) pasan a VIC-23.
+  - `tests/test_sandbox_git.py`:
+    - simula el marcador (vacío y sin permiso de lectura) en un repo de usar y tirar y prueba commit, switch y push contra un remoto local; corre también en la CI;
+    - prueba un `commondir` que apunta a otro directorio de Git con su propio `config` y `hooks/pre-commit`: Git toma de ahí configuración, hooks, refs y objetos sin avisar, y `git commit` ejecuta ese pre-commit;
+    - dentro del sandbox, comprueba que las rutas que este ya deniega sin que existan siguen siendo un marcador vacío.
+  - `docs/herramientas.md`: el resultado, la alternativa descartada (`commondir` con `.`) y los controles que quedan contra `commondir` (la regla para la persona y `guarda-saltos.py`). ADR-0008 no cambia: su §6 ya dejaba este seguimiento condicionado a lo que permitiera el sandbox. La guía (B7), al día.
+
 - **Piloto de AgentShield (VIC-18, PR 4 de 4):**
   - `ecc-agentshield` 1.6.0, una vez, en un contenedor de podman sin red, sin credenciales y con una copia de `HEAD` en solo lectura, sobre `entorno/` (y los ajustes gestionados y de usuario, renombrados a `settings.json` porque no los busca), `plugin-sdd/` y `plantilla-proyecto/`.
   - Medido: menos de 1 s por carpeta y 46 hallazgos, ninguno accionable tal como los propone (palabras clave en inglés sin contexto). **Descartada**; pasa a "Evaluadas y no aprobadas" en `docs/herramientas.md`.
