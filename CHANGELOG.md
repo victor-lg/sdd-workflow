@@ -4,6 +4,11 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Semgrep no llegaba a escanear (VIC-24).**
+  - `plantilla-proyecto/.github/workflows/seguridad.yml`: el job `semgrep` corre en un contenedor como root, y el checkout es del usuario del runner. Git rechazaba el repo ("dubious ownership") y el paso de configuración fallaba antes de lanzar Semgrep. Se vio en la primera ejecución real, en calculadora-discos#40.
+  - Ahora el paso añade `safe.directory` solo para `$GITHUB_WORKSPACE`. Lo reproduce `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`; falta verlo en la CI de un proyecto.
+  - `tests/test_workflows_plantilla.py` comprueba la línea, y que no se usa `*`.
+
 - **Lo que se ejecuta fuera del sandbox (VIC-20). Cambia `entorno/managed-settings.json`: hace falta el `sudo cp` (desde el clon limpio) y reiniciar las sesiones.**
   - `entorno/managed-settings.json`: `deny` de `Write(~/.claude/**)` y `Edit(~/.claude/**)`. Ahí están la línea de estado (`~/.claude/sdd-metricas.py`), los hooks y la statusline de `~/.claude/settings.json` y el código de los plugins, que Claude Code ejecuta fuera del sandbox. También sobre `~/.claude.json` (servidores MCP de usuario) y sobre el clon limpio de la persona. **Consecuencia:** el agente ya no puede escribir su memoria automática (`~/.claude/projects/<proyecto>/memory/`) ni el plan del modo plan (`~/.claude/plans/`); decisión de Víctor.
   - Guía: B5 copia los ajustes y `sdd-metricas.py` desde un clon limpio de `main` (`~/proyectos/sdd-workflow-persona`, tras `git switch main && git pull`), no desde la copia del agente, tras comprobar que está limpio y en `origin/main`; F carga `claude-go.sh` desde ese clon. Nuevo paso de comprobación (B5, 7).
