@@ -8,7 +8,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 - **Semgrep no llegaba a escanear (VIC-24).**
   - `plantilla-proyecto/.github/workflows/seguridad.yml`: el job `semgrep` corre en un contenedor como root, y el checkout es del usuario del runner. Git rechazaba el repo ("dubious ownership") y el paso de configuración fallaba antes de lanzar Semgrep. Se vio en la primera ejecución real, en calculadora-discos#40.
-  - Ahora el paso añade `safe.directory` solo para `$GITHUB_WORKSPACE`. Lo reproduce `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`; falta verlo en la CI de un proyecto.
+  - Ahora el paso añade `safe.directory` solo para `$GITHUB_WORKSPACE`. Lo reproduce `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`, y se vio en la CI: el segundo run de Semgrep en calculadora-discos#40, con el `seguridad.yml` del #36 ya en `main`, pasó en 39 s. Cierra el aplazamiento de VIC-24.
   - `tests/test_workflows_plantilla.py` comprueba la línea, y que no se usa `*`.
 
 - **Lo que se ejecuta fuera del sandbox (VIC-20). Cambia `entorno/managed-settings.json`: hace falta el `sudo cp` (desde el clon limpio) y reiniciar las sesiones.**
