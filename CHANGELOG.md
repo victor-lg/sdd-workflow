@@ -4,6 +4,8 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Primera ejecución real de `seguridad.yml` (calculadora-discos#40):** `docs/herramientas.md` anota los tiempos medidos (gitleaks 6 s, osv-scanner 6 s, Semgrep 39 s y 53 s, `seguridad` 44 s en paralelo, frente a 6 min 28 s de tests), el digest de Semgrep verificado, los 2 hallazgos en tests excluidos en `.semgrepignore` y el timeout en `three.module.min.js`; cierra el aplazamiento del PR 3 de VIC-18.
+
 - **Semgrep no llegaba a escanear (VIC-24).**
   - `plantilla-proyecto/.github/workflows/seguridad.yml`: el job `semgrep` corre en un contenedor como root, y el checkout es del usuario del runner. Git rechazaba el repo ("dubious ownership") y el paso de configuración fallaba antes de lanzar Semgrep. Se vio en la primera ejecución real, en calculadora-discos#40.
   - Ahora el paso añade `safe.directory` solo para `$GITHUB_WORKSPACE`. Lo reproduce `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`; falta verlo en la CI de un proyecto.
