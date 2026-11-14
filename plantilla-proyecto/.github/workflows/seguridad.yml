@@ -120,6 +120,10 @@ jobs:
 
       - name: Configuración de Semgrep de main
         run: |
+          # El contenedor corre como root y el workspace es del usuario del runner: sin esto,
+          # Git rechaza el repo ("dubious ownership") y el job falla antes de escanear. Solo
+          # este directorio, que es el checkout de la acción: su .git no viene del PR.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           # Los .gitignore de la rama no son R2 y Semgrep podría saltarse lo que cubren, aunque
           # esté versionado. En la CI solo hay ficheros versionados: quitarlos no amplía nada.

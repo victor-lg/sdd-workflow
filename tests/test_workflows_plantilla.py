@@ -65,6 +65,14 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         self.assertIn("\\( -name .semgrepignore -o -name .gitignore \\) ! -type d -exec rm -f {} +", texto)
         self.assertIn("semgrep scan --config p/default --metrics=off --error --disable-nosem --max-target-bytes=0", texto)
 
+    def test_semgrep_confia_solo_en_el_workspace(self):
+        """En el contenedor, Git rechazaba el checkout por ser de otro usuario (calculadora-discos#40)."""
+        texto = leer("seguridad.yml")
+        self.assertIn('git config --global --add safe.directory "$GITHUB_WORKSPACE"\n', texto)
+        self.assertNotIn("safe.directory '*'", texto)
+        self.assertNotIn('safe.directory "*"', texto)
+        self.assertNotIn("safe.directory *", texto)
+
     def test_acciones_fijadas_por_sha(self):
         for fichero in WORKFLOWS.glob("*.yml"):
             for uso in re.findall(r"uses: (\S+)", fichero.read_text(encoding="utf-8")):
