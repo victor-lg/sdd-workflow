@@ -4,11 +4,11 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
-- **Primera ejecución real de `seguridad.yml` (calculadora-discos#40):** `docs/herramientas.md` anota los tiempos medidos (gitleaks 6 s, osv-scanner 6 s, Semgrep 39 s y 53 s, `seguridad` 44 s en paralelo, frente a 6 min 28 s de tests), el digest de Semgrep verificado, los 2 hallazgos en tests excluidos en `.semgrepignore` y el timeout en `three.module.min.js`; cierra el aplazamiento del PR 3 de VIC-18.
+- **Primeras ejecuciones de `seguridad.yml` (calculadora-discos#40, runs 43590228887 y 43593585195):** `docs/herramientas.md` anota los tiempos medidos (gitleaks 11 y 6 s, osv-scanner 7 y 6 s, Semgrep 53 s en el intento 1 y 39 s en el 2, con menos ficheros, y `seguridad` 58 s con los tres jobs en paralelo, frente a 6 min 28 s de tests), que el digest de Semgrep existe y la imagen arranca (no que sea la etiqueta 1.185.0), los 2 hallazgos en tests y el timeout en `three.module.min.js`, excluidos en `.semgrepignore`; la guía deja de llamarlos estimaciones. Cierra el aplazamiento del PR 3 de VIC-18.
 
 - **Semgrep no llegaba a escanear (VIC-24).**
   - `plantilla-proyecto/.github/workflows/seguridad.yml`: el job `semgrep` corre en un contenedor como root, y el checkout es del usuario del runner. Git rechazaba el repo ("dubious ownership") y el paso de configuración fallaba antes de lanzar Semgrep. Se vio en la primera ejecución real, en calculadora-discos#40.
-  - Ahora el paso añade `safe.directory` solo para `$GITHUB_WORKSPACE`. Lo reproduce `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`, y se vio en la CI: el segundo run de Semgrep en calculadora-discos#40, con el `seguridad.yml` del #36 ya en `main`, pasó en 39 s. Cierra el aplazamiento de VIC-24.
+  - Ahora el paso añade `safe.directory` solo para `$GITHUB_WORKSPACE`. Lo reproduce `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`, y se vio en la CI: en calculadora-discos#40 (run 43593585195, intento 1, commit `7a0f1146`), con el arreglo de sdd-workflow#36 ya en la rama, el paso de configuración de Semgrep pasó y Semgrep escaneó. Cierra el aplazamiento de VIC-24.
   - `tests/test_workflows_plantilla.py` comprueba la línea, y que no se usa `*`.
 
 - **Lo que se ejecuta fuera del sandbox (VIC-20). Cambia `entorno/managed-settings.json`: hace falta el `sudo cp` (desde el clon limpio) y reiniciar las sesiones.**

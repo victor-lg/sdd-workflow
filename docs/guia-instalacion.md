@@ -381,7 +381,7 @@ Pídele a Claude, dentro de la sesión:
 1. El push y el PR funcionan desde el sandbox: GitHub está en la lista blanca y las credenciales de `gh` sirven.
 2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, y pasan.
 3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. `semgrep`, solo si ya comprobaste su digest (A3, paso 3).
-   - Si el proyecto no usa npm, quita la entrada `npm` de `.github/dependabot.yml`: sin `package.json`, Dependabot da error cada mes. Apunta en `docs/herramientas.md` del workflow (PR R2) lo que tardó cada job de `seguridad`: hoy son estimaciones.
+   - Si el proyecto no usa npm, quita la entrada `npm` de `.github/dependabot.yml`: sin `package.json`, Dependabot da error cada mes. Lo que tarda cada job de `seguridad` ya está medido en `docs/herramientas.md` del workflow (calculadora-discos#40); si en tu proyecto difiere mucho, apúntalo allí (PR R2).
 4. Pide a Claude que fusione el PR: GitHub lo rechaza (N4).
 5. Tú lo apruebas y lo fusionas desde el navegador.
 6. Opcional (N5): pide a Claude que cree `.github/workflows/x.yml` y lo empuje en otra rama. El push debe fallar porque el token no tiene `workflow`. Borra después la rama local.
