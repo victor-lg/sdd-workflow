@@ -154,6 +154,10 @@ VARIANTES = {
     "codigo": lambda m, resto: f"`{m}`{resto}",
     "linea-en-codigo": lambda m, resto: f"`{m}{resto}`",
     "guion": lambda m, resto: f"- {m}{resto}",
+    "asterisco": lambda m, resto: f"* {m}{resto}",
+    "guion-negrita": lambda m, resto: f"- **{m}**{resto}",
+    "asterisco-negrita": lambda m, resto: f"* **{m}**{resto}",
+    "guion-codigo": lambda m, resto: f"- `{m}`{resto}",
 }
 
 
@@ -212,13 +216,26 @@ class RedaccionDeEvaluadores(unittest.TestCase):
     def test_veredicto_tras_guion_de_lista(self):
         self.comprobar_variante("guion")
 
+    def test_veredicto_tras_asterisco_de_lista(self):
+        self.comprobar_variante("asterisco")
+
+    def test_veredicto_en_negrita_tras_guion(self):
+        self.comprobar_variante("guion-negrita")
+
+    def test_veredicto_en_negrita_tras_asterisco(self):
+        self.comprobar_variante("asterisco-negrita")
+
+    def test_veredicto_en_codigo_tras_guion(self):
+        self.comprobar_variante("guion-codigo")
+
     def test_el_formato_a_mitad_de_linea_no_cuenta(self):
         for (caso, evaluador), (buenas, _) in CASOS.items():
             if "i" in banderas(caso, evaluador):
                 continue
             for respuesta in buenas:
                 cabeza, _, ultima = respuesta.rstrip().rpartition("\n")
-                for texto in (f"{cabeza}\nHecho. **{ultima}", f"{cabeza}\n> {ultima}", f"{cabeza}\n* {ultima}"):
+                for texto in (f"{cabeza}\nHecho. **{ultima}", f"{cabeza}\n> {ultima}", f"{cabeza}\n1. {ultima}",
+                              f"{cabeza}\n> - {ultima}"):
                     with self.subTest(caso=caso, texto=texto):
                         self.assertFalse(patron(caso, evaluador).search(texto))
 

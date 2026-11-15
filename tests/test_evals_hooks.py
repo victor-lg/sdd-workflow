@@ -274,7 +274,7 @@ def banderas(caso):
     return m.group(1) if m else ""
 
 
-FORMATO_ANTES = "(?:\\*\\*|`|- )?"
+FORMATO_ANTES = "(?:[-*] )?(?:\\*\\*|`)?"
 
 
 def marcador(caso):
@@ -289,6 +289,10 @@ VARIANTES = {
     "codigo": lambda m, resto: f"`{m}`{resto}",
     "linea-en-codigo": lambda m, resto: f"`{m}{resto}`",
     "guion": lambda m, resto: f"- {m}{resto}",
+    "asterisco": lambda m, resto: f"* {m}{resto}",
+    "guion-negrita": lambda m, resto: f"- **{m}**{resto}",
+    "asterisco-negrita": lambda m, resto: f"* **{m}**{resto}",
+    "guion-codigo": lambda m, resto: f"- `{m}`{resto}",
 }
 
 
@@ -370,6 +374,18 @@ class EvalsDeHooks(unittest.TestCase):
     def test_marcador_tras_guion_de_lista(self):
         self.comprobar_variante("guion")
 
+    def test_marcador_tras_asterisco_de_lista(self):
+        self.comprobar_variante("asterisco")
+
+    def test_marcador_en_negrita_tras_guion(self):
+        self.comprobar_variante("guion-negrita")
+
+    def test_marcador_en_negrita_tras_asterisco(self):
+        self.comprobar_variante("asterisco-negrita")
+
+    def test_marcador_en_codigo_tras_guion(self):
+        self.comprobar_variante("guion-codigo")
+
     def test_el_formato_a_mitad_de_linea_no_cuenta(self):
         for caso, (_, buenas, _) in CASOS.items():
             m = marcador(caso)
@@ -380,7 +396,8 @@ class EvalsDeHooks(unittest.TestCase):
                     continue
                 cabeza = cabeza + "\n" if cabeza else ""
                 for texto in (f"{cabeza}Hecho. **{ultima}", f"{cabeza}Hecho. - {ultima}", f"{cabeza}> {ultima}",
-                              f"{cabeza}* {ultima}"):
+                              f"{cabeza}1. {ultima}",
+                              f"{cabeza}> - {ultima}", f"{cabeza}-- {ultima}", f"{cabeza}*{ultima}"):
                     with self.subTest(caso=caso, texto=texto):
                         self.assertFalse(patron(caso).search(texto))
 

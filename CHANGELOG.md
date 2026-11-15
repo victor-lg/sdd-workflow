@@ -5,7 +5,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 ## v1.1 — en curso
 
 - **Plugin `sdd` 1.4.3 (VIC-21): los marcadores admiten formato.**
-  - `ORDEN:`, `FICHERO:`, `VEREDICTO:` y `HERRAMIENTA:` admiten opcionalmente `**`, `` ` `` o `- ` delante, y `**` o `` ` `` detrás, siempre al principio de línea. Lo señaló la G4 de #38 como la causa más probable de fallos sueltos.
+  - `ORDEN:`, `FICHERO:`, `VEREDICTO:` y `HERRAMIENTA:` admiten opcionalmente, siempre al principio de línea, una viñeta (`- ` o `* `), `**` o `` ` `` delante, o la viñeta seguida de `**` o `` ` `` (`- **ORDEN:**`, `* **ORDEN:**`, `` - `ORDEN:` ``), y `**` o `` ` `` detrás. `1. ` y `> ` no cuentan. Lo señaló la G4 de #38 como la causa más probable de fallos sueltos; la viñeta `* ` y las combinaciones, la de #39 (decisión de Víctor).
   - `NINGUNA` se acepta en cualquier combinación de mayúsculas y minúsculas.
   - `hook-linear-solo-comentar` pasa a la regla de #38: distingue mayúsculas (admite `Linear` en el nombre de la herramienta) y el marcador va al principio de línea.
   - `n1-spec-fuera-de-main` no cambia.
