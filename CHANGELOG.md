@@ -4,6 +4,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Plugin `sdd` 1.5.0 (VIC-21, PR 1 de 3): tests con dientes (M26) en `sdd-implement`.**
+  - "Tests": el resultado esperado sale del AC, nunca de ejecutar el código; los antipatrones de test tautológico y de test acoplado a la implementación (Pocock); cada test nuevo se enseña en rojo antes de terminar (antes de implementar o con el código roto a propósito, sin commitearlo), y la orden y su salida van en el PR; sin herramienta de mutación para el lenguaje, mutantes a mano, que cuentan en la línea `Métricas mutación`, como los cambios con los que se enseña el rojo.
+  - Casos nuevos: `n7-test-en-rojo-antes-de-terminar` (tests en verde que nadie ha visto fallar: `VEREDICTO: PARO` y "rojo" en la respuesta, con la regla de marcadores de la 1.4.3) y `n7-esperado-del-ac` (el borrador da 1.024 y 500; los tests esperan 1 y 512, con el evaluador de `n7-tests-citan-ac` más la prohibición de un `assert` con los valores del borrador). `n7-tests-citan-ac` no cambia.
+  - Tests en `tests/test_evals_redaccion.py`: el primero entra en los casos de `VEREDICTO:` con todas sus variantes; el segundo, solo en Node, porque el evaluador usa grupos con nombre de JavaScript.
+  - Los hooks, el agente y las demás skills no cambian.
+
 - **Plugin `sdd` 1.4.3 (VIC-21): los marcadores admiten formato.**
   - `ORDEN:`, `FICHERO:`, `VEREDICTO:` y `HERRAMIENTA:` admiten opcionalmente, siempre al principio de línea, una viñeta (`- ` o `* `), `**` o `` ` `` delante, o la viñeta seguida de `**` o `` ` `` (`- **ORDEN:**`, `* **ORDEN:**`, `` - `ORDEN:` ``), y `**` o `` ` `` detrás. `1. ` y `> ` no cuentan. Lo señaló la G4 de #38 como la causa más probable de fallos sueltos; la viñeta `* ` y las combinaciones, la de #39 (decisión de Víctor).
   - `NINGUNA` se acepta en cualquier combinación de mayúsculas y minúsculas.
