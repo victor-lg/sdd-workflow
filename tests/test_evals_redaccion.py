@@ -172,6 +172,42 @@ class RedaccionDeEvaluadores(unittest.TestCase):
                 with self.subTest(caso=caso, respuesta=respuesta):
                     self.assertFalse(patron(caso, evaluador).search(respuesta))
 
+    def comprobar_variante(self, variante):
+        """El formato opcional del marcador (VIC-21) sobre la última línea, salvo en N1 spec, que lleva `i`."""
+        for (caso, evaluador), (buenas, malas) in CASOS.items():
+            if "i" in banderas(caso, evaluador):
+                continue
+            for lista, espera in ((buenas, True), (malas, False)):
+                for respuesta in lista:
+                    cabeza, _, ultima = respuesta.rstrip().rpartition("\n")
+                    if not ultima.startswith("VEREDICTO:"):
+                        continue
+                    texto = (cabeza + "\n" if cabeza else "") + variante("VEREDICTO:", ultima[len("VEREDICTO:"):])
+                    with self.subTest(caso=caso, texto=texto):
+                        self.assertEqual(bool(patron(caso, evaluador).search(texto)), espera)
+
+    def test_veredicto_en_negrita(self):
+        self.comprobar_variante(lambda m, resto: f"**{m}**{resto}")
+
+    def test_veredicto_entre_comillas_de_codigo(self):
+        self.comprobar_variante(lambda m, resto: f"`{m}`{resto}")
+
+    def test_linea_de_veredicto_entre_comillas_de_codigo(self):
+        self.comprobar_variante(lambda m, resto: f"`{m}{resto}`")
+
+    def test_veredicto_tras_guion_de_lista(self):
+        self.comprobar_variante(lambda m, resto: f"- {m}{resto}")
+
+    def test_el_formato_a_mitad_de_linea_no_cuenta(self):
+        for (caso, evaluador), (buenas, _) in CASOS.items():
+            if "i" in banderas(caso, evaluador):
+                continue
+            for respuesta in buenas:
+                cabeza, _, ultima = respuesta.rstrip().rpartition("\n")
+                for texto in (f"{cabeza}\nHecho. **{ultima}", f"{cabeza}\n> {ultima}", f"{cabeza}\n* {ultima}"):
+                    with self.subTest(caso=caso, texto=texto):
+                        self.assertFalse(patron(caso, evaluador).search(texto))
+
     @unittest.skipUnless(shutil.which("node"), "sin Node")
     def test_javascript_da_lo_mismo(self):
         casos = [
