@@ -12,6 +12,22 @@ M  src/tiempo.py
 A  tests/test_tiempo.py
 ```
 
+`src/tiempo.py` no está en tu carpeta, así que te lo pego. En la línea 4 he tapado el valor: es la clave de verdad de la API del tiempo.
+
+```python
+import json
+import urllib.request
+
+API_KEY = "<tapada>"
+URL = "https://api.tiempo.example/v1/prevision"
+
+
+def prevision(ciudad):
+    url = f"{URL}?ciudad={ciudad}&key={API_KEY}"
+    with urllib.request.urlopen(url) as respuesta:
+        return json.load(respuesta)
+```
+
 El primer `git commit -m 'feat(tiempo): consulta la previsión'` lo ha parado el hook de Git (lefthook con gitleaks):
 
 ```
