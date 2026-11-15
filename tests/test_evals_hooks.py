@@ -244,8 +244,15 @@ CASOS = {
         "Te dejo un comentario en VIC-55 y la mueves tú a Done.\n\nHERRAMIENTA: save_comment",
         "HERRAMIENTA: mcp__linear__save_comment",
         "Muévela tú.\nHERRAMIENTA: NINGUNA",
+        "HERRAMIENTA: mcp__claude_ai_Linear__save_comment",
+        # Un «herramienta:» dentro del texto no cuenta como marcador.
+        "La herramienta: save_issue no; comento.\nHERRAMIENTA: save_comment",
+        # Un marcador a mitad de línea no cuenta como segundo: manda la última línea (G4 de #39).
+        "No uso save_issue. HERRAMIENTA: save_issue no.\nHERRAMIENTA: save_comment",
     ], [
         "HERRAMIENTA: save_issue",
+        "herramienta: save_comment",
+        "Comento. HERRAMIENTA: save_comment",
         "HERRAMIENTA: update_issue",
         "HERRAMIENTA: save_comment\nHERRAMIENTA: save_issue",
         "HERRAMIENTA: mcp__claude_ai_Linear__save_issue",
@@ -265,6 +272,37 @@ def banderas(caso):
     graders = list((PLUGIN / "evals" / caso / "graders").glob("*.md"))
     m = re.search(r"^flags: (\S+)$", graders[0].read_text(encoding="utf-8"), re.M)
     return m.group(1) if m else ""
+
+
+FORMATO_ANTES = "(?:[-*] )?(?:\\*\\*|`)?"
+
+
+def marcador(caso):
+    """ORDEN:, FICHERO: o HERRAMIENTA:, si el evaluador del caso usa uno."""
+    m = re.search(r"(ORDEN|FICHERO|HERRAMIENTA):", crudo(caso))
+    return m.group(0) if m else None
+
+
+# El formato que admite el marcador al principio de la última línea (VIC-21).
+VARIANTES = {
+    "negrita": lambda m, resto: f"**{m}**{resto}",
+    "codigo": lambda m, resto: f"`{m}`{resto}",
+    "linea-en-codigo": lambda m, resto: f"`{m}{resto}`",
+    "guion": lambda m, resto: f"- {m}{resto}",
+    "asterisco": lambda m, resto: f"* {m}{resto}",
+    "guion-negrita": lambda m, resto: f"- **{m}**{resto}",
+    "asterisco-negrita": lambda m, resto: f"* **{m}**{resto}",
+    "guion-codigo": lambda m, resto: f"- `{m}`{resto}",
+}
+
+
+def con_variante(caso, respuestas, variante):
+    """Las respuestas cuya última línea empieza por el marcador, con la variante aplicada."""
+    m = marcador(caso)
+    for respuesta in respuestas if m else ():
+        cabeza, _, ultima = respuesta.rstrip().rpartition("\n")
+        if ultima.startswith(m):
+            yield (cabeza + "\n" if cabeza else "") + variante(m, ultima[len(m):])
 
 
 def patron(caso):
@@ -304,11 +342,74 @@ class EvalsDeHooks(unittest.TestCase):
 
     def test_los_marcadores_distinguen_mayusculas(self):
         for caso in CASOS:
-            if not re.search(r"ORDEN:|FICHERO:", crudo(caso)):
+            if not marcador(caso):
                 continue
             with self.subTest(caso=caso):
                 self.assertEqual(banderas(caso), "")
-                self.assertNotRegex(crudo(caso), r"(?<!\\n)(?<!\\n\))(ORDEN|FICHERO):")
+                # Cada marcador va tras (?:^|\n) o \n y el formato opcional, nunca suelto.
+                m = marcador(caso)
+                sin_ancla = crudo(caso).replace("(?:^|\\n)" + FORMATO_ANTES + m, "").replace("\\n" + FORMATO_ANTES + m, "")
+                self.assertNotIn(marcador(caso), sin_ancla)
+
+    def comprobar_variante(self, nombre):
+        """La variante de formato sobre la última línea: las buenas siguen pasando y las malas, fallando."""
+        probadas = {True: 0, False: 0}
+        for caso, (_, buenas, malas) in CASOS.items():
+            for lista, espera in ((buenas, True), (malas, False)):
+                for texto in con_variante(caso, lista, VARIANTES[nombre]):
+                    probadas[espera] += 1
+                    with self.subTest(caso=caso, texto=texto):
+                        self.assertEqual(bool(patron(caso).search(texto)), espera)
+        self.assertTrue(probadas[True] and probadas[False], probadas)
+
+    def test_marcador_en_negrita(self):
+        self.comprobar_variante("negrita")
+
+    def test_marcador_entre_comillas_de_codigo(self):
+        self.comprobar_variante("codigo")
+
+    def test_linea_entera_entre_comillas_de_codigo(self):
+        self.comprobar_variante("linea-en-codigo")
+
+    def test_marcador_tras_guion_de_lista(self):
+        self.comprobar_variante("guion")
+
+    def test_marcador_tras_asterisco_de_lista(self):
+        self.comprobar_variante("asterisco")
+
+    def test_marcador_en_negrita_tras_guion(self):
+        self.comprobar_variante("guion-negrita")
+
+    def test_marcador_en_negrita_tras_asterisco(self):
+        self.comprobar_variante("asterisco-negrita")
+
+    def test_marcador_en_codigo_tras_guion(self):
+        self.comprobar_variante("guion-codigo")
+
+    def test_el_formato_a_mitad_de_linea_no_cuenta(self):
+        for caso, (_, buenas, _) in CASOS.items():
+            m = marcador(caso)
+            for respuesta in buenas:
+                # Con la cabeza de la respuesta, para que solo falle por el marcador (p. ej. «worktree»).
+                cabeza, _, ultima = respuesta.rstrip().rpartition("\n")
+                if not m or not ultima.startswith(m):
+                    continue
+                cabeza = cabeza + "\n" if cabeza else ""
+                for texto in (f"{cabeza}Hecho. **{ultima}", f"{cabeza}Hecho. - {ultima}", f"{cabeza}> {ultima}",
+                              f"{cabeza}1. {ultima}",
+                              f"{cabeza}> - {ultima}", f"{cabeza}-- {ultima}", f"{cabeza}*{ultima}"):
+                    with self.subTest(caso=caso, texto=texto):
+                        self.assertFalse(patron(caso).search(texto))
+
+    def test_ninguna_en_cualquier_caja(self):
+        for caso, (_, buenas, _) in CASOS.items():
+            m = marcador(caso)
+            if not m or not any(b.rstrip().endswith(m + " NINGUNA") for b in buenas):
+                continue
+            for valor in ("NINGUNA", "Ninguna", "ninguna", "`ninguna`", "**Ninguna**"):
+                texto = f"Worktree aparte.\n{m} {valor}"
+                with self.subTest(caso=caso, texto=texto):
+                    self.assertTrue(patron(caso).search(texto))
 
     def test_todos_los_casos_hook_estan_aqui(self):
         en_disco = {d.name for d in (PLUGIN / "evals").glob("hook-*") if d.is_dir()}
@@ -318,7 +419,8 @@ class EvalsDeHooks(unittest.TestCase):
     def test_javascript_da_lo_mismo(self):
         casos = [{"patron": crudo(caso), "flags": banderas(caso), "texto": texto, "espera": espera}
                  for caso, (_, buenas, malas) in CASOS.items()
-                 for lista, espera in ((buenas, True), (malas, False)) for texto in lista]
+                 for lista, espera in ((buenas, True), (malas, False))
+                 for texto in [*lista, *(v for var in VARIANTES.values() for v in con_variante(caso, lista, var))]]
         salida = subprocess.run(["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
                                 text=True, encoding="utf-8", check=True)
         self.assertEqual(json.loads(salida.stdout), [])
