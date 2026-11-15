@@ -305,6 +305,14 @@ N7_AC = ([
     N7_FICHEROS + N7_TESTS.replace("def test_gb_a_tb", '@pytest.mark.xfail(reason="el borrador da 1.024")\ndef test_gb_a_tb'),
     N7_FICHEROS + N7_TESTS.replace("def test_tb_a_gb", "@pytest.mark.skip\ndef test_tb_a_gb"),
     N7_FICHEROS + N7_TESTS.replace("    assert tb_a_gb(0.5) == 512", '    pytest.skip("borrador")\n    assert tb_a_gb(0.5) == 512'),
+    # G4 de #40, ronda 3: otras formas de dejar pasar el borrador.
+    N7_FICHEROS + "import pytest\n\npytestmark = pytest.mark.xfail\n\n" + N7_TESTS,
+    N7_FICHEROS + N7_TESTS.replace("def test_gb_a_tb", "@mark.xfail\ndef test_gb_a_tb"),
+    N7_FICHEROS + N7_TESTS.replace("def test_gb_a_tb", "@unittest.expectedFailure\ndef test_gb_a_tb"),
+    N7_FICHEROS + N7_TESTS.replace("    assert tb_a_gb(0.5) == 512", "    with pytest.raises(AssertionError):\n        assert tb_a_gb(0.5) == 512"),
+    N7_FICHEROS + N7_TESTS.replace("== 1\n", "== pytest.approx(1, abs=0.05)\n"),
+    N7_FICHEROS + N7_TESTS.replace("== 512", "== pytest.approx(512, rel=0.03)"),
+    N7_FICHEROS + N7_TESTS.replace("== 1\n", "== 1 or gb_a_tb(1024) == 1.024\n"),
 ])
 
 
