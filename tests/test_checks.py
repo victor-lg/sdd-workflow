@@ -515,6 +515,15 @@ class TestFicherosSensibles(unittest.TestCase):
             with self.subTest(ruta=ruta):
                 self.assertEqual(riesgo([ruta]).errores, [])
 
+    def test_npm_shrinkwrap_es_un_manifiesto(self):
+        """G4 del PR 2 de VIC-21, ronda 3: `npm ci` lo usa antes que package-lock.json."""
+        for ruta in ["npm-shrinkwrap.json", "web/npm-shrinkwrap.json"]:
+            with self.subTest(ruta=ruta):
+                errores = riesgo([ruta]).errores
+                self.assertEqual(len(errores), 1, errores)
+                self.assertIn("exige R2", errores[0])
+                self.assertEqual(riesgo([ruta], "R2").errores, [])
+
     def test_submodulos(self):
         """G4 del PR 3, ronda 3: el código de un submódulo no lo ve ningún escáner."""
         inf = ejecutar(checks.check_riesgo, "## Nivel de riesgo\n\n- [x] R1\n", ["src/lib"], None, None, {}, {},

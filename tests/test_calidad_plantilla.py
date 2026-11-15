@@ -124,46 +124,6 @@ class Preparar(unittest.TestCase):
         self.assertIn("::error::main tiene package.json y la rama no", texto)
         self.assertNotIn("stryker=", salida)
 
-    def test_un_stryker_disable_nuevo_falla(self):
-        """G4, ronda 1: con el test debilitado y dos `// Stryker disable next-line all`, Stryker
-        10.1.1 da 100,00 y sale con 0 (medido); los mutantes quedan Ignored."""
-        for comentario in ("// Stryker disable next-line all", "/* Stryker disable all */",
-                           "// stryker  disable next-line ArithmeticOperator", "# Stryker\tdisable all",
-                           # G4, ronda 2: en el diff sale como `+++n; …`, que parecía una cabecera.
-                           "++n; // Stryker disable all"):
-            with self.subTest(comentario=comentario):
-                self.setUp()
-                self.main(CONFIG)
-                self.escribir("package.json", PAQUETE)
-                self.escribir("src/unidades.js", f"{comentario}\nexport const x = 1 * 2;\n")
-                estado, texto, salida = self.preparar()
-                self.assertEqual(estado, 1, texto)
-                self.assertIn("::error::La rama añade un comentario «Stryker disable»", texto)
-                self.assertNotIn("stryker=si", salida)
-
-    def test_un_stryker_disable_tapado_con_gitattributes_falla(self):
-        """G4, ronda 2: con `-diff` o `binary`, `git diff` solo dice "Binary files … differ"."""
-        for atributo in ("src/*.js -diff", "*.js binary", "* -diff"):
-            with self.subTest(atributo=atributo):
-                self.setUp()
-                self.main(CONFIG)
-                self.escribir("package.json", PAQUETE)
-                self.escribir(".gitattributes", atributo + "\n")
-                self.escribir("src/unidades.js", "// Stryker disable all\nexport const x = 1 * 2;\n")
-                estado, texto, _ = self.preparar()
-                self.assertEqual(estado, 1, texto)
-                self.assertIn("::error::La rama añade un comentario «Stryker disable»", texto)
-
-    def test_un_stryker_disable_de_main_no_cuenta(self):
-        """Los que ya están en main los aprobó la persona: solo se mira lo que añade la rama."""
-        self.escribir("src/unidades.js", "// Stryker disable next-line all\nexport const x = 1 * 2;\n")
-        self.main(CONFIG)
-        self.escribir("package.json", PAQUETE)
-        self.escribir("src/otro.js", "export const y = 3;\n")
-        estado, texto, salida = self.preparar()
-        self.assertEqual(estado, 0, texto)
-        self.assertEqual(salida, "stryker=si\n")
-
     def test_sin_stryker_en_dev_dependencies_falla(self):
         self.main(CONFIG)
         for paquete in ({"name": "p"}, {"devDependencies": None},
@@ -201,6 +161,20 @@ class Preparar(unittest.TestCase):
         estado, texto, salida = self.preparar()
         self.assertEqual(estado, 1, texto)
         self.assertIn("::error::Falta stryker.config.json", texto)
+
+    def test_otra_configuracion_en_main_falla(self):
+        """G4, ronda 3: si main usa .mjs (o .js…), la CI no la lee, y un .json de la rama no puede ocupar su sitio."""
+        for nombre in ("stryker.config.mjs", ".stryker.conf.js", "stryker.conf.cjs"):
+            with self.subTest(nombre=nombre):
+                self.setUp()
+                self.escribir(nombre, "export default {thresholds: {break: 80}}")
+                self.main()
+                self.escribir("package.json", PAQUETE)
+                self.escribir("stryker.config.json", {"thresholds": {"break": 1}})
+                estado, texto, salida = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::main tiene una configuración de Stryker que no es stryker.config.json", texto)
+                self.assertNotIn("stryker=si", salida)
 
     def test_umbral_mayor_que_cero(self):
         """Sin `break`, o con 0, Stryker nunca falla (Víctor, 2026-11-15)."""
@@ -272,6 +246,71 @@ class StrykerEnLaCi(unittest.TestCase):
         estado, texto, _ = self.stryker()
         self.assertEqual(estado, 1, texto)
         self.assertIn("::error::Stryker no ha probado ningún mutante", texto)
+
+    def debilitar_y_tapar(self, codigo):
+        """El test debilitado de arriba (sobreviven 4 de 7) y `src/unidades.js` con comentarios de Stryker."""
+        (self.proyecto / "test" / "unidades.test.js").write_text(
+            'import { test } from "node:test";\nimport assert from "node:assert/strict";\n'
+            'import { tbAGb } from "../src/unidades.js";\n\n'
+            'test("devuelve un número", () => assert.equal(typeof tbAGb(1), "number"));\n')
+        (self.proyecto / "src" / "unidades.js").write_bytes(codigo.encode("utf-8", "surrogateescape"))
+        return self.stryker()
+
+    def test_un_comentario_stryker_disable_hace_fallar_el_job(self):
+        """G4, rondas 1 a 3: sin este control, con el test debilitado y los mutantes tapados por
+        comentarios, Stryker 10.1.1 da 100,00 y sale con 0 (medido). Cada forma esconde el comentario
+        a un `grep` del diff: `++` al principio, un NUL antes, un byte UTF-8 inválido en el motivo."""
+        formas = {
+            "next-line": "// Stryker disable next-line all\n  if (tb < 0) throw new RangeError();\n"
+                         "  // Stryker disable next-line all\n  return tb * 1024;\n",
+            "++ delante": "  if (tb < 0) throw new RangeError();\n  return tb * 1024;\n",
+            "byte inválido": "  // Stryker disable all: \udcff\n  if (tb < 0) throw new RangeError();\n  return tb * 1024;\n",
+        }
+        for forma, cuerpo in formas.items():
+            with self.subTest(forma=forma):
+                self.setUp()
+                if forma == "++ delante":
+                    codigo = "let n = 0;\n++n; // Stryker disable all\nexport function tbAGb(tb) {\n" + cuerpo + "}\n"
+                else:
+                    codigo = "export function tbAGb(tb) {\n" + cuerpo + "}\n"
+                estado, texto, _ = self.debilitar_y_tapar(codigo)
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::Hay mutantes Ignored", texto)
+                self.assertRegex(texto, r"::error file=src/unidades\.js,line=\d+::Mutante ignorado")
+
+    def test_con_los_tests_buenos_un_ignorado_tambien_falla(self):
+        """Aunque la puntuación pase el umbral: lo que no se deba mutar sale de `mutate`, en main."""
+        (self.proyecto / "src" / "unidades.js").write_text(
+            "export function tbAGb(tb) {\n  if (tb < 0) throw new RangeError();\n"
+            "  // Stryker disable next-line all: motivo\n  return tb * 1024;\n}\n")
+        estado, texto, _ = self.stryker()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("greater than or equal to break threshold 80", texto)
+        self.assertIn("Mutante ignorado (motivo)", texto)
+
+    def test_un_informe_json_de_la_rama_no_cuenta(self):
+        """El informe se borra antes de ejecutar: uno commiteado en la rama no sustituye al de Stryker."""
+        informe = self.proyecto / "reports" / "mutation" / "mutation.json"
+        informe.parent.mkdir(parents=True)
+        informe.write_text('{"files": {}}')
+        self.assertEqual(self.stryker()[0], 0)
+        self.assertIn("unidades.js", informe.read_text())
+
+    def test_sin_informe_falla(self):
+        """Con `dryRunOnly`, Stryker sale con 0 sin mutar nada ni dejar informe (medido). Tampoco vale
+        un informe que traiga la rama: se borra antes."""
+        config = json.loads((self.temporal / "stryker.config.json").read_text())
+        config["dryRunOnly"] = True
+        (self.temporal / "stryker.config.json").write_text(json.dumps(config))
+        for con_informe_de_la_rama in (False, True):
+            with self.subTest(con_informe_de_la_rama=con_informe_de_la_rama):
+                if con_informe_de_la_rama:
+                    informe = self.proyecto / "reports" / "mutation" / "mutation.json"
+                    informe.parent.mkdir(parents=True, exist_ok=True)
+                    informe.write_text('{"files": {}}')
+                estado, texto, _ = self.stryker()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::Stryker no ha dejado el informe JSON", texto)
 
     def test_un_fichero_incremental_de_la_rama_no_cuenta(self):
         """--force: sin él, Stryker reutiliza un informe incremental que la rama marque como "Killed"

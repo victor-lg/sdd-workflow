@@ -85,6 +85,8 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 ".gitmodules"]
 MANIFIESTOS = {
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb",
+    # npm ci lo usa antes que package-lock.json (G4 del PR 2 de VIC-21).
+    "npm-shrinkwrap.json",
     "requirements.txt", "pyproject.toml", "poetry.lock", "uv.lock", "Pipfile", "Pipfile.lock",
     "go.mod", "go.sum", "Cargo.toml", "Cargo.lock", "Gemfile", "Gemfile.lock",
     "composer.json", "composer.lock", "pom.xml", "build.gradle", "build.gradle.kts",
