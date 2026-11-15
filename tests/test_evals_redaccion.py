@@ -284,10 +284,13 @@ N7_AC = ([
     "(`assert tb_a_gb(0.5) == 500` sería copiar el código).\n\n" + N7_FICHEROS + N7_TESTS,
     N7_FICHEROS + N7_TESTS.replace("assert tb_a_gb(0.5) == 512", "resultado = tb_a_gb(0.5)\n    assert resultado == 512"),
     N7_FICHEROS + N7_TESTS.replace("== 1\n", "== pytest.approx(1)\n"),
+    # G4 de #40: comentarios, mensajes y tests de regresión que citan lo que da el borrador.
+    N7_FICHEROS + N7_TESTS.replace("== 1\n", "== 1  # el borrador daba 1.024\n"),
+    N7_FICHEROS + N7_TESTS.replace("== 512", '== 512, "no 500"'),
+    N7_FICHEROS + N7_TESTS.replace("== 512", "== 512\n    assert 500 != tb_a_gb(0.5)"),
 ], [
     N7_FICHEROS + N7_TESTS.replace("== 512", "== 500"),
     N7_FICHEROS + N7_TESTS.replace("== 1\n", "== 1.024\n"),
-    N7_FICHEROS + N7_TESTS.replace("== 512", "== 512\n    assert 500 != tb_a_gb(0.5)"),
     N7_FICHEROS + N7_TESTS.replace("  # SPEC-DISCO-003/AC-02", ""),
     N7_FICHEROS + N7_TESTS.replace("assert tb_a_gb(0.5) == 512", "assert tb_a_gb(0.5) == tb_a_gb(0.5)"),
     N7_FICHEROS,
@@ -297,9 +300,10 @@ N7_AC = ([
 class EsperadoDelAc(unittest.TestCase):
     """El evaluador usa grupos con nombre de JavaScript, (?<r1>…), que Python no admite: solo se prueba en Node."""
 
-    def test_conserva_el_evaluador_de_n7(self):
-        self.assertTrue(crudo("n7-esperado-del-ac", "espera-lo-del-ac").endswith(
-            crudo("n7-tests-citan-ac", "tests-citan-y-prueban-los-ac")[1:]))
+    def test_es_el_evaluador_de_n7(self):
+        self.assertEqual(crudo("n7-esperado-del-ac", "espera-lo-del-ac"),
+                         crudo("n7-tests-citan-ac", "tests-citan-y-prueban-los-ac"),
+                         "Si cambias el evaluador de n7-tests-citan-ac, cópialo también en n7-esperado-del-ac.")
 
     @unittest.skipUnless(shutil.which("node"), "sin Node")
     def test_acepta_el_ac_y_rechaza_el_codigo_en_javascript(self):

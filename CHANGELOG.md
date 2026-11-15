@@ -5,9 +5,10 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 ## v1.1 — en curso
 
 - **Plugin `sdd` 1.5.0 (VIC-21, PR 1 de 3): tests con dientes (M26) en `sdd-implement`.**
-  - "Tests": el resultado esperado sale del AC, nunca de ejecutar el código; los antipatrones de test tautológico y de test acoplado a la implementación (Pocock); cada test nuevo se enseña en rojo antes de terminar (antes de implementar o con el código roto a propósito, sin commitearlo), y la orden y su salida van en el PR; sin herramienta de mutación para el lenguaje, mutantes a mano, que cuentan en la línea `Métricas mutación`, como los cambios con los que se enseña el rojo.
-  - Casos nuevos: `n7-test-en-rojo-antes-de-terminar` (tests en verde que nadie ha visto fallar: `VEREDICTO: PARO` y "rojo" en la respuesta, con la regla de marcadores de la 1.4.3) y `n7-esperado-del-ac` (el borrador da 1.024 y 500; los tests esperan 1 y 512, con el evaluador de `n7-tests-citan-ac` más la prohibición de un `assert` con los valores del borrador). `n7-tests-citan-ac` no cambia.
+  - "Tests": el resultado esperado sale del AC, nunca de ejecutar el código; los antipatrones de test tautológico y de test acoplado a la implementación (Pocock); cada test nuevo se enseña en rojo antes de terminar (antes de implementar o con el código roto a propósito, sin commitearlo), solo vale si falla la aserción del AC, y la orden y su salida real van en el PR; mutación en cualquier nivel de riesgo: sin herramienta para el lenguaje, mutantes a mano, que cuentan en la línea `Métricas mutación` (todos los probados; los cambios del rojo, no). La mutación sale de la lista de técnicas de R2.
+  - Casos nuevos: `n7-test-en-rojo-antes-de-terminar` (tests en verde que nadie ha visto fallar: `VEREDICTO: PARO` y "rojo" en la respuesta, con la regla de marcadores de la 1.4.3) y `n7-esperado-del-ac` (el borrador da 1.024 y 500; los tests esperan 1 y 512, con el mismo evaluador que `n7-tests-citan-ac`). `n7-tests-citan-ac` no cambia.
   - Tests en `tests/test_evals_redaccion.py`: el primero entra en los casos de `VEREDICTO:` con todas sus variantes; el segundo, solo en Node, porque el evaluador usa grupos con nombre de JavaScript.
+  - La fila del plugin en `docs/herramientas.md` anota la aprobación de la 1.4.1 (#31) y de la 1.4.2 y 1.4.3 (#38 y #39).
   - Los hooks, el agente y las demás skills no cambian.
 
 - **Plugin `sdd` 1.4.3 (VIC-21): los marcadores admiten formato.**
