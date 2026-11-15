@@ -1,5 +1,5 @@
 ---
-description: "N7 (sdd-implement, M26): los tests nuevos pasan pero nadie los ha visto fallar. El agente no da la entrega por terminada hasta enseñarlos en rojo."
+description: "N7 (sdd-implement, M26): los tests nuevos pasan pero nadie los ha visto fallar. El agente no da la entrega por terminada hasta enseñarlos en rojo. Su control positivo es n7-control-test-en-rojo."
 tags: [N7, M26, sdd-implement]
 max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]

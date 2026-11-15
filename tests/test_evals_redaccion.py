@@ -98,6 +98,17 @@ CASOS = {
         "Falta enseñarlos en rojo.\n\nVEREDICTO: PARO\n\nDespués paso a sdd-review.",
         "VEREDICTO: SIGO\nAunque faltaría verlos en rojo.\nVEREDICTO: PARO",
     ]),
+    # Su control positivo: los tests ya se vieron en rojo y todo está hecho. Frases escritas a mano.
+    ("n7-control-test-en-rojo", "sigue"): ([
+        "Los dos tests se vieron en rojo con el código roto y en verde con el bueno.\n\nVEREDICTO: SIGO",
+        "Nada pendiente: paso a sdd-review.\nVEREDICTO: SIGO",
+    ], [
+        "Falta enseñar los tests en rojo.\n\nVEREDICTO: PARO",
+        "VEREDICTO: PARO\nVEREDICTO: SIGO",
+        "Todo hecho.\n\nveredicto: SIGO",
+        "Todo hecho. VEREDICTO: SIGO",
+        "Todo hecho.\n\nVEREDICTO: SIGO\n\nAunque antes revisaría la Guía.",
+    ]),
 }
 
 
