@@ -148,6 +148,23 @@ def banderas(caso, evaluador):
     return m.group(1) if m else ""
 
 
+# El formato que admite el marcador al principio de la última línea (VIC-21).
+VARIANTES = {
+    "negrita": lambda m, resto: f"**{m}**{resto}",
+    "codigo": lambda m, resto: f"`{m}`{resto}",
+    "linea-en-codigo": lambda m, resto: f"`{m}{resto}`",
+    "guion": lambda m, resto: f"- {m}{resto}",
+}
+
+
+def con_variante(caso, evaluador, respuestas, variante):
+    """Las respuestas que acaban en VEREDICTO:, con la variante aplicada; ninguna si el evaluador lleva `i`."""
+    for respuesta in respuestas if "i" not in banderas(caso, evaluador) else ():
+        cabeza, _, ultima = respuesta.rstrip().rpartition("\n")
+        if ultima.startswith("VEREDICTO:"):
+            yield (cabeza + "\n" if cabeza else "") + variante("VEREDICTO:", ultima[len("VEREDICTO:"):])
+
+
 def patron(caso, evaluador):
     return re.compile(crudo(caso, evaluador), re.I if "i" in banderas(caso, evaluador) else 0)
 
@@ -172,31 +189,28 @@ class RedaccionDeEvaluadores(unittest.TestCase):
                 with self.subTest(caso=caso, respuesta=respuesta):
                     self.assertFalse(patron(caso, evaluador).search(respuesta))
 
-    def comprobar_variante(self, variante):
+    def comprobar_variante(self, nombre):
         """El formato opcional del marcador (VIC-21) sobre la última línea, salvo en N1 spec, que lleva `i`."""
+        probadas = {True: 0, False: 0}
         for (caso, evaluador), (buenas, malas) in CASOS.items():
-            if "i" in banderas(caso, evaluador):
-                continue
             for lista, espera in ((buenas, True), (malas, False)):
-                for respuesta in lista:
-                    cabeza, _, ultima = respuesta.rstrip().rpartition("\n")
-                    if not ultima.startswith("VEREDICTO:"):
-                        continue
-                    texto = (cabeza + "\n" if cabeza else "") + variante("VEREDICTO:", ultima[len("VEREDICTO:"):])
+                for texto in con_variante(caso, evaluador, lista, VARIANTES[nombre]):
+                    probadas[espera] += 1
                     with self.subTest(caso=caso, texto=texto):
                         self.assertEqual(bool(patron(caso, evaluador).search(texto)), espera)
+        self.assertTrue(probadas[True] and probadas[False], probadas)
 
     def test_veredicto_en_negrita(self):
-        self.comprobar_variante(lambda m, resto: f"**{m}**{resto}")
+        self.comprobar_variante("negrita")
 
     def test_veredicto_entre_comillas_de_codigo(self):
-        self.comprobar_variante(lambda m, resto: f"`{m}`{resto}")
+        self.comprobar_variante("codigo")
 
     def test_linea_de_veredicto_entre_comillas_de_codigo(self):
-        self.comprobar_variante(lambda m, resto: f"`{m}{resto}`")
+        self.comprobar_variante("linea-en-codigo")
 
     def test_veredicto_tras_guion_de_lista(self):
-        self.comprobar_variante(lambda m, resto: f"- {m}{resto}")
+        self.comprobar_variante("guion")
 
     def test_el_formato_a_mitad_de_linea_no_cuenta(self):
         for (caso, evaluador), (buenas, _) in CASOS.items():
@@ -214,7 +228,7 @@ class RedaccionDeEvaluadores(unittest.TestCase):
             {"patron": crudo(caso, evaluador), "flags": banderas(caso, evaluador), "texto": texto, "espera": espera}
             for (caso, evaluador), (buenas, malas) in CASOS.items()
             for lista, espera in ((buenas, True), (malas, False))
-            for texto in lista
+            for texto in [*lista, *(v for var in VARIANTES.values() for v in con_variante(caso, evaluador, lista, var))]
         ]
         salida = subprocess.run(
             ["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,

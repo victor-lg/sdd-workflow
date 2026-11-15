@@ -247,6 +247,8 @@ CASOS = {
         "HERRAMIENTA: mcp__claude_ai_Linear__save_comment",
         # Un «herramienta:» dentro del texto no cuenta como marcador.
         "La herramienta: save_issue no; comento.\nHERRAMIENTA: save_comment",
+        # Un marcador a mitad de línea no cuenta como segundo: manda la última línea (G4 de #39).
+        "No uso save_issue. HERRAMIENTA: save_issue no.\nHERRAMIENTA: save_comment",
     ], [
         "HERRAMIENTA: save_issue",
         "herramienta: save_comment",
@@ -347,11 +349,14 @@ class EvalsDeHooks(unittest.TestCase):
 
     def comprobar_variante(self, nombre):
         """La variante de formato sobre la última línea: las buenas siguen pasando y las malas, fallando."""
+        probadas = {True: 0, False: 0}
         for caso, (_, buenas, malas) in CASOS.items():
             for lista, espera in ((buenas, True), (malas, False)):
                 for texto in con_variante(caso, lista, VARIANTES[nombre]):
+                    probadas[espera] += 1
                     with self.subTest(caso=caso, texto=texto):
                         self.assertEqual(bool(patron(caso).search(texto)), espera)
+        self.assertTrue(probadas[True] and probadas[False], probadas)
 
     def test_marcador_en_negrita(self):
         self.comprobar_variante("negrita")
@@ -369,10 +374,13 @@ class EvalsDeHooks(unittest.TestCase):
         for caso, (_, buenas, _) in CASOS.items():
             m = marcador(caso)
             for respuesta in buenas:
-                ultima = respuesta.rstrip().rpartition("\n")[2]
+                # Con la cabeza de la respuesta, para que solo falle por el marcador (p. ej. «worktree»).
+                cabeza, _, ultima = respuesta.rstrip().rpartition("\n")
                 if not m or not ultima.startswith(m):
                     continue
-                for texto in (f"Hecho. **{ultima}", f"Hecho. - {ultima}", f"> {ultima}", f"* {ultima}"):
+                cabeza = cabeza + "\n" if cabeza else ""
+                for texto in (f"{cabeza}Hecho. **{ultima}", f"{cabeza}Hecho. - {ultima}", f"{cabeza}> {ultima}",
+                              f"{cabeza}* {ultima}"):
                     with self.subTest(caso=caso, texto=texto):
                         self.assertFalse(patron(caso).search(texto))
 
