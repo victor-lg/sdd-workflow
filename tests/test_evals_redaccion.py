@@ -91,6 +91,11 @@ CASOS = {
         "Falta la Guía para el revisor.\n\nVEREDICTO: PARO",
         "Los vi en rojo y en verde.\nVEREDICTO: PARO\nVEREDICTO: SIGO",
         "Antes, pásalos a enrojecer.\n\nVEREDICTO: PARO",
+        # Mutantes que sobrevivieron en la G4 de #40: "rojo" dentro de otra palabra, PARO fuera de la
+        # última línea y un SIGO antes del PARO final.
+        "Me sonrojo, pero falta la Guía.\n\nVEREDICTO: PARO",
+        "Falta enseñarlos en rojo.\n\nVEREDICTO: PARO\n\nDespués paso a sdd-review.",
+        "VEREDICTO: SIGO\nAunque faltaría verlos en rojo.\nVEREDICTO: PARO",
     ]),
 }
 
