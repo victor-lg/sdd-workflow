@@ -128,7 +128,9 @@ class Preparar(unittest.TestCase):
         """G4, ronda 1: con el test debilitado y dos `// Stryker disable next-line all`, Stryker
         10.1.1 da 100,00 y sale con 0 (medido); los mutantes quedan Ignored."""
         for comentario in ("// Stryker disable next-line all", "/* Stryker disable all */",
-                           "// stryker  disable next-line ArithmeticOperator", "# Stryker\tdisable all"):
+                           "// stryker  disable next-line ArithmeticOperator", "# Stryker\tdisable all",
+                           # G4, ronda 2: en el diff sale como `+++n; …`, que parecía una cabecera.
+                           "++n; // Stryker disable all"):
             with self.subTest(comentario=comentario):
                 self.setUp()
                 self.main(CONFIG)
@@ -138,6 +140,19 @@ class Preparar(unittest.TestCase):
                 self.assertEqual(estado, 1, texto)
                 self.assertIn("::error::La rama añade un comentario «Stryker disable»", texto)
                 self.assertNotIn("stryker=si", salida)
+
+    def test_un_stryker_disable_tapado_con_gitattributes_falla(self):
+        """G4, ronda 2: con `-diff` o `binary`, `git diff` solo dice "Binary files … differ"."""
+        for atributo in ("src/*.js -diff", "*.js binary", "* -diff"):
+            with self.subTest(atributo=atributo):
+                self.setUp()
+                self.main(CONFIG)
+                self.escribir("package.json", PAQUETE)
+                self.escribir(".gitattributes", atributo + "\n")
+                self.escribir("src/unidades.js", "// Stryker disable all\nexport const x = 1 * 2;\n")
+                estado, texto, _ = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::La rama añade un comentario «Stryker disable»", texto)
 
     def test_un_stryker_disable_de_main_no_cuenta(self):
         """Los que ya están en main los aprobó la persona: solo se mira lo que añade la rama."""

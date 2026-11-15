@@ -68,7 +68,10 @@ jobs:
           ' || { echo "::error::package.json no tiene @stryker-mutator/core en devDependencies"; exit 1; }
           # Un comentario `// Stryker disable` en el código deja sus mutantes como Ignored, fuera
           # de la puntuación. Los que ya están en `main` los aprobó la persona; uno nuevo, no.
-          if git diff "$BASE" -- . | grep '^+' | grep -v '^+++' | grep -Eiq 'stryker[[:space:]]+disable'; then
+          # --text: un `-diff` o `binary` de .gitattributes escondería las líneas. Con `>` como
+          # marca de línea añadida, una línea que empiece por `++` no se confunde con `+++ b/…`.
+          if git diff --text --no-ext-diff --no-textconv --output-indicator-new='>' "$BASE" -- . \
+              | grep '^>' | grep -Eiq 'stryker[[:space:]]+disable'; then
             echo "::error::La rama añade un comentario «Stryker disable»: los mutantes que tapa no cuentan"; exit 1
           fi
           if git cat-file -e "$BASE:stryker.config.json" 2>/dev/null; then
