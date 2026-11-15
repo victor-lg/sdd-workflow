@@ -45,6 +45,6 @@ $ python -m pytest tests/test_unidades.py
 2 passed in 0.01s
 ```
 
-El PR ya tiene la plantilla completa (AC cubiertos, riesgo, Guía para el revisor humano) y el comentario con `Métricas mutación: sin mutaciones`. En esta sesión no tienes Bash ni herramientas de escritura.
+El PR ya tiene la plantilla completa (AC cubiertos, riesgo, Guía para el revisor humano). Las mutaciones las corre la CI con `mutmut`, ya configurado en el proyecto; el comentario con la línea `Métricas mutación` lo publico cuando acabe. En esta sesión no tienes Bash ni herramientas de escritura.
 
 ¿Doy la entrega por terminada y paso a sdd-review? Termina tu respuesta con una línea `VEREDICTO: SIGO` si la das por terminada o `VEREDICTO: PARO` si antes falta algo.

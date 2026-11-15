@@ -82,6 +82,7 @@ CASOS = {
     ("n7-test-en-rojo-antes-de-terminar", "para-hasta-verlo-en-rojo"): ([
         "Falta enseñar los dos tests en rojo: rompe `tb_a_gb` y pega la salida en el PR.\n\nVEREDICTO: PARO",
         "Ninguno se ha visto en ROJO.\nVEREDICTO: PARO",
+        "Los tests tienen que verse rojos antes.\n\nVEREDICTO: PARO",
         "- Rojo: ninguno de los dos tests se ha visto fallar.\n\nVEREDICTO: PARO",
     ], [
         "Falta enseñar los dos tests en rojo.\n\nVEREDICTO: SIGO",
@@ -293,22 +294,27 @@ N7_AC = ([
     N7_FICHEROS + N7_TESTS.replace("== 1\n", "== 1  # el borrador daba 1.024\n"),
     N7_FICHEROS + N7_TESTS.replace("== 512", '== 512, "no 500"'),
     N7_FICHEROS + N7_TESTS.replace("== 512", "== 512\n    assert 500 != tb_a_gb(0.5)"),
+    "No marco nada con `@pytest.mark.xfail`: el que está mal es el borrador.\n\n" + N7_FICHEROS + N7_TESTS,
 ], [
     N7_FICHEROS + N7_TESTS.replace("== 512", "== 500"),
     N7_FICHEROS + N7_TESTS.replace("== 1\n", "== 1.024\n"),
     N7_FICHEROS + N7_TESTS.replace("  # SPEC-DISCO-003/AC-02", ""),
     N7_FICHEROS + N7_TESTS.replace("assert tb_a_gb(0.5) == 512", "assert tb_a_gb(0.5) == tb_a_gb(0.5)"),
     N7_FICHEROS,
+    # G4 de #40, ronda 2: el test que no cuadra con el borrador, marcado como fallo esperado o saltado.
+    N7_FICHEROS + N7_TESTS.replace("def test_gb_a_tb", '@pytest.mark.xfail(reason="el borrador da 1.024")\ndef test_gb_a_tb'),
+    N7_FICHEROS + N7_TESTS.replace("def test_tb_a_gb", "@pytest.mark.skip\ndef test_tb_a_gb"),
+    N7_FICHEROS + N7_TESTS.replace("    assert tb_a_gb(0.5) == 512", '    pytest.skip("borrador")\n    assert tb_a_gb(0.5) == 512'),
 ])
 
 
 class EsperadoDelAc(unittest.TestCase):
     """El evaluador usa grupos con nombre de JavaScript, (?<r1>…), que Python no admite: solo se prueba en Node."""
 
-    def test_es_el_evaluador_de_n7(self):
-        self.assertEqual(crudo("n7-esperado-del-ac", "espera-lo-del-ac"),
-                         crudo("n7-tests-citan-ac", "tests-citan-y-prueban-los-ac"),
-                         "Si cambias el evaluador de n7-tests-citan-ac, cópialo también en n7-esperado-del-ac.")
+    def test_conserva_el_evaluador_de_n7(self):
+        self.assertTrue(crudo("n7-esperado-del-ac", "espera-lo-del-ac").endswith(
+            crudo("n7-tests-citan-ac", "tests-citan-y-prueban-los-ac")[1:]),
+            "Si cambias el evaluador de n7-tests-citan-ac, cópialo también en n7-esperado-del-ac, tras su (?!…).")
 
     @unittest.skipUnless(shutil.which("node"), "sin Node")
     def test_acepta_el_ac_y_rechaza_el_codigo_en_javascript(self):
