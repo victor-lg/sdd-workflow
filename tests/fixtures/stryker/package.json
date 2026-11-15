@@ -1,0 +1,11 @@
+{
+  "name": "prueba-stryker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "10.1.1"
+  }
+}

@@ -88,7 +88,7 @@ En ese repo:
     - *Require review from Code Owners*;
   - *Require approval of the most recent reviewable push*: el último push lo aprueba alguien distinto de quien lo hizo;
   - *Bypass list*: solo el rol de administrador (tú), en modo **"Allow for pull requests only"**: ni siquiera tú empujas directo a `main`.
-  - Los checks requeridos (`checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`) se añaden en el bloque C, cuando GitHub ya los conoce.
+  - Los checks requeridos (`checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep` y `mutaciones`) se añaden en el bloque C, cuando GitHub ya los conoce.
 - **Settings → Code security** (M38): activa *Dependabot alerts*. Las actualizaciones de versión las abre Dependabot solo, con `.github/dependabot.yml` (una vez al mes, agrupadas). Sus PR tocan dependencias: son R2 y los apruebas tú. Si activas también *Dependabot security updates*, abre además un PR por vulnerabilidad, sin esperar al mes.
 - **La tarea mensual** de osv-scanner (`osv-mensual.yml`, el día 1) corre sola sobre `main`; si encuentra algo, GitHub te avisa por correo de la ejecución fallida. Para lanzarla a mano: *Actions → osv-mensual → Run workflow*, sobre `main`. No la marques como check requerido.
 
@@ -379,8 +379,8 @@ Pídele a Claude, dentro de la sesión:
 **Comprobación:**
 
 1. El push y el PR funcionan desde el sandbox: GitHub está en la lista blanca y las credenciales de `gh` sirven.
-2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, y pasan.
-3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner` y `semgrep`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. `semgrep`, solo si ya comprobaste su digest (A3, paso 3).
+2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep` y `mutaciones`, y pasan. Sin `package.json`, `mutaciones` pasa con un aviso: el proyecto aún no tiene herramienta de mutación.
+3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep` y `mutaciones`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. `semgrep`, solo si ya comprobaste su digest (A3, paso 3).
    - Si el proyecto no usa npm, quita la entrada `npm` de `.github/dependabot.yml`: sin `package.json`, Dependabot da error cada mes. Lo que tarda cada job de `seguridad` ya está medido en `docs/herramientas.md` del workflow (calculadora-discos#40); si en tu proyecto difiere mucho, apúntalo allí (PR R2).
 4. Pide a Claude que fusione el PR: GitHub lo rechaza (N4).
 5. Tú lo apruebas y lo fusionas desde el navegador.
@@ -532,7 +532,7 @@ Todo está en la página del PR, repartido en sus pestañas. En GitHub Mobile es
 
 1. **AC.** En **Conversation**, la descripción → "Qué comportamiento cubre". Los AC deben ser los de la issue de Linear ("AC de esta entrega").
 2. **Tests que cambian.** En la descripción → "Guía para el revisor humano" → "Tests existentes que cambian". Compruébalo en **Files changed**: las líneas rojas que quiten una comprobación (`expect`, `assert`) sin otra verde equivalente son señal de alarma. El panel lateral de ficheros muestra si se toca algo fuera de `tests/`.
-3. **CI.** En el recuadro de merge, al final de Conversation, o en la pestaña **Checks**: `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep` y `tests` en verde.
+3. **CI.** En el recuadro de merge, al final de Conversation, o en la pestaña **Checks**: `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones` y `tests` en verde.
    - **PR de Dependabot:** en la pestaña **Commits**, todos de `dependabot[bot]` y con la marca *Verified*. Si hay uno de otra cuenta o sin verificar, `checks.py` puede haber aplicado la excepción con un correo falsificado: no lo apruebes.
 4. **Revisión de la IA.** En la descripción → "Revisión IA (G4)". No debe quedar ningún hallazgo "debe corregirse" sin corregir. Si hubo cambios tras la última revisión, están listados.
 5. **Dónde mirar.** En la guía del revisor: cada punto cita un fichero y una función. Ábrelo en Files changed y busca el nombre con Ctrl+F. En R1, un vistazo; en R2, lectura de verdad.

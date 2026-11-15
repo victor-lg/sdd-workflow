@@ -76,10 +76,17 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 ".semgrepignore", "*/.semgrepignore",
                 "osv-scanner.toml", "*/osv-scanner.toml",
                 "eslint.config.*", "*/eslint.config.*",
+                # Todos los nombres que Stryker carga solo; los .js, .mjs y .cjs ejecutan código.
+                "stryker.conf.*", "*/stryker.conf.*", "stryker.config.*", "*/stryker.config.*",
+                ".stryker.conf.*", "*/.stryker.conf.*", ".stryker.config.*", "*/.stryker.config.*",
+                # npm lo lee en `npm ci` y en `npm test` (script-shell, node-options), también dentro de Stryker.
+                ".npmrc", "*/.npmrc",
                 # Un submódulo trae código que no ve ningún escáner (también sus gitlinks, ver main).
                 ".gitmodules"]
 MANIFIESTOS = {
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb",
+    # npm ci lo usa antes que package-lock.json (G4 del PR 2 de VIC-21).
+    "npm-shrinkwrap.json",
     "requirements.txt", "pyproject.toml", "poetry.lock", "uv.lock", "Pipfile", "Pipfile.lock",
     "go.mod", "go.sum", "Cargo.toml", "Cargo.lock", "Gemfile", "Gemfile.lock",
     "composer.json", "composer.lock", "pom.xml", "build.gradle", "build.gradle.kts",

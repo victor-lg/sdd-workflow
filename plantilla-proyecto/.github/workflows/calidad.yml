@@ -1,0 +1,134 @@
+# Controles de calidad del workflow SDD + IA v1.1 (M26).
+#
+# En cada PR contra `main`: mutaciones con Stryker (JS/TS). El nombre del job es el check
+# que se marca como requerido en la regla de `main`. El agente no puede modificar este
+# fichero: su token no tiene el permiso `workflow` (ADR-0005, caso N5).
+#
+# Solo `pull_request` (nunca `pull_request_target`) y sin `workflow_dispatch`, por lo mismo
+# que seguridad.yml: el agente no puede lanzarlo sobre su rama.
+#
+# La configuración de Stryker es la de `main`, no la del PR: así un PR no puede bajar su
+# propio umbral ni sacar ficheros de `mutate`. Un cambio en ella lo marca R2 checks.py y vale
+# después del merge. Límites aceptados (docs/herramientas.md del workflow): la configuración
+# del runner de tests y los scripts de package.json salen de la rama (package.json es R2 por
+# ser un manifiesto), y el código que lanza `npm test`, también un test, puede leer
+# `__STRYKER_ACTIVE_MUTANT__` y fallar a propósito con cada mutante. Eso lo ve la revisión.
+#
+# Stryker sale de node_modules, instalado con `npm ci` desde el lockfile del proyecto: la
+# versión es la que fija el proyecto y la aprobada está en docs/herramientas.md del workflow.
+
+name: calidad
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calidad-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # La configuración de Stryker sale de aquí. Con la ref completa: `origin/main` resolvería
+  # antes una etiqueta llamada así (refs/tags/origin/main), que puede empujar la rama.
+  BASE: refs/remotes/origin/${{ github.base_ref }}
+  # Git no sustituye objetos con refs/replace al leer la historia.
+  GIT_NO_REPLACE_OBJECTS: "1"
+
+jobs:
+  mutaciones:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Fijada por SHA (v7.0.1, 2026-07-17), igual que en sdd.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Sin package.json no hay herramienta de mutación (M26: mutantes a mano en R1 y R2) y el
+      # job pasa con aviso. Con package.json, Stryker tiene que estar en devDependencies y la
+      # configuración, tener `thresholds.break` mayor que 0: sin él, Stryker nunca falla.
+      - name: Configuración de Stryker de main
+        id: preparar
+        run: |
+          git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
+          if [ ! -f package.json ]; then
+            if git cat-file -e "$BASE:package.json" 2>/dev/null; then
+              echo "::error::main tiene package.json y la rama no: sin él no se mutaría nada"; exit 1
+            fi
+            echo "::warning::Sin package.json: este proyecto no tiene herramienta de mutación en la CI."
+            echo "stryker=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 -I -c '
+          import json, sys
+          dev = json.load(open("package.json", encoding="utf-8")).get("devDependencies") or {}
+          sys.exit(0 if "@stryker-mutator/core" in dev else 1)
+          ' || { echo "::error::package.json no tiene @stryker-mutator/core en devDependencies"; exit 1; }
+          if git cat-file -e "$BASE:stryker.config.json" 2>/dev/null; then
+            git show "$BASE:stryker.config.json" > "$RUNNER_TEMP/stryker.config.json"
+          elif git ls-tree --name-only "$BASE" | grep -Eqx '\.?stryker\.conf(ig)?\.(json|js|mjs|cjs)'; then
+            # Con otra configuración en `main`, la de la rama no puede sustituirla.
+            echo "::error::main tiene una configuración de Stryker que no es stryker.config.json: la CI solo usa esa"; exit 1
+          elif [ -f stryker.config.json ]; then
+            # Solo hasta que llegue a `main`: el PR que la añade es R2.
+            echo "::warning::main no tiene stryker.config.json: se usa el de la rama."
+            cp stryker.config.json "$RUNNER_TEMP/stryker.config.json"
+          else
+            echo "::error::Falta stryker.config.json (en main y en la rama)"; exit 1
+          fi
+          python3 -I -c '
+          import json, sys
+          umbral = (json.load(open(sys.argv[1], encoding="utf-8")).get("thresholds") or {}).get("break")
+          sys.exit(0 if type(umbral) in (int, float) and umbral > 0 else 1)
+          ' "$RUNNER_TEMP/stryker.config.json" || { echo "::error::stryker.config.json necesita thresholds.break mayor que 0"; exit 1; }
+          echo "stryker=si" >> "$GITHUB_OUTPUT"
+
+      # Fijada por SHA (v7.1.0, 2026-10-08). Sin caché: la de un PR la escribe código de la rama.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.preparar.outputs.stryker == 'si'
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      # --force: ejecuta todos los mutantes aunque la rama traiga un fichero incremental.
+      # Con cero mutantes la puntuación es NaN y Stryker no aplica el umbral: falla aquí.
+      # Un mutante Ignored no cuenta en la puntuación: lo dejan así un comentario
+      # `// Stryker disable` en el código o `ignoreStatic`. Con uno solo, falla: lo que no se
+      # deba mutar se saca con `mutate`, en la configuración de `main`. Se mira en el informe
+      # JSON de Stryker, no en el texto del diff, que tenía formas de esconderse (G4).
+      - name: Stryker
+        if: steps.preparar.outputs.stryker == 'si'
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          [ -x node_modules/.bin/stryker ] || { echo "::error::npm ci no instaló Stryker"; exit 1; }
+          informe=$(python3 -I -c '
+          import json, sys
+          print((json.load(open(sys.argv[1], encoding="utf-8")).get("jsonReporter") or {}).get("fileName") or "reports/mutation/mutation.json")
+          ' "$RUNNER_TEMP/stryker.config.json")
+          rm -f "$informe"
+          node_modules/.bin/stryker run "$RUNNER_TEMP/stryker.config.json" --force --reporters clear-text,json 2>&1 | tee "$RUNNER_TEMP/stryker.log"
+          estado=${PIPESTATUS[0]}
+          if grep -q "Final mutation score of NaN" "$RUNNER_TEMP/stryker.log"; then
+            echo "::error::Stryker no ha probado ningún mutante: revisa mutate en stryker.config.json"; exit 1
+          fi
+          if [ "$estado" -eq 0 ] && [ ! -f "$informe" ]; then
+            echo "::error::Stryker no ha dejado el informe JSON en $informe"; exit 1
+          fi
+          if [ -f "$informe" ]; then
+            python3 -I -c '
+          import json, sys
+          def limpio(texto):
+              return str(texto).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          informe = json.load(open(sys.argv[1], encoding="utf-8"))
+          ignorados = [(f, (m.get("location") or {}).get("start", {}).get("line"), m.get("statusReason") or "")
+                       for f, datos in informe["files"].items() for m in datos["mutants"] if m["status"] == "Ignored"]
+          for f, linea, motivo in ignorados:
+              print(f"::error file={limpio(f)},line={limpio(linea)}::Mutante ignorado ({limpio(motivo)})")
+          sys.exit(1 if ignorados else 0)
+          ' "$informe" || { echo "::error::Hay mutantes Ignored: no cuentan en la puntuación"; exit 1; }
+          fi
+          exit "$estado"
