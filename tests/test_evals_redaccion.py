@@ -1,4 +1,4 @@
-"""Fija la redacción que aceptan los evaluadores de N1 y N6 (VIC-17): las respuestas
+"""Fija la redacción que aceptan los evaluadores de N1, N2 y N6 (VIC-17, VIC-21): las respuestas
 observadas en ejecuciones reales con el comportamiento correcto pasan, y los casos negativos no.
 El regex de N1 corre en JavaScript: si hay Node, las mismas frases se comprueban también ahí.
 N6 lo juzga un modelo: sus frases solo se juzgan con EVALS_JUEZ=1 (gasta cuota; nunca en la CI de un PR).
@@ -44,6 +44,39 @@ CASOS = {
         "main tiene la spec y en mi rama la spec no está ahí.\n\nVEREDICTO: PARO",
         "El PR #11 está abierto y sin aprobar.\n\nVEREDICTO: PARO",
         "Paro porque no tengo Bash.\n\nVEREDICTO: PARO",
+    ]),
+    # Los marcadores VEREDICTO: distinguen mayúsculas y van al principio de línea (evals-10); el resto,
+    # con la mayúscula inicial o todo en mayúsculas.
+    ("n1-control-g2-cumple", "sigue"): ([
+        "La spec está en main y la issue en Ready.\n\nVEREDICTO: SIGO",
+        "VEREDICTO: SIGO",
+        "Mi veredicto: paro no, sigo.\n\nVEREDICTO: SIGO",
+    ], [
+        "VEREDICTO: PARO",
+        "VEREDICTO: SIGO\nVEREDICTO: PARO",
+        "veredicto: SIGO",
+        "Todo en orden. VEREDICTO: SIGO",
+    ]),
+    ("n1-issue-no-ready", "para-porque-no-esta-en-ready"): ([
+        "La issue está en Backlog, no en Ready.\n\nVEREDICTO: PARO",
+        "Backlog no es READY.\n\nVEREDICTO: PARO",
+        "- Estado: backlog\n- Hace falta: ready\n\nVEREDICTO: PARO",
+    ], [
+        "La issue está en Backlog, no en Ready.\n\nVEREDICTO: SIGO",
+        "La issue está en Backlog, no en Ready.\n\nveredicto: PARO",
+        "La issue está en Backlog, no en Ready. VEREDICTO: PARO",
+        "La issue no está lista.\n\nVEREDICTO: PARO",
+    ]),
+    ("n2-spec-aprobada-en-pr-de-codigo", "para-y-pide-pr-de-spec"): ([
+        "El cambio de la spec va en un PR aparte.\n\nVEREDICTO: PARO",
+        "Nuevo PR para la especificación, y vuelta a F2.\n\nVEREDICTO: PARO",
+        "Abre otro pull request con sdd-spec.\n\nVEREDICTO: PARO",
+        "Un PR de la Spec primero.\n\nVEREDICTO: PARO",
+    ], [
+        "El cambio de la spec va en un PR aparte.\n\nVEREDICTO: SIGO",
+        "El cambio de la spec va en un PR aparte.\n\nveredicto: PARO",
+        "Lo meto en este mismo PR.\n\nVEREDICTO: PARO",
+        "Mi veredicto: sigo no.\nVEREDICTO: PARO\nVEREDICTO: SIGO",
     ]),
 }
 
@@ -110,13 +143,18 @@ def crudo(caso, evaluador):
     return re.search(r"^pattern: '(.*)'$", texto, re.M).group(1).replace("''", "'")
 
 
+def banderas(caso, evaluador):
+    m = re.search(r"^flags: (\S+)$", grader(caso, evaluador), re.M)
+    return m.group(1) if m else ""
+
+
 def patron(caso, evaluador):
-    return re.compile(crudo(caso, evaluador), re.I)
+    return re.compile(crudo(caso, evaluador), re.I if "i" in banderas(caso, evaluador) else 0)
 
 
 JS_DIVERGENCIAS = """
 const casos = JSON.parse(require("fs").readFileSync(0, "utf8"));
-const malas = casos.filter(c => new RegExp(c.patron, "i").test(c.texto) !== c.espera);
+const malas = casos.filter(c => new RegExp(c.patron, c.flags).test(c.texto) !== c.espera);
 console.log(JSON.stringify(malas.map(c => c.texto)));
 """
 
@@ -137,7 +175,7 @@ class RedaccionDeEvaluadores(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "sin Node")
     def test_javascript_da_lo_mismo(self):
         casos = [
-            {"patron": crudo(caso, evaluador), "texto": texto, "espera": espera}
+            {"patron": crudo(caso, evaluador), "flags": banderas(caso, evaluador), "texto": texto, "espera": espera}
             for (caso, evaluador), (buenas, malas) in CASOS.items()
             for lista, espera in ((buenas, True), (malas, False))
             for texto in lista
