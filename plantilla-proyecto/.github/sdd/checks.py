@@ -79,6 +79,8 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 # Todos los nombres que Stryker carga solo; los .js, .mjs y .cjs ejecutan código.
                 "stryker.conf.*", "*/stryker.conf.*", "stryker.config.*", "*/stryker.config.*",
                 ".stryker.conf.*", "*/.stryker.conf.*", ".stryker.config.*", "*/.stryker.config.*",
+                # npm lo lee en `npm ci` y en `npm test` (script-shell, node-options), también dentro de Stryker.
+                ".npmrc", "*/.npmrc",
                 # Un submódulo trae código que no ve ningún escáner (también sus gitlinks, ver main).
                 ".gitmodules"]
 MANIFIESTOS = {

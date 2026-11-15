@@ -505,7 +505,13 @@ class TestFicherosSensibles(unittest.TestCase):
                 errores = riesgo([ruta]).errores
                 self.assertEqual(len(errores), 1, errores)
                 self.assertIn("exige R2", errores[0])
-        for ruta in ["docs/stryker.md", "stryker.js", "src/stryker-config.json", "reports/mutation/stryker.html"]:
+        for ruta in [".npmrc", "web/.npmrc", ".NPMRC"]:
+            with self.subTest(ruta=ruta):
+                errores = riesgo([ruta]).errores
+                self.assertEqual(len(errores), 1, errores)
+                self.assertIn("exige R2", errores[0])
+        for ruta in ["docs/stryker.md", "stryker.js", "src/stryker-config.json", "reports/mutation/stryker.html",
+                     "npmrc.md", ".npmrc.example"]:
             with self.subTest(ruta=ruta):
                 self.assertEqual(riesgo([ruta]).errores, [])
 

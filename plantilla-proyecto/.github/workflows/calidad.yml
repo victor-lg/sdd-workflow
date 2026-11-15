@@ -29,8 +29,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # La configuración de Stryker sale de aquí.
-  BASE: origin/${{ github.base_ref }}
+  # La configuración de Stryker sale de aquí. Con la ref completa: `origin/main` resolvería
+  # antes una etiqueta llamada así (refs/tags/origin/main), que puede empujar la rama.
+  BASE: refs/remotes/origin/${{ github.base_ref }}
   # Git no sustituye objetos con refs/replace al leer la historia.
   GIT_NO_REPLACE_OBJECTS: "1"
 
@@ -53,6 +54,9 @@ jobs:
         run: |
           git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           if [ ! -f package.json ]; then
+            if git cat-file -e "$BASE:package.json" 2>/dev/null; then
+              echo "::error::main tiene package.json y la rama no: sin él no se mutaría nada"; exit 1
+            fi
             echo "::warning::Sin package.json: este proyecto no tiene herramienta de mutación en la CI."
             echo "stryker=no" >> "$GITHUB_OUTPUT"
             exit 0
@@ -62,6 +66,11 @@ jobs:
           dev = json.load(open("package.json", encoding="utf-8")).get("devDependencies") or {}
           sys.exit(0 if "@stryker-mutator/core" in dev else 1)
           ' || { echo "::error::package.json no tiene @stryker-mutator/core en devDependencies"; exit 1; }
+          # Un comentario `// Stryker disable` en el código deja sus mutantes como Ignored, fuera
+          # de la puntuación. Los que ya están en `main` los aprobó la persona; uno nuevo, no.
+          if git diff "$BASE" -- . | grep '^+' | grep -v '^+++' | grep -Eiq 'stryker[[:space:]]+disable'; then
+            echo "::error::La rama añade un comentario «Stryker disable»: los mutantes que tapa no cuentan"; exit 1
+          fi
           if git cat-file -e "$BASE:stryker.config.json" 2>/dev/null; then
             git show "$BASE:stryker.config.json" > "$RUNNER_TEMP/stryker.config.json"
           elif [ -f stryker.config.json ]; then

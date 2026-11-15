@@ -27,7 +27,7 @@ def script(paso):
     return textwrap.dedent(bloque)
 
 
-def ejecutar(paso, carpeta, temporal, base="origin/main"):
+def ejecutar(paso, carpeta, temporal, base="refs/remotes/origin/main"):
     salida = pathlib.Path(temporal) / "salida"
     salida.write_text("")
     entorno = dict(os.environ, BASE=base, RUNNER_TEMP=str(temporal), GITHUB_OUTPUT=str(salida),
@@ -86,7 +86,9 @@ class Preparar(unittest.TestCase):
         git(self.repo, "init", "-q", "-b", "main")
 
     def escribir(self, nombre, contenido):
+        (self.repo / nombre).parent.mkdir(parents=True, exist_ok=True)
         (self.repo / nombre).write_text(contenido if isinstance(contenido, str) else json.dumps(contenido))
+        git(self.repo, "add", nombre)
 
     def main(self, config=None):
         """Commit en `main` (con o sin stryker.config.json) y su ref origin/main."""
@@ -98,6 +100,8 @@ class Preparar(unittest.TestCase):
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
 
     def preparar(self):
+        """En la CI, HEAD es el merge con todo lo de la rama commiteado: aquí, un commit de la rama."""
+        git(self.repo, "commit", "-q", "--allow-empty", "-m", "rama")
         return ejecutar(self.PASO, self.repo, self.temporal)
 
     def config_usada(self):
@@ -109,6 +113,41 @@ class Preparar(unittest.TestCase):
         self.assertEqual(estado, 0, texto)
         self.assertIn("::warning::Sin package.json", texto)
         self.assertEqual(salida, "stryker=no\n")
+
+    def test_sin_package_json_en_la_rama_si_main_lo_tiene_falla(self):
+        """G4, ronda 1: borrar o mover el package.json de main no puede dejar el check en verde."""
+        self.escribir("package.json", PAQUETE)
+        self.main(CONFIG)
+        git(self.repo, "rm", "-q", "package.json")
+        estado, texto, salida = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::main tiene package.json y la rama no", texto)
+        self.assertNotIn("stryker=", salida)
+
+    def test_un_stryker_disable_nuevo_falla(self):
+        """G4, ronda 1: con el test debilitado y dos `// Stryker disable next-line all`, Stryker
+        10.1.1 da 100,00 y sale con 0 (medido); los mutantes quedan Ignored."""
+        for comentario in ("// Stryker disable next-line all", "/* Stryker disable all */",
+                           "// stryker  disable next-line ArithmeticOperator", "# Stryker\tdisable all"):
+            with self.subTest(comentario=comentario):
+                self.setUp()
+                self.main(CONFIG)
+                self.escribir("package.json", PAQUETE)
+                self.escribir("src/unidades.js", f"{comentario}\nexport const x = 1 * 2;\n")
+                estado, texto, salida = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::La rama añade un comentario «Stryker disable»", texto)
+                self.assertNotIn("stryker=si", salida)
+
+    def test_un_stryker_disable_de_main_no_cuenta(self):
+        """Los que ya están en main los aprobó la persona: solo se mira lo que añade la rama."""
+        self.escribir("src/unidades.js", "// Stryker disable next-line all\nexport const x = 1 * 2;\n")
+        self.main(CONFIG)
+        self.escribir("package.json", PAQUETE)
+        self.escribir("src/otro.js", "export const y = 3;\n")
+        estado, texto, salida = self.preparar()
+        self.assertEqual(estado, 0, texto)
+        self.assertEqual(salida, "stryker=si\n")
 
     def test_sin_stryker_en_dev_dependencies_falla(self):
         self.main(CONFIG)
@@ -176,7 +215,7 @@ class Preparar(unittest.TestCase):
         self.escribir("package.json", PAQUETE)
         estado, texto, _ = self.preparar()
         self.assertEqual(estado, 1, texto)
-        self.assertIn("::error::Git no encuentra origin/main", texto)
+        self.assertIn("::error::Git no encuentra refs/remotes/origin/main", texto)
 
 
 @unittest.skipUnless(shutil.which("node") and shutil.which("npm"), "sin node o npm en el PATH")
@@ -235,6 +274,14 @@ class StrykerEnLaCi(unittest.TestCase):
         estado, texto, _ = self.stryker()
         self.assertEqual(estado, 1, texto)
         self.assertIn("Force mode is activated", texto)
+
+
+class BaseSinAmbiguedad(unittest.TestCase):
+    """G4, ronda 1: con `origin/main`, Git resuelve antes una etiqueta llamada así (medido: avisa de
+    la ambigüedad y devuelve la etiqueta). La ref completa no depende de eso."""
+
+    def test_la_base_es_la_ref_completa(self):
+        self.assertIn("  BASE: refs/remotes/origin/${{ github.base_ref }}\n", CALIDAD)
 
 
 if __name__ == "__main__":
