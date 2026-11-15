@@ -4,6 +4,14 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Plugin `sdd` 1.5.0 (VIC-21, PR 1 de 3): tests con dientes (M26) en `sdd-implement`.**
+  - "Tests": el resultado esperado sale del AC, nunca de ejecutar el código; los antipatrones de test tautológico y de test acoplado a la implementación (Pocock); cada test nuevo se enseña en rojo antes de terminar (antes de implementar o con el código roto a propósito, sin commitearlo), solo vale si falla la aserción del AC, y la orden y su salida real van en el PR; el cambio se deshace a mano y se comprueba con `git diff HEAD` antes de cada commit; mutación: con herramienta para el lenguaje, la corre la CI en cualquier nivel de riesgo; sin ella, mutantes a mano en R1 y R2 (R0 exento, sin mínimo), que cuentan en la línea `Métricas mutación` (todos los probados salvo equivalentes y los que no compilan, listados en el comentario; los cambios del rojo, no; `sin mutaciones`, solo si la entrega no cambia código probado o es R0 sin herramienta). La mutación sale de la lista de técnicas de R2 (decisión de Víctor tras la G4).
+  - Casos nuevos: `n7-test-en-rojo-antes-de-terminar` (tests en verde que nadie ha visto fallar, con las mutaciones a cargo de la CI: `VEREDICTO: PARO` y "rojo", "roja", "rojos" o "rojas" en la respuesta, con la regla de marcadores de la 1.4.3), con su control positivo `n7-control-test-en-rojo` (el rojo ya se enseñó: `VEREDICTO: SIGO`, para que un plugin que siempre diga PARO no pase) y `n7-esperado-del-ac` (el borrador da 1.024 y 500; los tests esperan 1 y 512, con el evaluador de `n7-tests-citan-ac` y sin nada que deje pasar el borrador: `xfail`, `skip`, `pytest.raises(AssertionError)`, un `assert` con `or` o `approx` con tolerancia). `n7-tests-citan-ac` no cambia.
+  - Tests en `tests/test_evals_redaccion.py`: el primero entra en los casos de `VEREDICTO:` con todas sus variantes; el segundo, solo en Node, porque el evaluador usa grupos con nombre de JavaScript.
+  - La fila del plugin en `docs/herramientas.md` anota la aprobación de la 1.4.1 (#31) y de la 1.4.2 y 1.4.3 (#38 y #39).
+  - Límites aceptados (decisión de Víctor): ningún evaluador castiga commitear el código roto ni inventarse la salida del rojo, y `n7-esperado-del-ac` no comprueba que el código quede corregido.
+  - Los hooks, el agente y las demás skills no cambian.
+
 - **Plugin `sdd` 1.4.3 (VIC-21): los marcadores admiten formato.**
   - `ORDEN:`, `FICHERO:`, `VEREDICTO:` y `HERRAMIENTA:` admiten opcionalmente, siempre al principio de línea, una viñeta (`- ` o `* `), `**` o `` ` `` delante, o la viñeta seguida de `**` o `` ` `` (`- **ORDEN:**`, `* **ORDEN:**`, `` - `ORDEN:` ``), y `**` o `` ` `` detrás. `1. ` y `> ` no cuentan. Lo señaló la G4 de #38 como la causa más probable de fallos sueltos; la viñeta `* ` y las combinaciones, la de #39 (decisión de Víctor).
   - `NINGUNA` se acepta en cualquier combinación de mayúsculas y minúsculas.

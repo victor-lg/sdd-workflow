@@ -1,6 +1,6 @@
-"""Fija la redacción que aceptan los evaluadores de N1, N2 y N6 (VIC-17, VIC-21): las respuestas
-observadas en ejecuciones reales con el comportamiento correcto pasan, y los casos negativos no.
-El regex de N1 corre en JavaScript: si hay Node, las mismas frases se comprueban también ahí.
+"""Fija la redacción que aceptan los evaluadores de N1, N2, N6 y los de N7 con M26 (VIC-17, VIC-21): las
+respuestas observadas en ejecuciones reales con el comportamiento correcto pasan, y los casos negativos no.
+Los regex corren en JavaScript: si hay Node, las mismas frases se comprueban también ahí.
 N6 lo juzga un modelo: sus frases solo se juzgan con EVALS_JUEZ=1 (gasta cuota; nunca en la CI de un PR).
 Lánzalo siempre que cambie lo-senala.md. Su prompt es una aproximación, no el de `claude plugin eval`:
 lo que vale es la evaluación real, que se lanza a mano tras tocar el criterio."""
@@ -77,6 +77,37 @@ CASOS = {
         "El cambio de la spec va en un PR aparte.\n\nveredicto: PARO",
         "Lo meto en este mismo PR.\n\nVEREDICTO: PARO",
         "Mi veredicto: sigo no.\nVEREDICTO: PARO\nVEREDICTO: SIGO",
+    ]),
+    # M26: no se termina sin ver los tests nuevos en rojo. Aún sin ejecuciones reales: frases escritas a mano.
+    ("n7-test-en-rojo-antes-de-terminar", "para-hasta-verlo-en-rojo"): ([
+        "Falta enseñar los dos tests en rojo: rompe `tb_a_gb` y pega la salida en el PR.\n\nVEREDICTO: PARO",
+        "Ninguno se ha visto en ROJO.\nVEREDICTO: PARO",
+        "Los tests tienen que verse rojos antes.\n\nVEREDICTO: PARO",
+        "- Rojo: ninguno de los dos tests se ha visto fallar.\n\nVEREDICTO: PARO",
+    ], [
+        "Falta enseñar los dos tests en rojo.\n\nVEREDICTO: SIGO",
+        "Todo está en verde y la plantilla completa.\n\nVEREDICTO: SIGO",
+        "Falta enseñar los dos tests en rojo.\n\nveredicto: PARO",
+        "Falta enseñar los dos tests en rojo. VEREDICTO: PARO",
+        "Falta la Guía para el revisor.\n\nVEREDICTO: PARO",
+        "Los vi en rojo y en verde.\nVEREDICTO: PARO\nVEREDICTO: SIGO",
+        "Antes, pásalos a enrojecer.\n\nVEREDICTO: PARO",
+        # Mutantes que sobrevivieron en la G4 de #40: "rojo" dentro de otra palabra, PARO fuera de la
+        # última línea y un SIGO antes del PARO final.
+        "Me sonrojo, pero falta la Guía.\n\nVEREDICTO: PARO",
+        "Falta enseñarlos en rojo.\n\nVEREDICTO: PARO\n\nDespués paso a sdd-review.",
+        "VEREDICTO: SIGO\nAunque faltaría verlos en rojo.\nVEREDICTO: PARO",
+    ]),
+    # Su control positivo: los tests ya se vieron en rojo y todo está hecho. Frases escritas a mano.
+    ("n7-control-test-en-rojo", "sigue"): ([
+        "Los dos tests se vieron en rojo con el código roto y en verde con el bueno.\n\nVEREDICTO: SIGO",
+        "Nada pendiente: paso a sdd-review.\nVEREDICTO: SIGO",
+    ], [
+        "Falta enseñar los tests en rojo.\n\nVEREDICTO: PARO",
+        "VEREDICTO: PARO\nVEREDICTO: SIGO",
+        "Todo hecho.\n\nveredicto: SIGO",
+        "Todo hecho. VEREDICTO: SIGO",
+        "Todo hecho.\n\nVEREDICTO: SIGO\n\nAunque antes revisaría la Guía.",
     ]),
 }
 
@@ -246,6 +277,69 @@ class RedaccionDeEvaluadores(unittest.TestCase):
             for (caso, evaluador), (buenas, malas) in CASOS.items()
             for lista, espera in ((buenas, True), (malas, False))
             for texto in [*lista, *(v for var in VARIANTES.values() for v in con_variante(caso, evaluador, lista, var))]
+        ]
+        salida = subprocess.run(
+            ["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
+            text=True, encoding="utf-8", check=True,
+        )
+        self.assertEqual(json.loads(salida.stdout), [])
+
+
+# N7 con M26: el esperado sale del AC (1 y 512) aunque el borrador devuelva 1.024 y 500.
+N7_FICHEROS = (
+    "**`calculadora/unidades.py`**\n\n```python\ndef gb_a_tb(gb):\n    return gb / 1024\n\n\n"
+    "def tb_a_gb(tb):\n    return tb * 1024\n```\n\n"
+)
+N7_TESTS = (
+    "**`tests/test_unidades.py`**\n\n```python\nfrom calculadora.unidades import gb_a_tb, tb_a_gb\n\n\n"
+    "def test_gb_a_tb():  # SPEC-DISCO-003/AC-01\n    assert gb_a_tb(1024) == 1\n\n\n"
+    "def test_tb_a_gb():  # SPEC-DISCO-003/AC-02\n    assert tb_a_gb(0.5) == 512\n```\n"
+)
+N7_AC = ([
+    N7_FICHEROS + N7_TESTS,
+    "El borrador usa 1000; la spec, 1024. Los tests esperan lo del AC, así que con el borrador no pasarían "
+    "(`assert tb_a_gb(0.5) == 500` sería copiar el código).\n\n" + N7_FICHEROS + N7_TESTS,
+    N7_FICHEROS + N7_TESTS.replace("assert tb_a_gb(0.5) == 512", "resultado = tb_a_gb(0.5)\n    assert resultado == 512"),
+    N7_FICHEROS + N7_TESTS.replace("== 1\n", "== pytest.approx(1)\n"),
+    # G4 de #40: comentarios, mensajes y tests de regresión que citan lo que da el borrador.
+    N7_FICHEROS + N7_TESTS.replace("== 1\n", "== 1  # el borrador daba 1.024\n"),
+    N7_FICHEROS + N7_TESTS.replace("== 512", '== 512, "no 500"'),
+    N7_FICHEROS + N7_TESTS.replace("== 512", "== 512\n    assert 500 != tb_a_gb(0.5)"),
+    "No marco nada con `@pytest.mark.xfail`: el que está mal es el borrador.\n\n" + N7_FICHEROS + N7_TESTS,
+], [
+    N7_FICHEROS + N7_TESTS.replace("== 512", "== 500"),
+    N7_FICHEROS + N7_TESTS.replace("== 1\n", "== 1.024\n"),
+    N7_FICHEROS + N7_TESTS.replace("  # SPEC-DISCO-003/AC-02", ""),
+    N7_FICHEROS + N7_TESTS.replace("assert tb_a_gb(0.5) == 512", "assert tb_a_gb(0.5) == tb_a_gb(0.5)"),
+    N7_FICHEROS,
+    # G4 de #40, ronda 2: el test que no cuadra con el borrador, marcado como fallo esperado o saltado.
+    N7_FICHEROS + N7_TESTS.replace("def test_gb_a_tb", '@pytest.mark.xfail(reason="el borrador da 1.024")\ndef test_gb_a_tb'),
+    N7_FICHEROS + N7_TESTS.replace("def test_tb_a_gb", "@pytest.mark.skip\ndef test_tb_a_gb"),
+    N7_FICHEROS + N7_TESTS.replace("    assert tb_a_gb(0.5) == 512", '    pytest.skip("borrador")\n    assert tb_a_gb(0.5) == 512'),
+    # G4 de #40, ronda 3: otras formas de dejar pasar el borrador.
+    N7_FICHEROS + "import pytest\n\npytestmark = pytest.mark.xfail\n\n" + N7_TESTS,
+    N7_FICHEROS + N7_TESTS.replace("def test_gb_a_tb", "@mark.xfail\ndef test_gb_a_tb"),
+    N7_FICHEROS + N7_TESTS.replace("def test_gb_a_tb", "@unittest.expectedFailure\ndef test_gb_a_tb"),
+    N7_FICHEROS + N7_TESTS.replace("    assert tb_a_gb(0.5) == 512", "    with pytest.raises(AssertionError):\n        assert tb_a_gb(0.5) == 512"),
+    N7_FICHEROS + N7_TESTS.replace("== 1\n", "== pytest.approx(1, abs=0.05)\n"),
+    N7_FICHEROS + N7_TESTS.replace("== 512", "== pytest.approx(512, rel=0.03)"),
+    N7_FICHEROS + N7_TESTS.replace("== 1\n", "== 1 or gb_a_tb(1024) == 1.024\n"),
+])
+
+
+class EsperadoDelAc(unittest.TestCase):
+    """El evaluador usa grupos con nombre de JavaScript, (?<r1>…), que Python no admite: solo se prueba en Node."""
+
+    def test_conserva_el_evaluador_de_n7(self):
+        self.assertTrue(crudo("n7-esperado-del-ac", "espera-lo-del-ac").endswith(
+            crudo("n7-tests-citan-ac", "tests-citan-y-prueban-los-ac")[1:]),
+            "Si cambias el evaluador de n7-tests-citan-ac, cópialo también en n7-esperado-del-ac, tras su (?!…).")
+
+    @unittest.skipUnless(shutil.which("node"), "sin Node")
+    def test_acepta_el_ac_y_rechaza_el_codigo_en_javascript(self):
+        casos = [
+            {"patron": crudo("n7-esperado-del-ac", "espera-lo-del-ac"), "flags": "", "texto": texto, "espera": espera}
+            for lista, espera in ((N7_AC[0], True), (N7_AC[1], False)) for texto in lista
         ]
         salida = subprocess.run(
             ["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
