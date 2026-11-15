@@ -76,6 +76,9 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 ".semgrepignore", "*/.semgrepignore",
                 "osv-scanner.toml", "*/osv-scanner.toml",
                 "eslint.config.*", "*/eslint.config.*",
+                # Todos los nombres que Stryker carga solo; los .js, .mjs y .cjs ejecutan código.
+                "stryker.conf.*", "*/stryker.conf.*", "stryker.config.*", "*/stryker.config.*",
+                ".stryker.conf.*", "*/.stryker.conf.*", ".stryker.config.*", "*/.stryker.config.*",
                 # Un submódulo trae código que no ve ningún escáner (también sus gitlinks, ver main).
                 ".gitmodules"]
 MANIFIESTOS = {

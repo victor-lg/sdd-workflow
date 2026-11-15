@@ -1,0 +1,6 @@
+{
+  "mutate": ["src/**/*.js"],
+  "testRunner": "command",
+  "reporters": ["clear-text"],
+  "thresholds": { "high": 90, "low": 80, "break": 80 }
+}
