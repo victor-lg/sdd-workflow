@@ -4,6 +4,13 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Código que sobra y duplicación nueva en la CI de la plantilla (VIC-21, PR 3 de 3; M23, parte fija).**
+  - `calidad.yml`, job `codigo-sobrante`: knip 6.45.1 de `node_modules` (tras `npm ci --ignore-scripts`), con el `knip.json` de `main` y `--no-gitignore`, sin `--fix`. Sin `package.json` pasa con aviso; sin `knip` en `devDependencies`, o con la clave `knip` en `package.json` (knip la mezcla con la configuración), falla. La plantilla trae `knip.json` con las reglas en `"warn"`: solo avisa hasta que el proyecto pase a `"error"` (R2).
+  - `calidad.yml`, job `duplicados`: jscpd 5.4.3, de su release de GitHub con el SHA-256 escrito en el workflow, con el `.jscpd.json` de `main`, `--no-gitignore`, `--baseline-from-ref` y `--fail-on-new-clones`: falla con un solo clon nuevo. Falla también con un comentario que excluye una región (buscado con `git grep --text -i` en el árbol de la rama), con claves `semantic*` o de la base en la configuración y con la clave `jscpd` en `package.json`. Después, un informe de salud que no bloquea. La plantilla trae `.jscpd.json`.
+  - `checks.py`: los 8 nombres de configuración de knip y los 4 de jscpd, en cualquier carpeta, son R2.
+  - `docs/herramientas.md`: knip y jscpd, con los límites aceptados (las etiquetas JSDoc de knip y los plugins que ejecutan configuraciones de la rama). Guía de instalación y `AGENTS.md` de la plantilla: `codigo-sobrante` y `duplicados`, entre los checks requeridos.
+  - Tests: los pasos de preparación, en local; knip y jscpd de verdad, sobre `tests/fixtures/knip` y `tests/fixtures/jscpd`, solo en `validar`.
+
 - **Mutaciones con Stryker en la CI de la plantilla (VIC-21, PR 2 de 3; M26).**
   - `plantilla-proyecto/.github/workflows/calidad.yml`, job `mutaciones`: solo en `pull_request`, con `contents: read`, sin secretos, `timeout-minutes: 30` y acciones fijadas por SHA. Sin `package.json` pasa con aviso; con `package.json` y sin `@stryker-mutator/core` en `devDependencies`, falla. La configuración es el `stryker.config.json` de `main` (si `main` no tiene, la de la rama con aviso) y tiene que tener `thresholds.break` mayor que 0. Stryker sale de `node_modules` tras `npm ci --ignore-scripts`, nunca de `npx`, y corre con `--force` para no reutilizar un informe incremental de la rama. Con cero mutantes, falla.
   - `checks.py`: los 16 nombres de configuración que Stryker carga solo y `.npmrc`, en cualquier carpeta, son R2 (`R2_CONTROLES`).

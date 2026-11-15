@@ -9,7 +9,7 @@ import unittest
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOWS = RAIZ / "plantilla-proyecto" / ".github" / "workflows"
 REGISTRO = (RAIZ / "docs" / "herramientas.md").read_text(encoding="utf-8")
-REQUERIDOS = {"checks-sdd", "gitleaks", "osv-scanner", "semgrep", "mutaciones"}
+REQUERIDOS = {"checks-sdd", "gitleaks", "osv-scanner", "semgrep", "mutaciones", "codigo-sobrante", "duplicados"}
 
 
 def leer(nombre):
@@ -34,7 +34,7 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
     def test_los_jobs_son_los_checks_requeridos(self):
         self.assertEqual(jobs(leer("seguridad.yml")), {"gitleaks", "osv-scanner", "semgrep"})
         self.assertEqual(jobs(leer("sdd.yml")), {"checks-sdd"})
-        self.assertEqual(jobs(leer("calidad.yml")), {"mutaciones"})
+        self.assertEqual(jobs(leer("calidad.yml")), {"mutaciones", "codigo-sobrante", "duplicados"})
 
     def test_la_tarea_mensual_no_se_llama_como_un_check_requerido(self):
         texto = leer("osv-mensual.yml")

@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "files": "warn",
+    "subpaths": "warn",
+    "dependencies": "warn",
+    "devDependencies": "warn",
+    "optionalPeerDependencies": "warn",
+    "unlisted": "warn",
+    "binaries": "warn",
+    "unresolved": "warn",
+    "exports": "warn",
+    "nsExports": "warn",
+    "types": "warn",
+    "nsTypes": "warn",
+    "enumMembers": "warn",
+    "namespaceMembers": "warn",
+    "duplicates": "warn",
+    "catalog": "warn",
+    "catalogReferences": "warn",
+    "cycles": "warn"
+  }
+}

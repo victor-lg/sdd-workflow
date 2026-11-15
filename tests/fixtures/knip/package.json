@@ -1,0 +1,8 @@
+{
+  "name": "fixture-knip",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "knip": "6.45.1"
+  }
+}

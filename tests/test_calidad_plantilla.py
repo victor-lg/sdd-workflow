@@ -1,21 +1,29 @@
-"""calidad.yml de la plantilla (VIC-21, PR 2): mutaciones con Stryker. El workflow no corre en
-este repo, así que los tests ejecutan con bash los scripts de sus pasos, como en la CI, sobre
-repos de prueba: la configuración sale de `main`, el umbral tiene que ser mayor que 0 y un test
-debilitado hace fallar el job. Los de Stryker necesitan node y npm (y red para `npm ci`)."""
+"""calidad.yml de la plantilla (VIC-21): mutaciones con Stryker (PR 2), código que sobra con knip y
+duplicación nueva con jscpd (PR 3). El workflow no corre en este repo, así que los tests ejecutan
+con bash los scripts de sus pasos, como en la CI, sobre repos de prueba: la configuración sale de
+`main`, el umbral tiene que ser mayor que 0 y un test debilitado hace fallar el job. Los de Stryker
+necesitan node y npm (y red para `npm ci`). Los que ejecutan knip y jscpd de verdad corren en la CI
+(`validar`); en local se saltan si no encuentran el binario."""
 import json
 import os
 import pathlib
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import textwrap
+import time
 import unittest
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 CALIDAD = (RAIZ / "plantilla-proyecto" / ".github" / "workflows" / "calidad.yml").read_text(encoding="utf-8")
 REGISTRO = (RAIZ / "docs" / "herramientas.md").read_text(encoding="utf-8")
 FIXTURE = RAIZ / "tests" / "fixtures" / "stryker"
+FIXTURE_KNIP = RAIZ / "tests" / "fixtures" / "knip"
+FIXTURE_JSCPD = RAIZ / "tests" / "fixtures" / "jscpd"
+PLANTILLA = RAIZ / "plantilla-proyecto"
+EN_LA_CI = os.environ.get("GITHUB_ACTIONS") == "true"
 PAQUETE = {"name": "p", "private": True, "devDependencies": {"@stryker-mutator/core": "10.1.1"}}
 CONFIG = {"mutate": ["src/**/*.js"], "testRunner": "command", "thresholds": {"break": 80}}
 
@@ -27,11 +35,12 @@ def script(paso):
     return textwrap.dedent(bloque)
 
 
-def ejecutar(paso, carpeta, temporal, base="refs/remotes/origin/main"):
+def ejecutar(paso, carpeta, temporal, base="refs/remotes/origin/main", **extra):
     salida = pathlib.Path(temporal) / "salida"
     salida.write_text("")
     entorno = dict(os.environ, BASE=base, RUNNER_TEMP=str(temporal), GITHUB_OUTPUT=str(salida),
                    GIT_NO_REPLACE_OBJECTS="1", npm_config_cache=str(pathlib.Path(temporal) / "npm"))
+    entorno.update(extra)
     r = subprocess.run(["bash", "-e", "-c", script(paso)], cwd=carpeta, env=entorno,
                        capture_output=True, text=True, timeout=600)
     return r.returncode, r.stdout + r.stderr, salida.read_text()
@@ -51,10 +60,13 @@ class TextoDeCalidad(unittest.TestCase):
         self.assertNotIn("secrets.", codigo)
         self.assertNotIn("workflow_dispatch", codigo)
 
-    def test_un_job_con_tiempo_maximo(self):
+    def test_tres_jobs_con_tiempo_maximo(self):
         jobs = CALIDAD.split("\njobs:\n", 1)[1]
-        self.assertEqual(re.findall(r"^  ([a-z0-9-]+):", jobs, re.M), ["mutaciones"])
-        self.assertRegex(jobs, r"\n    timeout-minutes: \d+\n")
+        nombres = re.findall(r"^  ([a-z0-9-]+):", jobs, re.M)
+        self.assertEqual(nombres, ["mutaciones", "codigo-sobrante", "duplicados"])
+        for nombre, bloque in zip(nombres, re.split(r"^  [a-z0-9-]+:\n", jobs, flags=re.M)[1:]):
+            with self.subTest(job=nombre):
+                self.assertRegex(bloque, r"\n    timeout-minutes: \d+\n")
 
     def test_stryker_de_node_modules_con_la_configuracion_de_main(self):
         """Nada de npx: descargaría una versión que no fija el lockfile."""
@@ -74,9 +86,10 @@ class TextoDeCalidad(unittest.TestCase):
                 self.assertIn(sha, REGISTRO)
 
 
-class Preparar(unittest.TestCase):
-    """El paso "Configuración de Stryker de main", sobre un repo con `main` y una rama."""
-    PASO = "Configuración de Stryker de main"
+class RepoDePrueba(unittest.TestCase):
+    """Un repo con `main` y una rama, para ejecutar el paso PASO. CONFIG_PASO es el fichero de
+    configuración que el paso copia de `main`."""
+    PASO = CONFIG_PASO = None
 
     def setUp(self):
         self.temporal = pathlib.Path(tempfile.mkdtemp())
@@ -87,25 +100,35 @@ class Preparar(unittest.TestCase):
 
     def escribir(self, nombre, contenido):
         (self.repo / nombre).parent.mkdir(parents=True, exist_ok=True)
-        (self.repo / nombre).write_text(contenido if isinstance(contenido, str) else json.dumps(contenido))
+        if isinstance(contenido, bytes):
+            (self.repo / nombre).write_bytes(contenido)
+        else:
+            (self.repo / nombre).write_text(contenido if isinstance(contenido, str) else json.dumps(contenido))
         git(self.repo, "add", nombre)
 
     def main(self, config=None):
-        """Commit en `main` (con o sin stryker.config.json) y su ref origin/main."""
+        """Commit en `main` (con o sin la configuración) y su ref origin/main."""
         if config is not None:
-            self.escribir("stryker.config.json", config)
+            self.escribir(self.CONFIG_PASO, config)
         self.escribir("LEEME", "x")
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "base")
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
 
-    def preparar(self):
+    def preparar(self, paso=None, **extra):
         """En la CI, HEAD es el merge con todo lo de la rama commiteado: aquí, un commit de la rama."""
+        git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "--allow-empty", "-m", "rama")
-        return ejecutar(self.PASO, self.repo, self.temporal)
+        return ejecutar(paso or self.PASO, self.repo, self.temporal, **extra)
 
     def config_usada(self):
-        return json.loads((self.temporal / "stryker.config.json").read_text())
+        return json.loads((self.temporal / self.CONFIG_PASO).read_text())
+
+
+class Preparar(RepoDePrueba):
+    """El paso "Configuración de Stryker de main", sobre un repo con `main` y una rama."""
+    PASO = "Configuración de Stryker de main"
+    CONFIG_PASO = "stryker.config.json"
 
     def test_sin_package_json_pasa_con_aviso(self):
         self.main()
@@ -336,6 +359,452 @@ class BaseSinAmbiguedad(unittest.TestCase):
 
     def test_la_base_es_la_ref_completa(self):
         self.assertIn("  BASE: refs/remotes/origin/${{ github.base_ref }}\n", CALIDAD)
+
+
+
+PAQUETE_KNIP = {"name": "p", "private": True, "devDependencies": {"knip": "6.45.1"}}
+CONFIG_KNIP = {"entry": ["src/index.js"], "project": ["src/**/*.js"], "rules": {"exports": "error"}}
+JSCPD_URL = re.search(r"\n      JSCPD_URL: (\S+)\n", CALIDAD).group(1)
+JSCPD_SHA256 = re.search(r"\n      JSCPD_SHA256: ([0-9a-f]{64})\n", CALIDAD).group(1)
+# Los tipos de hallazgo de knip 6.45.1 (ISSUE_TYPES, en dist/constants.js).
+TIPOS_KNIP = {"files", "subpaths", "dependencies", "devDependencies", "optionalPeerDependencies", "unlisted",
+              "binaries", "unresolved", "exports", "nsExports", "types", "nsTypes", "enumMembers",
+              "namespaceMembers", "duplicates", "catalog", "catalogReferences", "cycles"}
+
+
+def medida(texto):
+    """Tiempos y hallazgos de knip y jscpd en la CI de este repo (VIC-21, PR 3): salen en el log de `validar`."""
+    print(f"\nMEDIDA {texto}", file=sys.stderr)
+
+
+class TextoDeKnipYJscpd(unittest.TestCase):
+    def codigo(self):
+        return re.sub(r"^\s*#.*\n", "", CALIDAD, flags=re.M)
+
+    def test_knip_de_node_modules_con_la_configuracion_de_main(self):
+        self.assertIn('node_modules/.bin/knip --config "$RUNNER_TEMP/knip.json" --no-gitignore\n', CALIDAD)
+        self.assertIn('git show "$BASE:knip.json" > "$RUNNER_TEMP/knip.json"', CALIDAD)
+        self.assertNotIn("--fix", self.codigo())
+
+    def test_jscpd_solo_con_la_duplicacion_nueva_y_sin_semantic(self):
+        codigo = " ".join(self.codigo().replace("\\\n", " ").split())
+        self.assertIn('"$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore '
+                      '--baseline-from-ref "$BASE" --fail-on-new-clones', codigo)
+        self.assertIn('git show "$BASE:.jscpd.json" > "$RUNNER_TEMP/.jscpd.json"', codigo)
+        self.assertNotIn("--semantic", codigo)
+        self.assertNotIn("npx", codigo)
+
+    def test_jscpd_de_la_release_con_la_suma_del_registro(self):
+        self.assertEqual(JSCPD_URL, "https://github.com/kucherenko/jscpd/releases/download/v5.4.3/"
+                                    "jscpd-linux-x64-gnu.tar.gz")
+        self.assertIn(JSCPD_SHA256, REGISTRO)
+        self.assertIn('sha256sum --check --strict', CALIDAD)
+
+    def test_la_plantilla_arranca_knip_en_warn(self):
+        """Víctor, 2026-11-15: pasar a "error" es un cambio de la configuración de main (R2)."""
+        config = json.loads((PLANTILLA / "knip.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["rules"], {tipo: "warn" for tipo in TIPOS_KNIP})
+
+
+class PrepararKnip(RepoDePrueba):
+    PASO = "Configuración de knip de main"
+    CONFIG_PASO = "knip.json"
+
+    def test_sin_package_json_pasa_con_aviso(self):
+        self.main(CONFIG_KNIP)
+        estado, texto, salida = self.preparar()
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("::warning::Sin package.json", texto)
+        self.assertEqual(salida, "knip=no\n")
+
+    def test_sin_package_json_en_la_rama_si_main_lo_tiene_falla(self):
+        self.escribir("package.json", PAQUETE_KNIP)
+        self.main(CONFIG_KNIP)
+        git(self.repo, "rm", "-q", "package.json")
+        estado, texto, salida = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::main tiene package.json y la rama no", texto)
+        self.assertNotIn("knip=", salida)
+
+    def test_sin_knip_en_dev_dependencies_falla(self):
+        self.main(CONFIG_KNIP)
+        for paquete in ({"name": "p"}, {"devDependencies": None}, {"dependencies": {"knip": "6.45.1"}}):
+            with self.subTest(paquete=paquete):
+                self.escribir("package.json", paquete)
+                estado, texto, salida = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::package.json no tiene knip en devDependencies", texto)
+                self.assertNotIn("knip=si", salida)
+
+    def test_la_clave_knip_de_package_json_falla(self):
+        """knip la mezcla con el fichero de --config: sus `ignore` saldrían de la rama."""
+        self.main(CONFIG_KNIP)
+        self.escribir("package.json", dict(PAQUETE_KNIP, knip={"ignore": ["src/**"]}))
+        estado, texto, salida = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::package.json tiene la clave knip", texto)
+        self.assertNotIn("knip=si", salida)
+
+    def test_usa_la_configuracion_de_main_y_no_la_de_la_rama(self):
+        self.main(CONFIG_KNIP)
+        self.escribir("package.json", PAQUETE_KNIP)
+        self.escribir("knip.json", {"rules": {"exports": "off"}})
+        estado, texto, salida = self.preparar()
+        self.assertEqual(estado, 0, texto)
+        self.assertEqual(salida, "knip=si\n")
+        self.assertEqual(self.config_usada(), CONFIG_KNIP)
+
+    def test_sin_configuracion_en_main_usa_la_de_la_rama_con_aviso(self):
+        self.main()
+        self.escribir("package.json", PAQUETE_KNIP)
+        self.escribir("knip.json", CONFIG_KNIP)
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("::warning::main no tiene knip.json", texto)
+        self.assertEqual(self.config_usada(), CONFIG_KNIP)
+
+    def test_sin_configuracion_en_ninguna_falla(self):
+        self.main()
+        self.escribir("package.json", PAQUETE_KNIP)
+        self.escribir("knip.ts", "export default {}")
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::Falta knip.json", texto)
+
+    def test_otra_configuracion_en_main_falla(self):
+        for nombre in ("knip.jsonc", ".knip.json", ".knip.jsonc", "knip.ts", "knip.js", "knip.config.ts",
+                       "knip.config.js"):
+            with self.subTest(nombre=nombre):
+                self.setUp()
+                self.escribir(nombre, "{}")
+                self.main()
+                self.escribir("package.json", PAQUETE_KNIP)
+                self.escribir("knip.json", {"rules": {"exports": "off"}})
+                estado, texto, salida = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::main tiene una configuración de knip que no es knip.json", texto)
+                self.assertNotIn("knip=si", salida)
+
+    def test_la_configuracion_tiene_que_ser_un_objeto(self):
+        self.main([])
+        self.escribir("package.json", PAQUETE_KNIP)
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::knip.json tiene que ser un objeto JSON", texto)
+
+    def test_sin_la_rama_base_falla(self):
+        self.escribir("package.json", PAQUETE_KNIP)
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::Git no encuentra refs/remotes/origin/main", texto)
+
+
+class PrepararJscpd(RepoDePrueba):
+    PASO = "Configuración de jscpd de main"
+    CONFIG_PASO = ".jscpd.json"
+    CONFIG = {"ignore": ["**/docs/**"]}
+
+    def test_usa_la_configuracion_de_main_y_no_la_de_la_rama(self):
+        self.main(self.CONFIG)
+        self.escribir(".jscpd.json", {"ignore": ["**"]})
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
+        self.assertEqual(self.config_usada(), self.CONFIG)
+
+    def test_la_de_la_plantilla_vale(self):
+        self.main(json.loads((PLANTILLA / ".jscpd.json").read_text(encoding="utf-8")))
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
+
+    def test_sin_configuracion_en_main_usa_la_de_la_rama_con_aviso(self):
+        self.main()
+        self.escribir(".jscpd.json", self.CONFIG)
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("::warning::main no tiene .jscpd.json", texto)
+        self.assertEqual(self.config_usada(), self.CONFIG)
+
+    def test_sin_configuracion_en_ninguna_falla(self):
+        self.main()
+        self.escribir(".config/jscpd.json", self.CONFIG)
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::Falta .jscpd.json", texto)
+
+    def test_otra_configuracion_en_main_falla(self):
+        for nombre in (".config/jscpd.json", ".config/.jscpd.json"):
+            with self.subTest(nombre=nombre):
+                self.setUp()
+                self.escribir(nombre, self.CONFIG)
+                self.main()
+                self.escribir(".jscpd.json", {"ignore": ["**"]})
+                estado, texto, _ = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::main tiene una configuración de jscpd que no es .jscpd.json", texto)
+
+    def test_claves_que_fija_la_ci_fallan(self):
+        """--semantic enviaría el código fuera; la base y el umbral de clones nuevos los pone la CI."""
+        for clave, valor in (("semantic", True), ("semanticUrl", "http://x"), ("SemanticProvider", "http"),
+                             ("baseline", "b.json"), ("baselineFromRef", "HEAD"), ("failOnNewClones", 9)):
+            with self.subTest(clave=clave):
+                self.setUp()
+                self.main(dict(self.CONFIG, **{clave: valor}))
+                estado, texto, _ = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn(f"::error::.jscpd.json no puede llevar {clave}", texto)
+
+    def test_la_configuracion_tiene_que_ser_un_objeto(self):
+        self.main(["**"])
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::.jscpd.json tiene que ser un objeto JSON", texto)
+
+    def test_la_clave_jscpd_de_package_json_falla(self):
+        self.main(self.CONFIG)
+        self.escribir("package.json", {"name": "p", "jscpd": {"ignore": ["src/**"]}})
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::package.json tiene la clave jscpd", texto)
+        self.escribir("package.json", {"name": "p"})
+        self.assertEqual(self.preparar()[0], 0)
+
+    def test_un_comentario_que_excluye_una_region_falla(self):
+        """Víctor, 2026-11-15: con uno solo. Es un control sobre texto: se busca en el árbol de la
+        rama con git grep --text, sin distinguir mayúsculas, aunque .gitattributes marque el fichero
+        como binario o tenga un NUL delante."""
+        formas = {
+            "src/a.js": b"// jscpd:ignore-start\nconst a = 1;\n// jscpd:ignore-end\n",
+            "src/b.py": b"x = 1\n# JSCPD:IGNORE-START\n",
+            "src/c.js": b"\0\n/* Jscpd:Ignore-End */\n",
+            "src/d.bin": b"// jscpd:ignore-start\n",
+        }
+        for nombre, contenido in formas.items():
+            with self.subTest(nombre=nombre):
+                self.setUp()
+                self.main(self.CONFIG)
+                self.escribir(".gitattributes", "*.bin binary\n*.js -diff -text\n")
+                self.escribir(nombre, contenido)
+                estado, texto, _ = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn(f"::error file={nombre}::Comentario de jscpd que excluye una región", texto)
+                self.assertIn("::error::Hay comentarios que esconden código a jscpd", texto)
+
+    def test_sin_comentarios_pasa(self):
+        self.main(self.CONFIG)
+        self.escribir("src/a.js", "// jscpd ignora esto solo si lo dice la configuración\n")
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
+
+    def test_sin_la_rama_base_falla(self):
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::Git no encuentra refs/remotes/origin/main", texto)
+
+
+@unittest.skipUnless(shutil.which("node") and shutil.which("npm") and (EN_LA_CI or shutil.which("knip")),
+                     "knip solo corre en la CI (validar) o con knip en el PATH")
+class KnipEnLaCi(unittest.TestCase):
+    """El paso "knip" sobre tests/fixtures/knip, con la configuración fuera del proyecto, como en la CI."""
+    PASO = "knip"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cache = pathlib.Path(tempfile.mkdtemp())
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.cache)
+
+    def setUp(self):
+        self.temporal = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.temporal)
+        self.proyecto = self.temporal / "proyecto"
+        shutil.copytree(FIXTURE_KNIP, self.proyecto)
+        self.config = json.loads((self.proyecto / "knip.json").read_text())
+        (self.proyecto / "knip.json").unlink()
+
+    def knip(self, reglas, config=None):
+        (self.temporal / "knip.json").write_text(json.dumps(dict(config or self.config, rules=reglas)))
+        inicio = time.monotonic()
+        estado, texto, salida = ejecutar(self.PASO, self.proyecto, self.temporal, npm_config_cache=str(self.cache))
+        return estado, texto, time.monotonic() - inicio
+
+    def sobra(self):
+        (self.proyecto / "src" / "suma.js").write_text(
+            "export function suma(a, b) {\n  return a + b;\n}\n\nexport function resta(a, b) {\n  return a - b;\n}\n")
+        (self.proyecto / "src" / "sobra.js").write_text("export const nada = 0;\n")
+
+    def test_sin_codigo_que_sobre_pasa(self):
+        estado, texto, segundos = self.knip({"files": "error", "exports": "error"})
+        self.assertEqual(estado, 0, texto)
+        medida(f"knip, proyecto de prueba limpio: {segundos:.1f} s con npm ci")
+
+    def test_con_las_reglas_en_error_falla(self):
+        self.sobra()
+        estado, texto, segundos = self.knip({"files": "error", "exports": "error"})
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("src/sobra.js", texto)
+        self.assertIn("resta", texto)
+        medida(f"knip, una exportación y un fichero que sobran: salida {estado}, {segundos:.1f} s")
+
+    def test_con_las_reglas_en_warn_avisa_y_pasa(self):
+        self.sobra()
+        estado, texto, _ = self.knip({"files": "warn", "exports": "warn"})
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("src/sobra.js", texto)
+        self.assertIn("resta", texto)
+
+    def test_la_configuracion_de_la_plantilla_avisa_y_pasa(self):
+        self.sobra()
+        reglas = json.loads((PLANTILLA / "knip.json").read_text(encoding="utf-8"))["rules"]
+        estado, texto, segundos = self.knip(reglas)
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("resta", texto)
+        self.assertNotIn("Ignored unknown issue type", texto)
+        medida(f"knip, con el knip.json de la plantilla: salida {estado}, {segundos:.1f} s")
+
+    def test_la_configuracion_de_la_rama_no_cuenta(self):
+        """Con --config, knip no busca otra: un knip.json de la rama con las reglas apagadas no vale."""
+        self.sobra()
+        (self.proyecto / "knip.json").write_text(json.dumps({"rules": {"files": "off", "exports": "off"}}))
+        estado, texto, _ = self.knip({"files": "error", "exports": "error"})
+        self.assertEqual(estado, 1, texto)
+
+    def test_el_gitignore_de_la_rama_no_esconde_ficheros(self):
+        self.sobra()
+        (self.proyecto / ".gitignore").write_text("src/sobra.js\n")
+        estado, texto, _ = self.knip({"files": "error"})
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("src/sobra.js", texto)
+
+    def test_una_configuracion_que_no_carga_falla(self):
+        estado, texto, _ = self.knip({"exports": "error"}, config={"entry": 5})
+        self.assertNotEqual(estado, 0, texto)
+
+
+@unittest.skipUnless(EN_LA_CI or shutil.which("jscpd"), "jscpd solo corre en la CI (validar) o con jscpd en el PATH")
+class JscpdEnLaCi(RepoDePrueba):
+    """Los pasos "Instalar jscpd", "jscpd" e "Informe de salud de jscpd" sobre un repo con
+    tests/fixtures/jscpd en `main`, con el .jscpd.json de la plantilla. En la CI, el binario sale
+    del paso de instalación; en local, del PATH."""
+    PASO = "jscpd"
+    CONFIG_PASO = ".jscpd.json"
+    COPIA = (FIXTURE_JSCPD / "src" / "precios.js").read_text().replace("precioConImpuestos", "totalFactura")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.instalacion = pathlib.Path(tempfile.mkdtemp())
+        if EN_LA_CI:
+            inicio = time.monotonic()
+            estado, texto, _ = ejecutar("Instalar jscpd", cls.instalacion, cls.instalacion,
+                                        JSCPD_URL=JSCPD_URL, JSCPD_SHA256=JSCPD_SHA256)
+            assert estado == 0, texto
+            medida(f"jscpd, descarga y comprobación de la suma: {time.monotonic() - inicio:.1f} s")
+            cls.binario = cls.instalacion / "jscpd" / "jscpd"
+        else:
+            cls.binario = pathlib.Path(shutil.which("jscpd"))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.instalacion)
+
+    def setUp(self):
+        super().setUp()
+        shutil.copytree(FIXTURE_JSCPD, self.repo, dirs_exist_ok=True)
+        (self.temporal / "jscpd").mkdir()
+        (self.temporal / "jscpd" / "jscpd").symlink_to(self.binario)
+
+    def main(self, config=None):
+        super().main(json.loads((PLANTILLA / ".jscpd.json").read_text(encoding="utf-8")) if config is None else config)
+
+    def jscpd(self):
+        estado, texto, _ = self.preparar("Configuración de jscpd de main")
+        self.assertEqual(estado, 0, texto)
+        inicio = time.monotonic()
+        estado, texto, _ = ejecutar(self.PASO, self.repo, self.temporal)
+        return estado, texto, time.monotonic() - inicio
+
+    def informe(self):
+        return json.loads((self.temporal / "jscpd-informe" / "jscpd-report.json").read_text())
+
+    def test_sin_duplicacion_nueva_pasa(self):
+        self.main()
+        estado, texto, segundos = self.jscpd()
+        self.assertEqual(estado, 0, texto)
+        medida(f"jscpd, proyecto de prueba sin clones: {segundos:.1f} s")
+
+    def test_un_clon_nuevo_falla(self):
+        self.main()
+        self.escribir("src/factura.js", self.COPIA)
+        estado, texto, segundos = self.jscpd()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("factura.js", texto)
+        medida(f"jscpd, un clon nuevo: salida {estado}, {segundos:.1f} s")
+
+    def test_un_clon_heredado_de_main_no_cuenta(self):
+        self.escribir("src/factura.js", self.COPIA)
+        self.main()
+        self.escribir("src/otro.js", "export const otro = 1;\n")
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 0, texto)
+        self.assertGreaterEqual(len(self.informe().get("duplicates", [])), 1)
+
+    def test_lo_que_ignora_la_configuracion_de_main_no_cuenta(self):
+        self.main()
+        self.escribir("docs/ejemplo.js", self.COPIA)
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 0, texto)
+
+    def test_el_gitignore_de_la_rama_no_esconde_ficheros(self):
+        self.main()
+        self.escribir(".gitignore", "src/factura.js\n")
+        (self.repo / "src" / "factura.js").write_text(self.COPIA)
+        git(self.repo, "add", "-f", "src/factura.js")
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 1, texto)
+
+    def test_la_configuracion_de_la_rama_no_cuenta(self):
+        self.main()
+        self.escribir(".jscpd.json", {"ignore": ["**/src/**"]})
+        self.escribir("package.json", {"name": "p"})
+        self.escribir("src/factura.js", self.COPIA)
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 1, texto)
+
+    def test_el_informe_de_salud_no_bloquea(self):
+        self.main()
+        self.escribir("src/factura.js", self.COPIA)
+        self.jscpd()
+        estado, texto, _ = ejecutar("Informe de salud de jscpd", self.repo, self.temporal)
+        self.assertEqual(estado, 0, texto)
+
+    def test_mide_este_repo(self):
+        """El tiempo y los hallazgos de jscpd sobre este repo, con el .jscpd.json de la plantilla y sin
+        clones nuevos (la base es el propio HEAD). No es un proyecto de producto: sirve de tamaño real."""
+        temporal = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temporal)
+        shutil.copy(PLANTILLA / ".jscpd.json", temporal / ".jscpd.json")
+        (temporal / "jscpd").mkdir()
+        (temporal / "jscpd" / "jscpd").symlink_to(self.binario)
+        inicio = time.monotonic()
+        estado, texto, _ = ejecutar(self.PASO, RAIZ, temporal, base="HEAD")
+        segundos = time.monotonic() - inicio
+        self.assertEqual(estado, 0, texto)
+        informe = json.loads((temporal / "jscpd-informe" / "jscpd-report.json").read_text())
+        total = (informe.get("statistics") or {}).get("total") or {}
+        medida(f"jscpd, este repo: {segundos:.1f} s, {len(informe.get('duplicates', []))} clones heredados, "
+               f"{total.get('sources')} ficheros, {total.get('lines')} líneas, {total.get('percentage')} %")
+
+
+@unittest.skipUnless(EN_LA_CI, "descarga la release de GitHub: solo en la CI (validar)")
+class InstalarJscpd(unittest.TestCase):
+    def test_una_suma_que_no_coincide_falla(self):
+        temporal = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temporal)
+        estado, texto, _ = ejecutar("Instalar jscpd", temporal, temporal, JSCPD_URL=JSCPD_URL, JSCPD_SHA256="0" * 64)
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::La suma de jscpd no coincide con la fijada", texto)
+        self.assertFalse((temporal / "jscpd" / "jscpd").exists())
 
 
 if __name__ == "__main__":
