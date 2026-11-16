@@ -492,9 +492,24 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
 1. Copia `docs/ejemplos/workflows/tests-node-playwright.yml` del repo del workflow, adaptado al stack.
 2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci/vic-N-tests`, con el ID de la issue). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci/vic-N-tests` branch"**; si no, GitHub crea ramas nuevas (`ci/vic-N-tests-1`…).
 3. Abre un PR `ci: workflow de tests`, R2. Antes de fusionarlo, pide a una sesión del agente que lo revise con `sdd-review` (2 revisores; ADR-0006). Después, fusiónalo con tu excepción de administrador.
-4. En el ruleset de `main`, añade `tests` a los checks obligatorios.
+4. En el ruleset de `main`, añade `tests` a los checks obligatorios. Solo ese: `versiones` y los trozos `e2e (n/3)` los resume él.
    - Los PR que ya estaban abiertos se quedan esperando ese check. Ciérralos y vuelve a abrirlos para lanzarlo.
    - No uses "Update branch": crearía un push tuyo que tú mismo no podrías aprobar.
+
+**Subir la imagen de Playwright.** El job `versiones` falla cuando `@playwright/test` del `package-lock.json` no es la versión de la imagen. Lo normal es que pase en un PR de Dependabot, que sube el paquete pero no la imagen (calculadora-discos#42). En ese mismo PR:
+
+1. Lee la versión nueva en el mensaje del error (por ejemplo, `1.66.0`).
+2. Saca el digest del índice de su imagen. Desde una terminal con red, fuera del sandbox:
+
+```bash
+curl -sI -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  https://mcr.microsoft.com/v2/playwright/manifests/v1.66.0-noble | grep -i docker-content-digest
+```
+
+   Con Docker, `docker buildx imagetools inspect mcr.microsoft.com/playwright:v1.66.0-noble` da el mismo digest en la línea `Digest:` (es como se sacó el de la calculadora).
+
+3. En `.github/workflows/tests.yml`, cambia la línea `IMAGEN:` del job `versiones` por `mcr.microsoft.com/playwright:v1.66.0-noble@sha256:<digest>`. Hazlo desde la web, en la rama del PR: el agente no puede tocar workflows.
+4. Anota la versión y el digest en `docs/herramientas.md` del proyecto, si lo lleva.
 
 ### G2. Navegadores de Playwright (fuera del sandbox)
 
@@ -510,6 +525,8 @@ sudo env "PATH=$PATH" npx -y playwright@1.58.2 install-deps chromium webkit
 ```
 
 Quedan en `~/.cache/ms-playwright`, y el agente los usa desde el sandbox (verificado con Chromium 156 y WebKit 27.2). Repítelo cuando cambie la versión de Playwright.
+
+Las capturas de referencia de la regresión visual no salen de aquí: se generan con la imagen de la CI (G1), porque las fuentes y el navegador del PC dan otros píxeles.
 
 ### G3. Publicación en GitHub Pages con subdominio propio
 
