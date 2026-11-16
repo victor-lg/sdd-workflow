@@ -224,8 +224,10 @@ jobs:
 
       # jscpd busca .jscpd.json, .config/jscpd.json, .config/.jscpd.json y `package.json#jscpd`;
       # con --config usa ese fichero, y la clave de package.json, por si acaso, hace fallar.
-      # Sin --semantic ni sus claves: enviaría el código a un modelo o a una API externa.
-      # Un comentario que excluye una región (ignore-start o ignore-end de jscpd) hace fallar el
+      # Sin --semantic ni sus claves: enviaría el código a un modelo o a una API externa. La
+      # configuración solo admite las claves de la lista: el resto (tamaños, rutas, umbrales,
+      # anotaciones) vaciaría el control.
+      # Un comentario que excluye código (cualquier forma de ignore de jscpd) hace fallar el
       # job, como un mutante Ignored. Se busca con git grep en el árbol de la rama, no en el diff.
       - name: Configuración de jscpd de main
         id: preparar
@@ -247,13 +249,13 @@ jobs:
           config = json.load(open(sys.argv[1], encoding="utf-8"))
           if not isinstance(config, dict):
               sys.exit("::error::.jscpd.json tiene que ser un objeto JSON")
-          fijas = [c for c in config if c.lower().startswith("semantic") or c in ("baseline", "baselineFromRef", "failOnNewClones")]
+          fijas = [c for c in config if c not in ("$schema", "ignore", "format", "minTokens", "minLines")]
           if fijas:
-              sys.exit("::error::.jscpd.json no puede llevar " + ", ".join(sorted(fijas)) + ": la CI fija la base y no usa el modo semantic")
+              sys.exit("::error::.jscpd.json no puede llevar " + ", ".join(sorted(fijas)) + ": solo admite ignore, format, minTokens y minLines; la CI fija lo demás y no usa el modo semantic")
           if os.path.isfile("package.json") and "jscpd" in json.load(open("package.json", encoding="utf-8")):
               sys.exit("::error::package.json tiene la clave jscpd: la configuración es .jscpd.json, la de main")
           ' "$RUNNER_TEMP/.jscpd.json"
-          git grep --text -i -l -z -e 'jscpd:ignore-start' -e 'jscpd:ignore-end' HEAD -- > "$RUNNER_TEMP/silenciadores" || [ $? -eq 1 ]
+          git grep --text -i -l -z -F -e 'jscpd:ignore' HEAD -- > "$RUNNER_TEMP/silenciadores" || [ $? -eq 1 ]
           if [ -s "$RUNNER_TEMP/silenciadores" ]; then
             python3 -I -c '
           import sys

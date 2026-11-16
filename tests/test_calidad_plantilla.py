@@ -380,6 +380,14 @@ def medida(texto):
         print(f"::notice title=MEDIDA::{texto}", flush=True)
 
 
+def sonda(nombre, estado, texto):
+    """Qué hace la herramienta en un caso que puede esconderle código (G4 del PR 3): en la CI,
+    como anotación, porque el log de `validar` no se puede descargar desde el sandbox."""
+    if EN_LA_CI:
+        resumen = texto[-600:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::notice title=SONDA {nombre}::salida {estado}%0A{resumen}", flush=True)
+
+
 class TextoDeKnipYJscpd(unittest.TestCase):
     def codigo(self):
         return re.sub(r"^\s*#.*\n", "", CALIDAD, flags=re.M)
@@ -402,6 +410,13 @@ class TextoDeKnipYJscpd(unittest.TestCase):
                                     "jscpd-linux-x64-gnu.tar.gz")
         self.assertIn(JSCPD_SHA256, REGISTRO)
         self.assertIn('sha256sum --check --strict', CALIDAD)
+
+    def test_knip_del_lockfile_con_la_version_y_la_integrity_del_registro(self):
+        version = json.loads((FIXTURE_KNIP / "package.json").read_text())["devDependencies"]["knip"]
+        knip = json.loads((FIXTURE_KNIP / "package-lock.json").read_text())["packages"]["node_modules/knip"]
+        self.assertEqual(knip["version"], version)
+        self.assertIn(f"`knip` {version}", REGISTRO)
+        self.assertIn(knip["integrity"], REGISTRO)
 
     def test_la_plantilla_arranca_knip_en_warn(self):
         """Víctor, 2026-11-15: pasar a "error" es un cambio de la configuración de main (R2)."""
@@ -548,13 +563,21 @@ class PrepararJscpd(RepoDePrueba):
     def test_claves_que_fija_la_ci_fallan(self):
         """--semantic enviaría el código fuera; la base y el umbral de clones nuevos los pone la CI."""
         for clave, valor in (("semantic", True), ("semanticUrl", "http://x"), ("SemanticProvider", "http"),
-                             ("baseline", "b.json"), ("baselineFromRef", "HEAD"), ("failOnNewClones", 9)):
+                             ("baseline", "b.json"), ("baselineFromRef", "HEAD"), ("failOnNewClones", 9),
+                             ("maxLines", 10), ("maxSize", "1kb"), ("ignoreAnnotations", True), ("exitCode", 0),
+                             ("path", ["docs"]), ("pattern", "*.md"), ("changedOnly", True), ("skipLocal", True),
+                             ("min_tokens", 50), ("Ignore", ["**"])):
             with self.subTest(clave=clave):
                 self.setUp()
                 self.main(dict(self.CONFIG, **{clave: valor}))
                 estado, texto, _ = self.preparar()
                 self.assertEqual(estado, 1, texto)
                 self.assertIn(f"::error::.jscpd.json no puede llevar {clave}", texto)
+
+    def test_las_claves_admitidas_pasan(self):
+        self.main(dict(self.CONFIG, **{"$schema": "x", "format": ["javascript"], "minTokens": 50, "minLines": 5}))
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
 
     def test_la_configuracion_tiene_que_ser_un_objeto(self):
         self.main(["**"])
@@ -580,6 +603,8 @@ class PrepararJscpd(RepoDePrueba):
             "src/b.py": b"x = 1\n# JSCPD:IGNORE-START\n",
             "src/c.js": b"\0\n/* Jscpd:Ignore-End */\n",
             "src/d.bin": b"// jscpd:ignore-start\n",
+            "src/e.js": b"// jscpd:ignore\n",
+            "src/f.js": b"/* jscpd:ignore-file */\n",
         }
         for nombre, contenido in formas.items():
             with self.subTest(nombre=nombre):
@@ -686,6 +711,7 @@ class KnipEnLaCi(unittest.TestCase):
         (self.proyecto / ".util").mkdir()
         (self.proyecto / ".util" / "oculto.js").write_text("export const oculto = 0;\n")
         estado, texto, _ = self.knip({"files": "error"}, config={"entry": ["src/index.js"]})
+        sonda("knip oculta", estado, texto)
         self.assertEqual(estado, 1, texto)
         self.assertIn(".util/oculto.js", texto)
 
@@ -789,6 +815,7 @@ class JscpdEnLaCi(RepoDePrueba):
         self.escribir(".config/.jscpd.json", {"ignore": ["**/src/**"]})
         self.escribir("src/factura.js", self.COPIA)
         estado, texto, _ = self.jscpd()
+        sonda("jscpd .config", estado, texto)
         self.assertEqual(estado, 1, texto)
 
     def test_un_fichero_grande_no_esconde_un_clon(self):
@@ -797,6 +824,7 @@ class JscpdEnLaCi(RepoDePrueba):
         relleno = "".join(f"// {i:04d} " + "x" * 100 + "\n" for i in range(1200))
         self.escribir("src/factura.js", self.COPIA + relleno)
         estado, texto, _ = self.jscpd()
+        sonda("jscpd grande", estado, texto)
         self.assertEqual(estado, 1, texto)
 
     def test_un_fichero_de_ignore_no_esconde_ficheros(self):
@@ -808,12 +836,14 @@ class JscpdEnLaCi(RepoDePrueba):
                 self.escribir(nombre, "src/factura.js\n")
                 self.escribir("src/factura.js", self.COPIA)
                 estado, texto, _ = self.jscpd()
+                sonda(f"jscpd {nombre}", estado, texto)
                 self.assertEqual(estado, 1, texto)
 
     def test_una_carpeta_oculta_no_esconde_un_clon(self):
         self.main()
         self.escribir(".util/factura.js", self.COPIA)
         estado, texto, _ = self.jscpd()
+        sonda("jscpd oculta", estado, texto)
         self.assertEqual(estado, 1, texto)
 
     def test_una_tercera_copia_de_un_clon_heredado_falla(self):
@@ -821,6 +851,7 @@ class JscpdEnLaCi(RepoDePrueba):
         self.main()
         self.escribir("src/albaran.js", self.COPIA.replace("totalFactura", "totalAlbaran"))
         estado, texto, _ = self.jscpd()
+        sonda("jscpd tercera copia", estado, texto)
         self.assertEqual(estado, 1, texto)
         self.assertIn("albaran.js", texto)
 
@@ -829,6 +860,7 @@ class JscpdEnLaCi(RepoDePrueba):
         self.escribir("src/factura.js", self.COPIA)
         self.jscpd()
         estado, texto, _ = ejecutar("Informe de salud de jscpd", self.repo, self.temporal)
+        sonda("jscpd salud", estado, texto)
         self.assertEqual(estado, 0, texto)
         self.assertNotIn("::warning::El informe de salud", texto)
 
