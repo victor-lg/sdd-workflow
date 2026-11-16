@@ -23,6 +23,7 @@ import AxeBuilder from "@axe-core/playwright";
 test("un grosor negativo no se guarda", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("canvas")).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByLabel("Grosor (mm)").fill("-2");
   await page.getByRole("button", { name: "Guardar" }).click();
   await expect(page.getByRole("alert")).toHaveText("El grosor tiene que ser positivo");
