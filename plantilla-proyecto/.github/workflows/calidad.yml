@@ -228,7 +228,8 @@ jobs:
       # configuración solo admite las claves de la lista: el resto (tamaños, rutas, umbrales,
       # anotaciones) vaciaría el control.
       # Un comentario que excluye código (cualquier forma de ignore de jscpd) hace fallar el
-      # job, como un mutante Ignored. Se busca con git grep en el árbol de la rama, no en el diff.
+      # job, como un mutante Ignored. Se busca con git grep en el árbol de la rama, no en el diff,
+      # con [:] para que este fichero, que va en el árbol, no se encuentre a sí mismo.
       # También un .ignore en cualquier carpeta: jscpd lo respeta con --no-gitignore (medido en
       # el PR 3 de VIC-21).
       - name: Configuración de jscpd de main
@@ -257,7 +258,7 @@ jobs:
           if os.path.isfile("package.json") and "jscpd" in json.load(open("package.json", encoding="utf-8")):
               sys.exit("::error::package.json tiene la clave jscpd: la configuración es .jscpd.json, la de main")
           ' "$RUNNER_TEMP/.jscpd.json"
-          git grep --text -i -l -z -F -e 'jscpd:ignore' HEAD -- > "$RUNNER_TEMP/silenciadores" || [ $? -eq 1 ]
+          git grep --text -i -l -z -E -e 'jscpd[:]ignore' HEAD -- > "$RUNNER_TEMP/silenciadores" || [ $? -eq 1 ]
           git ls-tree -r -z --name-only HEAD > "$RUNNER_TEMP/arbol"
           python3 -I -c '
           import os, sys

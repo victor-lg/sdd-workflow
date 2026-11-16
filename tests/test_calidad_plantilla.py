@@ -76,7 +76,7 @@ class TextoDeCalidad(unittest.TestCase):
         self.assertIn('git show "$BASE:stryker.config.json" > "$RUNNER_TEMP/stryker.config.json"', CALIDAD)
 
     def test_node_sin_cache(self):
-        self.assertIn("package-manager-cache: false", CALIDAD)
+        self.assertEqual(CALIDAD.count("package-manager-cache: false"), CALIDAD.count("actions/setup-node@"))
         self.assertNotIn("cache: npm", CALIDAD)
 
     def test_acciones_del_registro(self):
@@ -380,10 +380,11 @@ def medida(texto):
         print(f"::notice title=MEDIDA::{texto}", flush=True)
 
 
-def sonda(nombre, estado, texto):
-    """Qué hace la herramienta en un caso que puede esconderle código (G4 del PR 3): en la CI,
-    como anotación, porque el log de `validar` no se puede descargar desde el sandbox."""
-    if EN_LA_CI:
+def sonda(nombre, estado, texto, esperado=1):
+    """Qué hace la herramienta en un caso que puede esconderle código (G4 del PR 3), si no es lo
+    esperado: en la CI, como anotación, porque el log de `validar` no se puede descargar desde el
+    sandbox. Solo si falla, porque GitHub guarda 10 avisos por paso."""
+    if EN_LA_CI and estado != esperado:
         resumen = texto[-600:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::notice title=SONDA {nombre}::salida {estado}%0A{resumen}", flush=True)
 
@@ -635,6 +636,13 @@ class PrepararJscpd(RepoDePrueba):
         estado, texto, _ = self.preparar()
         self.assertEqual(estado, 0, texto)
 
+    def test_la_plantilla_entera_pasa(self):
+        """El propio calidad.yml, AGENTS.md y el resto de la plantilla van en el árbol del proyecto."""
+        shutil.copytree(PLANTILLA, self.repo, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
+        self.main()
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
+
     def test_sin_comentarios_pasa(self):
         self.main(self.CONFIG)
         self.escribir("src/a.js", "// jscpd ignora esto solo si lo dice la configuración\n")
@@ -729,7 +737,6 @@ class KnipEnLaCi(unittest.TestCase):
         (self.proyecto / ".util").mkdir()
         (self.proyecto / ".util" / "oculto.js").write_text("export const oculto = 0;\n")
         estado, texto, _ = self.knip({"files": "error"}, config={"entry": ["src/index.js"]})
-        sonda("knip oculta", estado, texto)
         self.assertEqual(estado, 1, texto)
         self.assertIn(".util/oculto.js", texto)
 
@@ -867,12 +874,67 @@ class JscpdEnLaCi(RepoDePrueba):
         estado, texto, _ = self.jscpd()
         self.assertEqual(estado, 1, texto)
 
+    def test_una_carpeta_con_nombre_ignorado_dentro_de_src_cuenta(self):
+        """La plantilla ancla a la raíz dist/, build/, docs/…: dentro de src/ se analizan."""
+        for nombre in ("src/build/factura.js", "src/reports/factura.js", "src/docs/factura.js", "src/factura.min.js"):
+            with self.subTest(nombre=nombre):
+                self.setUp()
+                self.main()
+                self.escribir(nombre, self.COPIA)
+                estado, texto, _ = self.jscpd()
+                sonda(f"jscpd {nombre}", estado, texto)
+                self.assertEqual(estado, 1, texto)
+
+    def test_ficheros_raros_no_esconden_un_clon(self):
+        grande = "".join(f"// {i:05d} " + "x" * 100 + "\n" for i in range(10000))
+        casos = {
+            "src/factura.js": b"// \xff\xfe no es UTF-8\n" + self.COPIA.encode(),
+            "src/grande.js": (self.COPIA + grande).encode(),
+            "src/factura.cjs": self.COPIA.encode(),
+            "src/factura.mjs": self.COPIA.encode(),
+            "src/factura.mts": self.COPIA.encode(),
+            "src/factura.cts": self.COPIA.encode(),
+        }
+        for nombre, contenido in casos.items():
+            with self.subTest(nombre=nombre):
+                self.setUp()
+                self.main()
+                self.escribir(nombre, contenido)
+                estado, texto, _ = self.jscpd()
+                sonda(f"jscpd {nombre}", estado, texto)
+                self.assertEqual(estado, 1, texto)
+
+    def test_un_baseline_de_la_rama_no_cuenta(self):
+        """La rama genera su .jscpd-baseline.json con el clon nuevo dentro: la base es la de main."""
+        self.main()
+        self.escribir("src/factura.js", self.COPIA)
+        git(self.repo, "commit", "-q", "-m", "rama")
+        subprocess.run([str(self.binario), ".", "--update-baseline", "--no-gitignore"], cwd=self.repo,
+                       capture_output=True, text=True, timeout=120)
+        hecho = [p.name for p in self.repo.rglob("*baseline*") if ".git" not in p.parts]
+        estado, texto, _ = self.jscpd()
+        sonda(f"jscpd baseline {hecho}", estado, texto)
+        self.assertEqual(estado, 1, texto)
+
+    def test_el_primer_pr_sin_nada_en_main(self):
+        """Al adoptar la plantilla, main no tiene ni el código ni .jscpd.json: se analiza con el de la rama."""
+        self.escribir("LEEME", "x")
+        git(self.repo, "commit", "-q", "-m", "base")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        shutil.copy(PLANTILLA / ".jscpd.json", self.repo / ".jscpd.json")
+        estado, texto, _ = self.jscpd()
+        sonda("jscpd primer PR sin clones", estado, texto, esperado=0)
+        self.assertEqual(estado, 0, texto)
+        self.escribir("src/factura.js", self.COPIA)
+        estado, texto, _ = self.jscpd()
+        sonda("jscpd primer PR con un clon", estado, texto)
+        self.assertEqual(estado, 1, texto)
+
     def test_una_tercera_copia_de_un_clon_heredado_falla(self):
         self.escribir("src/factura.js", self.COPIA)
         self.main()
         self.escribir("src/albaran.js", self.COPIA.replace("totalFactura", "totalAlbaran"))
         estado, texto, _ = self.jscpd()
-        sonda("jscpd tercera copia", estado, texto)
         self.assertEqual(estado, 1, texto)
         self.assertIn("albaran.js", texto)
 

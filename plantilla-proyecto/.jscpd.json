@@ -1,15 +1,14 @@
 {
   "ignore": [
     "**/node_modules/**",
-    "**/dist/**",
-    "**/build/**",
-    "**/coverage/**",
-    "**/reports/**",
-    "**/.stryker-tmp/**",
-    "**/docs/**",
-    "**/.github/**",
+    "dist/**",
+    "build/**",
+    "coverage/**",
+    "reports/**",
+    ".stryker-tmp/**",
+    "docs/**",
+    ".github/**",
     "**/*.md",
-    "**/package-lock.json",
-    "**/*.min.js"
+    "**/package-lock.json"
   ]
 }
