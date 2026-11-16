@@ -79,6 +79,14 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 # Todos los nombres que Stryker carga solo; los .js, .mjs y .cjs ejecutan código.
                 "stryker.conf.*", "*/stryker.conf.*", "stryker.config.*", "*/stryker.config.*",
                 ".stryker.conf.*", "*/.stryker.conf.*", ".stryker.config.*", "*/.stryker.config.*",
+                # Los que knip carga solo (KNIP_CONFIG_LOCATIONS); los .ts y .js ejecutan código.
+                "knip.json", "*/knip.json", "knip.jsonc", "*/knip.jsonc",
+                ".knip.json", "*/.knip.json", ".knip.jsonc", "*/.knip.jsonc",
+                "knip.[jt]s", "*/knip.[jt]s", "knip.config.[jt]s", "*/knip.config.[jt]s",
+                # Los que jscpd busca solo (`*/.jscpd.json` cubre `.config/.jscpd.json`) y el
+                # baseline que lee con --baseline.
+                ".jscpd.json", "*/.jscpd.json", ".config/jscpd.json", "*/.config/jscpd.json",
+                ".jscpd-baseline.json", "*/.jscpd-baseline.json",
                 # npm lo lee en `npm ci` y en `npm test` (script-shell, node-options), también dentro de Stryker.
                 ".npmrc", "*/.npmrc",
                 # Un submódulo trae código que no ve ningún escáner (también sus gitlinks, ver main).

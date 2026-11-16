@@ -515,6 +515,22 @@ class TestFicherosSensibles(unittest.TestCase):
             with self.subTest(ruta=ruta):
                 self.assertEqual(riesgo([ruta]).errores, [])
 
+    def test_configuracion_de_knip_y_jscpd(self):
+        """VIC-21, PR 3: los 8 nombres que knip carga solo (KNIP_CONFIG_LOCATIONS de la 6.45.1) y
+        los 3 que busca jscpd, más su baseline, en cualquier carpeta y sin distinguir mayúsculas."""
+        knip = ["knip.json", "knip.jsonc", ".knip.json", ".knip.jsonc",
+                "knip.ts", "knip.js", "knip.config.ts", "knip.config.js"]
+        jscpd = [".jscpd.json", ".config/jscpd.json", ".config/.jscpd.json", ".jscpd-baseline.json"]
+        for ruta in knip + jscpd + [f"web/{n}" for n in knip + jscpd] + ["KNIP.JSON", ".Jscpd.json"]:
+            with self.subTest(ruta=ruta):
+                errores = riesgo([ruta]).errores
+                self.assertEqual(len(errores), 1, errores)
+                self.assertIn("exige R2", errores[0])
+        for ruta in ["docs/knip.md", "src/knip.mjs", "knip.yaml", "jscpd.json", "report/jscpd-report.json",
+                     "config/jscpd.json"]:
+            with self.subTest(ruta=ruta):
+                self.assertEqual(riesgo([ruta]).errores, [])
+
     def test_npm_shrinkwrap_es_un_manifiesto(self):
         """G4 del PR 2 de VIC-21, ronda 3: `npm ci` lo usa antes que package-lock.json."""
         for ruta in ["npm-shrinkwrap.json", "web/npm-shrinkwrap.json"]:

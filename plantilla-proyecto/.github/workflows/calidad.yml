@@ -1,8 +1,9 @@
-# Controles de calidad del workflow SDD + IA v1.1 (M26).
+# Controles de calidad del workflow SDD + IA v1.1 (M26 y M23).
 #
-# En cada PR contra `main`: mutaciones con Stryker (JS/TS). El nombre del job es el check
-# que se marca como requerido en la regla de `main`. El agente no puede modificar este
-# fichero: su token no tiene el permiso `workflow` (ADR-0005, caso N5).
+# En cada PR contra `main`: mutaciones con Stryker (JS/TS), código que sobra con knip (JS/TS)
+# y duplicación nueva con jscpd (cualquier lenguaje). El nombre de cada job es el check que se
+# marca como requerido en la regla de `main`. El agente no puede modificar este fichero: su
+# token no tiene el permiso `workflow` (ADR-0005, caso N5).
 #
 # Solo `pull_request` (nunca `pull_request_target`) y sin `workflow_dispatch`, por lo mismo
 # que seguridad.yml: el agente no puede lanzarlo sobre su rama.
@@ -16,6 +17,10 @@
 #
 # Stryker sale de node_modules, instalado con `npm ci` desde el lockfile del proyecto: la
 # versión es la que fija el proyecto y la aprobada está en docs/herramientas.md del workflow.
+#
+# knip y jscpd siguen la misma regla: la configuración es la de `main`. knip sale de
+# node_modules, como Stryker; jscpd, de su release de GitHub con la suma fijada aquí, para que
+# un manifiesto de la rama no pueda sustituirlo. Ninguno respeta el .gitignore de la rama.
 
 name: calidad
 
@@ -110,8 +115,11 @@ jobs:
           print((json.load(open(sys.argv[1], encoding="utf-8")).get("jsonReporter") or {}).get("fileName") or "reports/mutation/mutation.json")
           ' "$RUNNER_TEMP/stryker.config.json")
           rm -f "$informe"
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
           node_modules/.bin/stryker run "$RUNNER_TEMP/stryker.config.json" --force --reporters clear-text,json 2>&1 | tee "$RUNNER_TEMP/stryker.log"
           estado=${PIPESTATUS[0]}
+          echo "::$token::"
           if grep -q "Final mutation score of NaN" "$RUNNER_TEMP/stryker.log"; then
             echo "::error::Stryker no ha probado ningún mutante: revisa mutate en stryker.config.json"; exit 1
           fi
@@ -132,3 +140,220 @@ jobs:
           ' "$informe" || { echo "::error::Hay mutantes Ignored: no cuentan en la puntuación"; exit 1; }
           fi
           exit "$estado"
+
+  codigo-sobrante:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Fijada por SHA (v7.0.1, 2026-07-17), igual que en sdd.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Sin package.json no es un proyecto JS/TS y el job pasa con aviso, como `mutaciones`.
+      # knip mezcla `package.json#knip` de la rama con el fichero que se le pasa
+      # (`create-options.js` de la 6.45.1): con esa clave, falla. Las reglas en "warn" solo
+      # avisan; en "error", fallan. Pasar a "error" es un cambio de la configuración de main (R2).
+      - name: Configuración de knip de main
+        id: preparar
+        run: |
+          git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
+          if [ ! -f package.json ]; then
+            if git cat-file -e "$BASE:package.json" 2>/dev/null; then
+              echo "::error::main tiene package.json y la rama no: sin él no se analizaría nada"; exit 1
+            fi
+            echo "::warning::Sin package.json: este proyecto no es JS/TS y no pasa por knip."
+            echo "knip=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 -I -c '
+          import json, sys
+          paquete = json.load(open("package.json", encoding="utf-8"))
+          if "knip" not in (paquete.get("devDependencies") or {}):
+              sys.exit("::error::package.json no tiene knip en devDependencies")
+          if "knip" in paquete:
+              sys.exit("::error::package.json tiene la clave knip: knip la mezcla con la configuración de main")
+          '
+          if git cat-file -e "$BASE:knip.json" 2>/dev/null; then
+            git show "$BASE:knip.json" > "$RUNNER_TEMP/knip.json"
+          elif git ls-tree --name-only "$BASE" | grep -Eqx '\.?knip\.jsonc?|knip(\.config)?\.[jt]s'; then
+            # Con otra configuración en `main`, la de la rama no puede sustituirla.
+            echo "::error::main tiene una configuración de knip que no es knip.json: la CI solo usa esa"; exit 1
+          elif [ -f knip.json ]; then
+            # Solo hasta que llegue a `main`: el PR que la añade es R2.
+            echo "::warning::main no tiene knip.json: se usa el de la rama."
+            cp knip.json "$RUNNER_TEMP/knip.json"
+          else
+            echo "::error::Falta knip.json (en main y en la rama)"; exit 1
+          fi
+          python3 -I -c '
+          import json, sys
+          sys.exit(0 if isinstance(json.load(open(sys.argv[1], encoding="utf-8")), dict) else 1)
+          ' "$RUNNER_TEMP/knip.json" || { echo "::error::knip.json tiene que ser un objeto JSON"; exit 1; }
+          echo "knip=si" >> "$GITHUB_OUTPUT"
+
+      # Fijada por SHA (v7.1.0, 2026-10-08). Sin caché: la de un PR la escribe código de la rama.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.preparar.outputs.knip == 'si'
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      # Solo informa: nunca --fix. Sale con 1 si hay hallazgos de una regla en "error" y con 2
+      # si no puede cargar la configuración. --no-gitignore: el .gitignore es de la rama.
+      # Como en los pasos de Stryker y jscpd, ::stop-commands:: con un token al azar: la salida
+      # de la herramienta lleva nombres de fichero de la rama, que podrían inyectar anotaciones.
+      - name: knip
+        if: steps.preparar.outputs.knip == 'si'
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          [ -x node_modules/.bin/knip ] || { echo "::error::npm ci no instaló knip"; exit 1; }
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
+          set +e
+          node_modules/.bin/knip --config "$RUNNER_TEMP/knip.json" --no-gitignore
+          estado=$?
+          set -e
+          echo "::$token::"
+          exit "$estado"
+
+  duplicados:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # jscpd 5.4.3 (2026-11-08), binario para Linux x64 con glibc. La suma es la de la release
+      # (checksums.txt), copiada aquí: subir de versión cambia las dos líneas y es R2.
+      JSCPD_URL: https://github.com/kucherenko/jscpd/releases/download/v5.4.3/jscpd-linux-x64-gnu.tar.gz
+      JSCPD_SHA256: a19d719331b21a047a7537f982566dabcf6d6e5f51581c3b80d9c420979cc92c
+    steps:
+      # Fijada por SHA (v7.0.1, 2026-07-17), igual que en sdd.yml. Con toda la historia:
+      # --baseline-from-ref saca `main` a un worktree temporal.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # jscpd busca .jscpd.json, .config/jscpd.json, .config/.jscpd.json y `package.json#jscpd`;
+      # con --config usa ese fichero, y la clave de package.json, por si acaso, hace fallar.
+      # Sin --semantic ni sus claves: enviaría el código a un modelo o a una API externa. La
+      # configuración solo admite las claves de la lista: el resto (tamaños, rutas, umbrales,
+      # anotaciones) vaciaría el control.
+      # Un comentario que excluye código (cualquier forma de ignore de jscpd) hace fallar el
+      # job, como un mutante Ignored. Se busca con git grep en el árbol de la rama, no en el diff,
+      # con [:] para que este fichero, que va en el árbol, no se encuentre a sí mismo.
+      # También un .ignore en cualquier carpeta (jscpd lo respeta con --no-gitignore) y el código
+      # que no es UTF-8 (jscpd lo salta sin avisar): medido en el PR 3 de VIC-21.
+      - name: Configuración de jscpd de main
+        id: preparar
+        run: |
+          git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
+          if git cat-file -e "$BASE:.jscpd.json" 2>/dev/null; then
+            git show "$BASE:.jscpd.json" > "$RUNNER_TEMP/.jscpd.json"
+          elif git cat-file -e "$BASE:.config/jscpd.json" 2>/dev/null || git cat-file -e "$BASE:.config/.jscpd.json" 2>/dev/null; then
+            echo "::error::main tiene una configuración de jscpd que no es .jscpd.json: la CI solo usa esa"; exit 1
+          elif [ -f .jscpd.json ]; then
+            # Solo hasta que llegue a `main`: el PR que la añade es R2.
+            echo "::warning::main no tiene .jscpd.json: se usa el de la rama."
+            cp .jscpd.json "$RUNNER_TEMP/.jscpd.json"
+          else
+            echo "::error::Falta .jscpd.json (en main y en la rama)"; exit 1
+          fi
+          python3 -I -c '
+          import json, os, sys
+          config = json.load(open(sys.argv[1], encoding="utf-8"))
+          if not isinstance(config, dict):
+              sys.exit("::error::.jscpd.json tiene que ser un objeto JSON")
+          fijas = [c for c in config if c not in ("$schema", "ignore", "format", "minTokens", "minLines")]
+          if fijas:
+              sys.exit("::error::.jscpd.json no puede llevar " + ", ".join(sorted(fijas)) + ": solo admite ignore, format, minTokens y minLines; la CI fija lo demás y no usa el modo semantic")
+          if os.path.isfile("package.json") and "jscpd" in json.load(open("package.json", encoding="utf-8")):
+              sys.exit("::error::package.json tiene la clave jscpd: la configuración es .jscpd.json, la de main")
+          ' "$RUNNER_TEMP/.jscpd.json"
+          git grep --text -i -l -z -E -e 'jscpd[:]ignore' HEAD -- > "$RUNNER_TEMP/silenciadores" || [ $? -eq 1 ]
+          git ls-tree -r -z --name-only HEAD > "$RUNNER_TEMP/arbol"
+          python3 -I -c '
+          import os, sys
+          def limpio(texto):
+              texto = texto.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+              return texto.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A").replace(",", "%2C").replace(":", "%3A")
+          def nombres(fichero):
+              return [os.fsdecode(f) for f in open(fichero, "rb").read().split(b"\0") if f]
+          silenciadores = [f.removeprefix("HEAD:") for f in nombres(sys.argv[1])]
+          arbol = nombres(sys.argv[2])
+          ignores = [f for f in arbol if os.path.basename(f) == ".ignore"]
+          codigo = (".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte", ".astro",
+                    ".py", ".pyi", ".pyw", ".rb", ".erb", ".go", ".rs", ".java", ".kt", ".kts", ".scala",
+                    ".groovy", ".gradle", ".clj", ".cljs", ".ex", ".exs", ".erl", ".hs", ".ml", ".fs", ".jl",
+                    ".r", ".pl", ".pm", ".lua", ".dart", ".zig", ".nim", ".c", ".h", ".cc", ".cpp", ".cxx",
+                    ".hh", ".hpp", ".hxx", ".m", ".mm", ".cs", ".vb", ".php", ".swift", ".sh", ".bash",
+                    ".zsh", ".ps1", ".css", ".scss", ".sass", ".less", ".html", ".sql", ".tf", ".hcl")
+          no_utf8 = []
+          for f in arbol:
+              try:
+                  f.encode("utf-8")
+              except UnicodeEncodeError:
+                  no_utf8.append(f)
+                  continue
+              if f.lower().endswith(codigo) and os.path.isfile(f) and not os.path.islink(f):
+                  datos = open(f, "rb").read()
+                  try:
+                      datos.decode("utf-8")
+                  except UnicodeDecodeError:
+                      no_utf8.append(f)
+                      continue
+                  if b"\0" in datos:
+                      no_utf8.append(f)
+          for f in silenciadores:
+              print(f"::error file={limpio(f)}::Comentario de jscpd que excluye una región")
+          for f in ignores:
+              print(f"::error file={limpio(f)}::jscpd no analiza lo que lista un .ignore")
+          if silenciadores:
+              print("::error::Hay comentarios que esconden código a jscpd: lo que no se deba analizar se saca con ignore, en la configuración de main")
+          for f in no_utf8:
+              print(f"::error file={limpio(f)}::El nombre o el contenido no es UTF-8, o lleva NUL: jscpd no lo analiza")
+          if no_utf8:
+              print("::error::Hay código que no es UTF-8 o lleva NUL, o un nombre que no es UTF-8: jscpd lo salta sin avisar; pásalo a UTF-8")
+          if ignores:
+              print("::error::Hay ficheros .ignore: jscpd los respeta aunque no use el .gitignore; lo que no se deba analizar se saca con ignore, en la configuración de main")
+          sys.exit(1 if silenciadores or ignores or no_utf8 else 0)
+          ' "$RUNNER_TEMP/silenciadores" "$RUNNER_TEMP/arbol"
+
+      - name: Instalar jscpd
+        id: instalar
+        run: |
+          [ "$(uname -m)" = x86_64 ] || { echo "::error::El binario fijado es para x86_64, no para $(uname -m)"; exit 1; }
+          curl --proto '=https' -sSfL --retry 3 -o "$RUNNER_TEMP/jscpd.tar.gz" "$JSCPD_URL"
+          echo "$JSCPD_SHA256  $RUNNER_TEMP/jscpd.tar.gz" | sha256sum --check --strict --quiet - || { echo "::error::La suma de jscpd no coincide con la fijada"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/jscpd"
+          tar -xzf "$RUNNER_TEMP/jscpd.tar.gz" -C "$RUNNER_TEMP/jscpd" jscpd
+
+      # Falla con un solo clon que no esté en `main`; los heredados no cuentan. La base, con la
+      # ref completa. --no-gitignore: el .gitignore es de la rama. --max-size: sin ella, jscpd salta
+      # los ficheros de más de 1 MB; --cross-formats js-ts: sin ella, una copia de un .js en un .ts
+      # no cuenta (medido en el PR 3 de VIC-21).
+      - name: jscpd
+        run: |
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
+          set +e
+          "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore \
+            --baseline-from-ref "$BASE" --fail-on-new-clones --max-size 200mb --cross-formats js-ts \
+            --reporters console,json --output "$RUNNER_TEMP/jscpd-informe"
+          estado=$?
+          set -e
+          echo "::$token::"
+          exit "$estado"
+
+      # Complejidad, código muerto y salud: solo como informe, no bloquea.
+      - name: Informe de salud de jscpd
+        if: ${{ !cancelled() && steps.preparar.outcome == 'success' && steps.instalar.outcome == 'success' }}
+        run: |
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
+          set +e
+          "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore --max-size 200mb --cross-formats js-ts --dashboard
+          estado=$?
+          set -e
+          echo "::$token::"
+          [ "$estado" -eq 0 ] || echo "::warning::El informe de salud de jscpd ha salido con error; no bloquea."
