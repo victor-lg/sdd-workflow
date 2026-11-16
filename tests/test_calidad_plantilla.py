@@ -373,8 +373,11 @@ TIPOS_KNIP = {"files", "subpaths", "dependencies", "devDependencies", "optionalP
 
 
 def medida(texto):
-    """Tiempos y hallazgos de knip y jscpd en la CI de este repo (VIC-21, PR 3): salen en el log de `validar`."""
+    """Tiempos y hallazgos de knip y jscpd en la CI de este repo (VIC-21, PR 3): salen en el log de `validar`
+    y, en la CI, como anotación del check, que se lee con la API sin descargar el log."""
     print(f"\nMEDIDA {texto}", file=sys.stderr)
+    if EN_LA_CI:
+        print(f"::notice title=MEDIDA::{texto}", flush=True)
 
 
 class TextoDeKnipYJscpd(unittest.TestCase):
