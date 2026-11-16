@@ -407,6 +407,8 @@ class TextoDeKnipYJscpd(unittest.TestCase):
         self.assertNotIn("npx", codigo)
         # Sin --max-size, jscpd salta sin avisar los ficheros de más de 1 MB (medido en el PR 3).
         self.assertEqual(codigo.count("--max-size 200mb"), 2)
+        # Sin --cross-formats, una copia de un .js en un .ts no cuenta como clon (medido en el PR 3).
+        self.assertEqual(codigo.count("--cross-formats js-ts"), 2)
 
     def test_jscpd_de_la_release_con_la_suma_del_registro(self):
         self.assertEqual(JSCPD_URL, "https://github.com/kucherenko/jscpd/releases/download/v5.4.3/"
@@ -925,6 +927,16 @@ class JscpdEnLaCi(RepoDePrueba):
                 sonda(f"jscpd {nombre}", estado, texto)
                 self.assertEqual(estado, 1, texto)
 
+    def test_una_copia_en_otro_formato_de_js_cuenta(self):
+        for ext in ("ts", "tsx", "jsx", "mts", "cts"):
+            with self.subTest(ext=ext):
+                self.setUp()
+                self.main()
+                self.escribir(f"src/factura.{ext}", self.COPIA)
+                estado, texto, _ = self.jscpd()
+                sonda(f"jscpd .{ext}", estado, texto)
+                self.assertEqual(estado, 1, texto)
+
     def test_un_baseline_de_la_rama_no_cuenta(self):
         """La rama genera su .jscpd-baseline.json con el clon nuevo dentro: la base es la de main."""
         self.main()
@@ -966,33 +978,6 @@ class JscpdEnLaCi(RepoDePrueba):
         estado, texto, _ = ejecutar("Informe de salud de jscpd", self.repo, self.temporal)
         self.assertEqual(estado, 0, texto)
         self.assertNotIn("::warning::El informe de salud", texto)
-
-    def test_explora_cross_formats(self):
-        """Exploración de la G4 (ronda 2): una copia de un .js en un .ts no cuenta como clon (formatos
-        distintos). Anota en la CI si --cross-formats lo cambia y con qué valor. No comprueba nada."""
-        if not EN_LA_CI:
-            self.skipTest("solo informa en la CI")
-        filas = []
-        for ext in ("ts", "tsx", "jsx", "mts"):
-            for valor in (None, "javascript,typescript,jsx,tsx", "javascript:typescript", "all", "true"):
-                repo = pathlib.Path(tempfile.mkdtemp())
-                self.addCleanup(shutil.rmtree, repo)
-                shutil.copytree(FIXTURE_JSCPD, repo, dirs_exist_ok=True)
-                (repo / "src" / f"x.{ext}").write_text(self.COPIA)
-                (repo / "c.json").write_text('{"ignore": []}')
-                extra = [] if valor is None else ["--cross-formats", valor]
-                r = subprocess.run([str(self.binario), "src", "--config", "c.json", "--no-gitignore", "--reporters",
-                                    "json", "--output", "inf", *extra], cwd=repo, capture_output=True, text=True,
-                                   timeout=120)
-                try:
-                    informe = json.loads((repo / "inf" / "jscpd-report.json").read_text())
-                    filas.append(f".{ext} {valor}: rc {r.returncode}, clones {len(informe.get('duplicates', []))}")
-                except (OSError, ValueError):
-                    filas.append(f".{ext} {valor}: rc {r.returncode}, " + (r.stderr or r.stdout)[-160:])
-        r = subprocess.run([str(self.binario), "--help"], capture_output=True, text=True, timeout=60)
-        ayuda = [l.strip() for l in r.stdout.splitlines() if "cross" in l.lower() or "max-size" in l.lower()]
-        texto = "%0A".join(f.replace("%", "%25").replace("\r", "").replace("\n", " ") for f in filas + ayuda)
-        print(f"::warning title=EXPLORA jscpd::{texto}", flush=True)
 
     def test_mide_este_repo(self):
         """El tiempo y los hallazgos de jscpd sobre este repo, con el .jscpd.json de la plantilla y sin

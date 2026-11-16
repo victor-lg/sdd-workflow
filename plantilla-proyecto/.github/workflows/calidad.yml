@@ -303,16 +303,18 @@ jobs:
           tar -xzf "$RUNNER_TEMP/jscpd.tar.gz" -C "$RUNNER_TEMP/jscpd" jscpd
 
       # Falla con un solo clon que no esté en `main`; los heredados no cuentan. La base, con la
-      # ref completa. --no-gitignore: el .gitignore es de la rama.
+      # ref completa. --no-gitignore: el .gitignore es de la rama. --max-size: sin ella, jscpd salta
+      # los ficheros de más de 1 MB; --cross-formats js-ts: sin ella, una copia de un .js en un .ts
+      # no cuenta (medido en el PR 3 de VIC-21).
       - name: jscpd
         run: |
           "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore \
-            --baseline-from-ref "$BASE" --fail-on-new-clones --max-size 200mb \
+            --baseline-from-ref "$BASE" --fail-on-new-clones --max-size 200mb --cross-formats js-ts \
             --reporters console,json --output "$RUNNER_TEMP/jscpd-informe"
 
       # Complejidad, código muerto y salud: solo como informe, no bloquea.
       - name: Informe de salud de jscpd
         if: ${{ !cancelled() && steps.preparar.outcome == 'success' && steps.instalar.outcome == 'success' }}
         run: |
-          "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore --max-size 200mb --dashboard \
+          "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore --max-size 200mb --cross-formats js-ts --dashboard \
             || echo "::warning::El informe de salud de jscpd ha salido con error; no bloquea."
