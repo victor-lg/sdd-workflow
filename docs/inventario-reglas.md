@@ -138,7 +138,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-86 | Tests desde los AC; en un bug, primero un test que lo reproduzca | implement:16 | Criterio | No consta | **Instrucción** (`implement`; bloque 3, M26) |
 | REG-87 | Escalera del cambio más pequeño | implement:20-26 | Criterio | No consta | **Instrucción** (`implement`) |
 | REG-88 | Nunca recortar validación, errores, seguridad ni accesibilidad | implement:28 | Criterio | No consta. El reparto propuesto para VIC-11 dejaba la accesibilidad como capa final y se corrigió antes de implementar (recorrido-2, M2) | **Instrucción** (`implement`) |
-| REG-89 | Elegir el nivel de test; no convertir cada AC en un E2E | implement:33-38 | Criterio | No consta | **Instrucción** (`implement`) |
+| REG-89 | Elegir el nivel de test; no convertir cada AC en un E2E | implement:33-38 | Criterio | No consta | **Instrucción** (`implement`; bloque 3, M19 y M27) |
 | REG-90 | En R2, valorar property-based, fuzz y mutación | implement:39-42 | Criterio | No consta | **Instrucción** (`implement`; bloque 3, M26) |
 | REG-91 | En R2, evidencia de los NFR y plan de vuelta atrás | implement:58 | Criterio | No consta | **Instrucción** (`implement`) |
 | REG-92 | Publicar la línea `Métricas mutación` | implement:59 | Mecánica | No determinable: wf#16 no la tiene y sin la sesión no se sabe si usó la skill. `sdd-metricas` marca "⚠ sin línea" | **Instrucción** (`implement`; el control ya está en `sdd-metricas`) |

@@ -11,7 +11,7 @@ Sigue con VIC-52 usando sdd-implement. Rama `feat/vic-52-grosor` y PR borrador #
 - AC-04 → FR-02: en el formulario de materiales, un grosor negativo muestra "El grosor tiene que ser positivo" y no se guarda.
 ```
 
-La spec marca guardar materiales como recorrido crítico, y el plan del PR cubre AC-04 con un test unitario de la validación y con un E2E de ese recorrido. La app dibuja el disco en 3D con three.js (WebGL). En la CI no hay GPU y el 3D va por software. La app también tiene una vista sin 3D, en `/?sin3d`, con el mismo formulario. El dibujo 3D tiene sus propios E2E en `e2e/dibujo-3d.spec.js`.
+La spec marca guardar materiales como recorrido crítico, y el plan del PR cubre AC-04 con un test unitario de la validación y con un E2E de ese recorrido. La app dibuja el disco en 3D con three.js (WebGL). En la CI no hay GPU y el 3D va por software. La app también ofrece a sus usuarios una vista sin 3D, en `/?sin3d` (para equipos sin GPU), con el mismo formulario y las mismas validaciones. El dibujo 3D tiene sus propios E2E en `e2e/dibujo-3d.spec.js`.
 
 Ya está todo escrito y commiteado. El E2E nuevo, `e2e/materiales.spec.js`:
 
