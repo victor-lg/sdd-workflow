@@ -952,45 +952,53 @@ class JscpdEnLaCi(RepoDePrueba):
         if not EN_LA_CI:
             self.skipTest("solo informa en la CI")
         copia = self.COPIA.encode()
+        plantilla = (PLANTILLA / ".jscpd.json").read_text()
         casos = []
-        for carpeta in ("build", "reports", "dist", "coverage", "out", "target", "vendor", "tmp", "temp", "lib",
-                        "bin", "public", "static", "generated", "gen", "test", "tests", "__tests__", "fixtures",
-                        "examples", "third_party", "bower_components", "jspm_packages", "node_modules", ".next",
-                        "cache", "logs", "release", "obj", "report", "docs"):
-            casos.append((f"src/{carpeta}/f.js", copia, []))
-        for lineas in (1500, 3000, 5000, 9000):
-            casos.append((f"src/l{lineas}.js", copia + b"// x\n" * lineas, []))
-        for kb in (200, 500, 900, 1100, 2000):
-            casos.append((f"src/k{kb}.js", copia + (b"// " + b"x" * 1021 + b"\n") * kb, []))
-        grande = copia + (b"// " + b"x" * 1021 + b"\n") * 1100
-        casos += [("src/g1.js", grande, ["--max-size", "100mb"]),
-                  ("src/g2.js", grande, ["--max-size", "100000000"]),
-                  ("src/g3.js", grande, ["--max-lines", "1000000"]),
-                  ("src/f.mts", copia, []), ("src/f.cts", copia, []), ("src/f.jsx", copia, []),
-                  ("src/f.tsx", copia, []),
-                  ("src/m.mts", copia, ["--formats-exts", "typescript:ts,tsx,mts,cts"]),
-                  ("src/m.cts", copia, ["--formats-exts", "typescript:ts,tsx,mts,cts"]),
-                  ("src/u.js", b"// \xff\xfe\n" + copia, []),
-                  ("src/u2.js", copia + b"// \xff\n", [])]
+        for config in ("plantilla", "vacia"):
+            for base in (True, False):
+                for nombre in ("src/build/f.js", "src/reports/f.js", "src/docs/f.js", "src/dist/f.js",
+                               "build/f.js", "docs/f.js"):
+                    casos.append((nombre, copia, [], config, base, None))
+        for ext in ("ts", "mts", "cts", "tsx", "jsx", "mjs"):
+            for extra in ([], ["--cross-formats"]):
+                casos.append((f"src/x.{ext}", copia, extra, "vacia", False, None))
+        for ext in ("mts", "cts", "ts"):
+            casos.append((f"src/y.{ext}", copia, [], "vacia", False, "ts"))
+        casos.append(("src/g.js", copia + (b"// " + b"x" * 1021 + b"\n") * 1100, ["--max-size", "200mb"],
+                      "plantilla", True, None))
         filas = []
-        for nombre, contenido, extra in casos:
+        for nombre, contenido, extra, config, base, original in casos:
             repo = pathlib.Path(tempfile.mkdtemp())
             self.addCleanup(shutil.rmtree, repo)
             shutil.copytree(FIXTURE_JSCPD, repo, dirs_exist_ok=True)
+            if original:
+                (repo / "src" / "precios.js").rename(repo / "src" / f"precios.{original}")
+            (repo / ".jscpd.json").write_text(plantilla if config == "plantilla" else '{"ignore": []}')
+            git(repo, "init", "-q", "-b", "main")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "base")
+            git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
             (repo / nombre).parent.mkdir(parents=True, exist_ok=True)
             (repo / nombre).write_bytes(contenido)
-            (repo / "c.json").write_text('{"ignore": []}')
-            r = subprocess.run([str(self.binario), "src", "--config", "c.json", "--no-gitignore", "--reporters",
-                                "json", "--output", "inf", *extra], cwd=repo, capture_output=True, text=True,
-                               timeout=300)
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "rama")
+            cfg = repo.parent / (repo.name + ".json")
+            shutil.copy(repo / ".jscpd.json", cfg)
+            self.addCleanup(cfg.unlink)
+            orden = [str(self.binario), ".", "--config", str(cfg), "--no-gitignore", "--reporters", "json",
+                     "--output", str(repo.parent / (repo.name + "-inf")), *extra]
+            if base:
+                orden += ["--baseline-from-ref", "refs/remotes/origin/main", "--fail-on-new-clones"]
+            self.addCleanup(shutil.rmtree, repo.parent / (repo.name + "-inf"), True)
+            r = subprocess.run(orden, cwd=repo, capture_output=True, text=True, timeout=300)
+            etiqueta = f"{nombre} [{config}{', base' if base else ''}{', original .' + original if original else ''}] {' '.join(extra)}"
             try:
-                informe = json.loads((repo / "inf" / "jscpd-report.json").read_text())
+                informe = json.loads((repo.parent / (repo.name + "-inf") / "jscpd-report.json").read_text())
                 total = (informe.get("statistics") or {}).get("total") or {}
-                filas.append(f"{nombre} {' '.join(extra)}: rc {r.returncode}, clones "
-                             f"{len(informe.get('duplicates', []))}, ficheros {total.get('sources')}")
+                filas.append(f"{etiqueta}: rc {r.returncode}, clones {len(informe.get('duplicates', []))}, "
+                             f"ficheros {total.get('sources')}")
             except (OSError, ValueError):
-                filas.append(f"{nombre} {' '.join(extra)}: rc {r.returncode}, sin informe: "
-                             + (r.stderr or r.stdout)[-200:].replace("\n", " "))
+                filas.append(f"{etiqueta}: rc {r.returncode}, sin informe: " + (r.stderr or r.stdout)[-160:])
         texto = "%0A".join(f.replace("%", "%25").replace("\r", "").replace("\n", " ") for f in filas)
         print(f"::warning title=EXPLORA jscpd::{texto}", flush=True)
 
