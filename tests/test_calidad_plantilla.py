@@ -617,6 +617,24 @@ class PrepararJscpd(RepoDePrueba):
                 self.assertIn(f"::error file={nombre}::Comentario de jscpd que excluye una región", texto)
                 self.assertIn("::error::Hay comentarios que esconden código a jscpd", texto)
 
+    def test_un_fichero_ignore_falla(self):
+        for nombre in (".ignore", "src/.ignore"):
+            with self.subTest(nombre=nombre):
+                self.setUp()
+                self.main(self.CONFIG)
+                self.escribir(nombre, "src/a.js\n")
+                estado, texto, _ = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn(f"::error file={nombre}::jscpd no analiza lo que lista un .ignore", texto)
+                self.assertIn("::error::Hay ficheros .ignore", texto)
+
+    def test_otros_ficheros_parecidos_a_ignore_pasan(self):
+        self.main(self.CONFIG)
+        for nombre in ("a.ignore", ".ignorar", ".rgignore", "src/.gitignore"):
+            self.escribir(nombre, "x\n")
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
+
     def test_sin_comentarios_pasa(self):
         self.main(self.CONFIG)
         self.escribir("src/a.js", "// jscpd ignora esto solo si lo dice la configuración\n")
@@ -815,7 +833,6 @@ class JscpdEnLaCi(RepoDePrueba):
         self.escribir(".config/.jscpd.json", {"ignore": ["**/src/**"]})
         self.escribir("src/factura.js", self.COPIA)
         estado, texto, _ = self.jscpd()
-        sonda("jscpd .config", estado, texto)
         self.assertEqual(estado, 1, texto)
 
     def test_un_fichero_grande_no_esconde_un_clon(self):
@@ -824,26 +841,30 @@ class JscpdEnLaCi(RepoDePrueba):
         relleno = "".join(f"// {i:04d} " + "x" * 100 + "\n" for i in range(1200))
         self.escribir("src/factura.js", self.COPIA + relleno)
         estado, texto, _ = self.jscpd()
-        sonda("jscpd grande", estado, texto)
         self.assertEqual(estado, 1, texto)
 
-    def test_un_fichero_de_ignore_no_esconde_ficheros(self):
-        """jscpd recorre el árbol con el crate `ignore`, que por defecto lee .ignore y .rgignore."""
-        for nombre in (".ignore", ".rgignore"):
-            with self.subTest(nombre):
-                self.setUp()
-                self.main()
-                self.escribir(nombre, "src/factura.js\n")
-                self.escribir("src/factura.js", self.COPIA)
-                estado, texto, _ = self.jscpd()
-                sonda(f"jscpd {nombre}", estado, texto)
-                self.assertEqual(estado, 1, texto)
+    def test_un_rgignore_no_esconde_ficheros(self):
+        self.main()
+        self.escribir(".rgignore", "src/factura.js\n")
+        self.escribir("src/factura.js", self.COPIA)
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 1, texto)
+
+    def test_un_ignore_esconde_ficheros_a_jscpd(self):
+        """Por eso falla la preparación con un .ignore (PrepararJscpd): jscpd recorre el árbol con el
+        crate `ignore`, que lo lee aunque se pase --no-gitignore. Si deja de leerlo, sobra ese control."""
+        self.main()
+        self.escribir(".ignore", "src/factura.js\n")
+        self.escribir("src/factura.js", self.COPIA)
+        git(self.repo, "commit", "-q", "-m", "rama")
+        shutil.copy(PLANTILLA / ".jscpd.json", self.temporal / ".jscpd.json")
+        estado, texto, _ = ejecutar(self.PASO, self.repo, self.temporal)
+        self.assertEqual(estado, 0, texto)
 
     def test_una_carpeta_oculta_no_esconde_un_clon(self):
         self.main()
         self.escribir(".util/factura.js", self.COPIA)
         estado, texto, _ = self.jscpd()
-        sonda("jscpd oculta", estado, texto)
         self.assertEqual(estado, 1, texto)
 
     def test_una_tercera_copia_de_un_clon_heredado_falla(self):
@@ -860,7 +881,6 @@ class JscpdEnLaCi(RepoDePrueba):
         self.escribir("src/factura.js", self.COPIA)
         self.jscpd()
         estado, texto, _ = ejecutar("Informe de salud de jscpd", self.repo, self.temporal)
-        sonda("jscpd salud", estado, texto)
         self.assertEqual(estado, 0, texto)
         self.assertNotIn("::warning::El informe de salud", texto)
 

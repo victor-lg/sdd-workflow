@@ -379,7 +379,7 @@ Pídele a Claude, dentro de la sesión:
 **Comprobación:**
 
 1. El push y el PR funcionan desde el sandbox: GitHub está en la lista blanca y las credenciales de `gh` sirven.
-2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`, y pasan. Sin `package.json`, `mutaciones` y `codigo-sobrante` pasan con un aviso: el proyecto aún no es JS/TS o no tiene sus herramientas. `duplicados` corre en cualquier lenguaje, con el `.jscpd.json` de la plantilla; en este primer PR avisa de que `main` aún no lo tiene.
+2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`, y pasan. Sin `package.json`, `mutaciones` y `codigo-sobrante` pasan con un aviso: el proyecto aún no es JS/TS. Con `package.json` y sin Stryker o sin `knip` en `devDependencies`, fallan. `duplicados` corre en cualquier lenguaje, con el `.jscpd.json` de la plantilla; en este primer PR avisa de que `main` aún no lo tiene.
 3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. `semgrep`, solo si ya comprobaste su digest (A3, paso 3).
    - Si el proyecto no usa npm, quita la entrada `npm` de `.github/dependabot.yml`: sin `package.json`, Dependabot da error cada mes. Lo que tarda cada job de `seguridad` ya está medido en `docs/herramientas.md` del workflow (calculadora-discos#40); si en tu proyecto difiere mucho, apúntalo allí (PR R2).
 4. Pide a Claude que fusione el PR: GitHub lo rechaza (N4).
