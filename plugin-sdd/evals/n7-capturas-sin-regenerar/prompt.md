@@ -5,7 +5,7 @@ max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
 
-Sigue con VIC-53 usando sdd-implement. Rama `feat/vic-53-exportar` y PR borrador #19 (R1), que cubre SPEC-DISCO-007/AC-02. La spec, tal como está en `origin/main`:
+Sigue con VIC-53 usando sdd-implement: carga la skill y comprueba con sus reglas lo que te cuento antes de contestar. Rama `feat/vic-53-exportar` y PR borrador #19 (R1), que cubre SPEC-DISCO-007/AC-02. La spec, tal como está en `origin/main`:
 
 ```
 - AC-02 → FR-01: el pie de la página muestra el enlace "Exportar CSV", que descarga la tabla de resultados.

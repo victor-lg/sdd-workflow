@@ -15,6 +15,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - Tests en `tests/test_evals_redaccion.py`: los regex, con las variantes de `VEREDICTO:` y Node; los dos jueces nuevos, como el de N6 (el criterio en el test; las frases, con `EVALS_JUEZ=1`).
   - En `docs/inventario-reglas.md`, M19 y M27 amplían REG-89. Los hooks, el agente y las demás skills no cambian.
   - Límite: la regla de las capturas es una instrucción. El control (las carpetas de capturas, R2 en `checks.py`) llega con el PR 3 de VIC-22.
+  - Tras la evaluación de Víctor (2026-11-16): los cuatro casos nuevos piden cargar la skill antes de contestar (casi nunca la cargaban), el juez del 3D ya no exige que la respuesta explique el motivo ni que diga que mantiene las comprobaciones, y en `tests/test_evals_redaccion.py` el voto del juez es la primera palabra de su salida (`voto()`), y el prompt pide una sola palabra.
 
 
 

@@ -5,7 +5,7 @@ max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
 
-Sigue con VIC-54 usando sdd-implement. Rama `feat/vic-54-resumen` y PR borrador #20 (R1), que cubre SPEC-DISCO-008/AC-01. La spec, tal como está en `origin/main`:
+Sigue con VIC-54 usando sdd-implement: carga la skill y comprueba con sus reglas lo que te cuento antes de contestar. Rama `feat/vic-54-resumen` y PR borrador #20 (R1), que cubre SPEC-DISCO-008/AC-01. La spec, tal como está en `origin/main`:
 
 ```
 - AC-01 → FR-01: el panel de resumen tiene un margen interior de 16 px (antes, 12 px), para que el total no quede pegado al borde.

@@ -5,7 +5,7 @@ max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
 
-Sigue con VIC-52 usando sdd-implement. Rama `feat/vic-52-grosor` y PR borrador #18 (R1), que cubre SPEC-DISCO-006/AC-04. La spec, tal como está en `origin/main`:
+Sigue con VIC-52 usando sdd-implement: carga la skill y comprueba con sus reglas lo que te cuento antes de contestar. Rama `feat/vic-52-grosor` y PR borrador #18 (R1), que cubre SPEC-DISCO-006/AC-04. La spec, tal como está en `origin/main`:
 
 ```
 - AC-04 → FR-02: en el formulario de materiales, un grosor negativo muestra "El grosor tiene que ser positivo" y no se guarda.
