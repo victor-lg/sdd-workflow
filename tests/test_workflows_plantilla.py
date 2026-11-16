@@ -188,6 +188,7 @@ class BaseConEtiqueta(unittest.TestCase):
         (self.temporal / "sdd" / "checks.py").write_text("import sys\nprint(sys.argv[sys.argv.index('--base') + 1])\n")
         codigo, salida = self.ejecutar("sdd.yml", "Specs, mezcla, trazabilidad (G3), riesgo, convenciones y commits")
         self.assertEqual(codigo, 0, salida)
+        self.assertEqual(salida.strip(), "refs/remotes/origin/main")
         self.resuelve_a_main(salida.strip())
 
     def test_checks_py_por_defecto_lee_la_rama_remota(self):
@@ -211,8 +212,10 @@ class BaseConEtiqueta(unittest.TestCase):
         """Un `git replace` del commit de main por el de la etiqueta no cambia lo que se lee."""
         self.git("replace", self.main, "refs/tags/origin/main")
         for workflow, nombre, copia in (("sdd.yml", "Tomar los checks de la rama base", self.temporal / "sdd" / "checks.py"),
-                                        ("seguridad.yml", "Configuración de gitleaks de main", self.repo / ".gitleaks.toml")):
-            with self.subTest(workflow=workflow):
+                                        ("seguridad.yml", "Configuración de gitleaks de main", self.repo / ".gitleaks.toml"),
+                                        ("seguridad.yml", "Configuración de osv-scanner de main", self.temporal / "osv-scanner.toml"),
+                                        ("seguridad.yml", "Configuración de Semgrep de main", self.repo / ".semgrepignore")):
+            with self.subTest(paso=nombre):
                 codigo, salida = self.ejecutar(workflow, nombre)
                 self.assertEqual(codigo, 0, salida)
                 self.assertEqual(copia.read_text(), "# main\n")
