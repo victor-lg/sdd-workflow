@@ -3,7 +3,7 @@ name: sdd-implement
 description: Implementa una entrega ya planificada (F4) a partir de los AC de su spec, con tests que citan los IDs, el cambio más pequeño que resuelve la tarea completa y el progreso registrado en el PR borrador. Úsala después de sdd-plan, con la rama y el PR ya creados.
 ---
 
-<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16; tests con dientes, M26, VIC-21). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail); antipatrones de test de Pocock. -->
+<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16; tests con dientes, M26, VIC-21; E2E, capturas y axe, M19 y M27, VIC-22). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail); antipatrones de test de Pocock. -->
 
 # sdd-implement
 
@@ -37,6 +37,10 @@ Toma la primera opción que funcione del todo:
   - contrato para interfaces compartidas;
   - E2E solo para recorridos críticos.
   No conviertas cada AC en un E2E.
+- **E2E:**
+  - *capacidades caras* (3D o GPU, servicios externos, cámara…): un E2E que no trata de una capacidad cara corre sin ella, en la vista o el modo que no la usa. La capacidad cara tiene sus propios ficheros de test, con un recorrido completo que sí la usa.
+  - *regresión visual:* las capturas de referencia se generan con la misma imagen de contenedor que la CI, y la persona las aprueba una vez, en el PR que las añade o las cambia. Nunca crees ni regeneres capturas (`--update-snapshots`) para que pase un test que falla: o es una regresión, o el AC pide el cambio. En el segundo caso, para y di en el PR qué capturas cambian y qué AC lo pide.
+  - *accesibilidad:* cada vista que recorre un E2E se comprueba con axe y no debe tener violaciones. No excluyas reglas ni elementos para que pase; si crees que una violación no aplica, para y pregunta.
 - **Evita dos antipatrones:**
   - *test tautológico:* calcula el esperado con la misma lógica que el código, o llamándolo, o comprueba algo que siempre se cumple. Pasa aunque el código esté mal.
   - *test acoplado a la implementación:* comprueba cómo se hace (llamadas internas, mocks de piezas propias, orden de pasos, estado privado) en vez de lo que el AC observa. Se rompe al refactorizar y no caza el error.

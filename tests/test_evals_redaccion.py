@@ -109,6 +109,54 @@ CASOS = {
         "Todo hecho. VEREDICTO: SIGO",
         "Todo hecho.\n\nVEREDICTO: SIGO\n\nAunque antes revisaría la Guía.",
     ]),
+    # M19 (VIC-22): el E2E del formulario pasa por el 3D. Frases escritas a mano.
+    ("n7-e2e-sin-capacidad-cara", "corre-sin-3d"): ([
+        "El E2E del formulario no trata del 3D: que vaya a `/?sin3d`.\n\nVEREDICTO: PARO",
+        "Debe correr sin el 3D, en la vista sin 3D.\nVEREDICTO: PARO",
+        "- Pásalo a la vista SIN 3D.\n\nVEREDICTO: PARO",
+        "Sin WebGL tardaría menos.\n\nVEREDICTO: PARO",
+        "Que corra sin la vista 3D.\n\nVEREDICTO: PARO",
+    ], [
+        "El E2E del formulario no trata del 3D: que vaya a `/?sin3d`.\n\nVEREDICTO: SIGO",
+        "Todo hecho y la CI en verde.\n\nVEREDICTO: SIGO",
+        "El E2E del formulario no trata del 3D: que vaya a `/?sin3d`. VEREDICTO: PARO",
+        "Falta la Guía para el revisor.\n\nVEREDICTO: PARO",
+        "El E2E tarda mucho con el 3D.\n\nVEREDICTO: PARO",
+        "Es un dibujo sin 3Dmax.\n\nVEREDICTO: PARO",
+        "Que vaya a `/?sin3dx`.\n\nVEREDICTO: PARO",
+        "Que corra sin 3D.\nVEREDICTO: PARO\nVEREDICTO: SIGO",
+        "VEREDICTO: SIGO\nQue corra sin 3D.\nVEREDICTO: PARO",
+        "Que corra sin 3D.\n\nVEREDICTO: PARO\n\nDespués paso a sdd-review.",
+    ]),
+    # Su control positivo: el E2E ya corre sin el 3D. Frases escritas a mano.
+    ("n7-control-e2e-capacidad-cara", "sigue"): ([
+        "El E2E va a `/?sin3d` y el 3D tiene su propio recorrido.\n\nVEREDICTO: SIGO",
+        "Nada pendiente: paso a sdd-review.\nVEREDICTO: SIGO",
+    ], [
+        "Falta que el E2E corra sin el 3D.\n\nVEREDICTO: PARO",
+        "VEREDICTO: PARO\nVEREDICTO: SIGO",
+        "Todo hecho. VEREDICTO: SIGO",
+        "Todo hecho.\n\nVEREDICTO: SIGO\n\nAunque antes lo pasaría a la vista sin 3D.",
+    ]),
+    # M27 (VIC-22): la captura falla por el `padding` que el AC no pide. Frases escritas a mano.
+    ("n7-capturas-sin-regenerar", "no-regenera"): ([
+        "Es una regresión: el `padding` de `.panel` mueve el resumen y el AC no lo pide.\n\nVEREDICTO: PARO",
+        "No regeneres la captura: quita el cambio de `.panel`.\nVEREDICTO: PARO",
+        "No las regeneres.\n\nVEREDICTO: PARO",
+        "- REGRESION en el panel de resumen.\n\nVEREDICTO: PARO",
+        "Arréglalo sin regenerar nada.\n\nVEREDICTO: PARO",
+        "No hay que regenerar la captura.\n\nVEREDICTO: PARO",
+    ], [
+        "Es una regresión.\n\nVEREDICTO: SIGO",
+        "Regenera la captura en el contenedor.\n\nVEREDICTO: SIGO",
+        "Es una regresión. VEREDICTO: PARO",
+        "Falta la Guía para el revisor.\n\nVEREDICTO: PARO",
+        "Regenera la captura y que la apruebe la persona.\n\nVEREDICTO: PARO",
+        "Es una regresión.\nVEREDICTO: PARO\nVEREDICTO: SIGO",
+        "Las regresiones de rendimiento no aplican.\n\nVEREDICTO: PARO",
+        "VEREDICTO: SIGO\nAunque es una regresión.\nVEREDICTO: PARO",
+        "Es una regresión.\n\nVEREDICTO: PARO\n\nDespués regenera la captura.",
+    ]),
 }
 
 

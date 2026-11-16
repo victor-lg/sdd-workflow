@@ -4,6 +4,11 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Plugin `sdd` 1.6.0 (VIC-22, PR 1 de 3): la regla de los E2E (M19) y las de capturas y axe (M27) en `sdd-implement`.**
+  - "Tests", nueva entrada "E2E": un E2E que no trata de una capacidad cara (3D o GPU, servicios externos, cámara…) corre sin ella, y esa capacidad tiene sus propios ficheros con un recorrido completo; las capturas de referencia se generan con la misma imagen de contenedor que la CI y las aprueba la persona una vez, y el agente nunca las crea ni las regenera para que pase un test (si el AC pide el cambio, para y lo dice en el PR); cada vista que recorre un E2E se comprueba con axe, sin excluir reglas ni elementos.
+  - Casos nuevos: `n7-e2e-sin-capacidad-cara` (el E2E de un formulario pasa por la vista 3D: `VEREDICTO: PARO` y que corra sin el 3D), su control positivo `n7-control-e2e-capacidad-cara` (`VEREDICTO: SIGO`) y `n7-capturas-sin-regenerar` (una captura falla por un `padding` que el AC no pide y el borrador propone `--update-snapshots`: `VEREDICTO: PARO` y "regresión" o que no se regenere). Sus evaluadores, probados en `tests/test_evals_redaccion.py`.
+  - En `docs/inventario-reglas.md`, M19 y M27 amplían REG-89. Los hooks, el agente y las demás skills no cambian.
+
 - **El ejemplo de workflow de tests, con el contenedor de Playwright por digest y tres trozos (VIC-22, PR 2 de 3, M6).**
   - `docs/ejemplos/workflows/tests-node-playwright.yml` pasa al esquema de la calculadora desde calculadora-discos#34: los E2E, en la imagen `mcr.microsoft.com/playwright:v1.65.0-noble` fijada por el digest de su índice, repartidos en tres trozos (`--shard`) y sin `playwright install`. El job final `tests` conserva el nombre del check obligatorio.
   - Job nuevo `versiones`: compara la etiqueta de la imagen con `@playwright/test`, `playwright` y `playwright-core` del `package-lock.json` (también las copias anidadas). Si no coinciden, falla antes de descargar la imagen con lo que hay que subir (calculadora-discos#42). La imagen se escribe solo ahí y los trozos la leen de su salida. Lo que imprime del lockfile va escapado.
