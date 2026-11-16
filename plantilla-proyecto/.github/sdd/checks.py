@@ -32,7 +32,7 @@ Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC:
 
 Uso local:
   PR_BODY="$(cat cuerpo.md)" PR_TITLE="feat(calculo): …" PR_BRANCH="feat/vic-12-calculo" \
-    python3 .github/sdd/checks.py --base origin/main
+    python3 .github/sdd/checks.py --base refs/remotes/origin/main
 Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta.
 
 Como hook `commit-msg` de lefthook, solo el formato del mensaje:
@@ -820,7 +820,8 @@ def ficheros_versionados() -> dict[str, str] | None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--base", default="origin/main", help="referencia de la rama base")
+    # La ref completa: `origin/main` resolvería antes una etiqueta llamada así.
+    ap.add_argument("--base", default="refs/remotes/origin/main", help="referencia de la rama base")
     ap.add_argument("--mensaje", metavar="FICHERO", help="solo comprueba el mensaje de commit de FICHERO (hook commit-msg)")
     args = ap.parse_args()
     if args.mensaje:
