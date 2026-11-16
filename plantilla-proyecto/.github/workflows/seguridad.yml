@@ -31,8 +31,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # La configuración de los escáneres sale de aquí.
-  BASE: origin/${{ github.base_ref }}
+  # La configuración de los escáneres sale de aquí. Con la ref completa: `origin/main` resolvería
+  # antes una etiqueta llamada así (refs/tags/origin/main), que puede empujar la rama.
+  BASE: refs/remotes/origin/${{ github.base_ref }}
   # Git no sustituye objetos con refs/replace al leer la historia.
   GIT_NO_REPLACE_OBJECTS: "1"
 

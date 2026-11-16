@@ -24,6 +24,13 @@ concurrency:
   group: sdd-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+env:
+  # checks.py sale de aquí y compara con esto. Con la ref completa: `origin/main` resolvería
+  # antes una etiqueta llamada así (refs/tags/origin/main), que puede empujar la rama.
+  BASE: refs/remotes/origin/${{ github.base_ref }}
+  # Git no sustituye objetos con refs/replace al leer la historia.
+  GIT_NO_REPLACE_OBJECTS: "1"
+
 jobs:
   checks-sdd:
     runs-on: ubuntu-latest
@@ -37,12 +44,13 @@ jobs:
 
       # Los checks se ejecutan con la versión de `main`, no con la del PR:
       # así un PR no puede debilitar sus propios checks.
+      # Fuera de un pull_request no hay github.base_ref y BASE se queda en "refs/remotes/origin/".
       - name: Tomar los checks de la rama base
-        env:
-          BASE_REF: ${{ github.base_ref }}
         run: |
+          if [ -z "${BASE#refs/remotes/origin/}" ]; then echo "::error::Sin rama base: sdd.yml solo corre en pull_request"; exit 1; fi
+          git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           mkdir -p "$RUNNER_TEMP/sdd"
-          git show "origin/$BASE_REF:.github/sdd/checks.py" > "$RUNNER_TEMP/sdd/checks.py"
+          git show "$BASE:.github/sdd/checks.py" > "$RUNNER_TEMP/sdd/checks.py"
 
       # La descripción, el título, la rama y el autor del PR entran por variables
       # de entorno, nunca interpolados en el script (evita inyección de órdenes).
@@ -50,10 +58,9 @@ jobs:
       # PR sirve para ver sus merges sin el merge efímero que GitHub prueba (HEAD).
       - name: Specs, mezcla, trazabilidad (G3), riesgo, convenciones y commits
         env:
-          BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BRANCH: ${{ github.head_ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: python3 "$RUNNER_TEMP/sdd/checks.py" --base "origin/$BASE_REF"
+        run: python3 "$RUNNER_TEMP/sdd/checks.py" --base "$BASE"
