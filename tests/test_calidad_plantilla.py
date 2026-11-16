@@ -648,16 +648,27 @@ class PrepararJscpd(RepoDePrueba):
         self.assertEqual(estado, 0, texto)
 
     def test_codigo_que_no_es_utf8_falla(self):
-        """jscpd salta sin avisar un fichero que no es UTF-8 (medido en el PR 3)."""
-        for nombre in ("src/a.js", "src/b.PY", "src/c.tsx"):
+        """jscpd salta sin avisar un fichero que no es UTF-8 (medido en el PR 3). El NUL y el nombre que
+        no es UTF-8 no se han medido: la CI falla igual, por si acaso (G4, ronda 3)."""
+        casos = {
+            "src/a.js": b"// \xff\nconst a = 1;\n",
+            "src/b.PY": b"# \xff\na = 1\n",
+            "src/c.tsx": b"// \xff\nconst a = 1;\n",
+            "lib/d.ex": "# año\n".encode("latin-1"),
+            "src/e.js": b"// \0\nconst a = 1;\n",
+            os.fsdecode(b"src/f\xffg.js"): b"const a = 1;\n",
+            os.fsdecode(b"datos/h\xff.txt"): b"x\n",
+        }
+        for nombre, contenido in casos.items():
             with self.subTest(nombre=nombre):
                 self.setUp()
                 self.main(self.CONFIG)
-                self.escribir(nombre, b"// \xff\n" + b"const a = 1;\n")
+                self.escribir(nombre, contenido)
                 estado, texto, _ = self.preparar()
                 self.assertEqual(estado, 1, texto)
-                self.assertIn(f"::error file={nombre}::No es UTF-8: jscpd no lo analiza", texto)
-                self.assertIn("::error::Hay código que no es UTF-8", texto)
+                visible = nombre.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+                self.assertIn(f"::error file={visible}::El nombre o el contenido no es UTF-8, o lleva NUL", texto)
+                self.assertIn("::error::Hay código que no es UTF-8 o lleva NUL", texto)
 
     def test_otros_ficheros_que_no_son_utf8_pasan(self):
         self.main(self.CONFIG)

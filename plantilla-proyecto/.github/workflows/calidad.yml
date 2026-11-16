@@ -263,20 +263,34 @@ jobs:
           python3 -I -c '
           import os, sys
           def limpio(texto):
+              texto = texto.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
               return texto.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A").replace(",", "%2C").replace(":", "%3A")
           def nombres(fichero):
-              return [f for f in open(fichero, "rb").read().decode("utf-8", "replace").split("\0") if f]
+              return [os.fsdecode(f) for f in open(fichero, "rb").read().split(b"\0") if f]
           silenciadores = [f.removeprefix("HEAD:") for f in nombres(sys.argv[1])]
-          ignores = [f for f in nombres(sys.argv[2]) if os.path.basename(f) == ".ignore"]
-          codigo = (".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte", ".py",
-                    ".rb", ".go", ".rs", ".java", ".kt", ".kts", ".scala", ".c", ".h", ".cc", ".cpp", ".hpp",
-                    ".cs", ".php", ".swift", ".sh", ".css", ".scss", ".html", ".sql", ".lua", ".dart")
+          arbol = nombres(sys.argv[2])
+          ignores = [f for f in arbol if os.path.basename(f) == ".ignore"]
+          codigo = (".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte", ".astro",
+                    ".py", ".pyi", ".pyw", ".rb", ".erb", ".go", ".rs", ".java", ".kt", ".kts", ".scala",
+                    ".groovy", ".gradle", ".clj", ".cljs", ".ex", ".exs", ".erl", ".hs", ".ml", ".fs", ".jl",
+                    ".r", ".pl", ".pm", ".lua", ".dart", ".zig", ".nim", ".c", ".h", ".cc", ".cpp", ".cxx",
+                    ".hh", ".hpp", ".hxx", ".m", ".mm", ".cs", ".vb", ".php", ".swift", ".sh", ".bash",
+                    ".zsh", ".ps1", ".css", ".scss", ".sass", ".less", ".html", ".sql", ".tf", ".hcl")
           no_utf8 = []
-          for f in nombres(sys.argv[2]):
+          for f in arbol:
+              try:
+                  f.encode("utf-8")
+              except UnicodeEncodeError:
+                  no_utf8.append(f)
+                  continue
               if f.lower().endswith(codigo) and os.path.isfile(f) and not os.path.islink(f):
+                  datos = open(f, "rb").read()
                   try:
-                      open(f, "rb").read().decode("utf-8")
+                      datos.decode("utf-8")
                   except UnicodeDecodeError:
+                      no_utf8.append(f)
+                      continue
+                  if b"\0" in datos:
                       no_utf8.append(f)
           for f in silenciadores:
               print(f"::error file={limpio(f)}::Comentario de jscpd que excluye una región")
@@ -285,9 +299,9 @@ jobs:
           if silenciadores:
               print("::error::Hay comentarios que esconden código a jscpd: lo que no se deba analizar se saca con ignore, en la configuración de main")
           for f in no_utf8:
-              print(f"::error file={limpio(f)}::No es UTF-8: jscpd no lo analiza")
+              print(f"::error file={limpio(f)}::El nombre o el contenido no es UTF-8, o lleva NUL: jscpd no lo analiza")
           if no_utf8:
-              print("::error::Hay código que no es UTF-8: jscpd lo salta sin avisar; pásalo a UTF-8")
+              print("::error::Hay código que no es UTF-8 o lleva NUL, o un nombre que no es UTF-8: jscpd lo salta sin avisar; pásalo a UTF-8")
           if ignores:
               print("::error::Hay ficheros .ignore: jscpd los respeta aunque no use el .gitignore; lo que no se deba analizar se saca con ignore, en la configuración de main")
           sys.exit(1 if silenciadores or ignores or no_utf8 else 0)
