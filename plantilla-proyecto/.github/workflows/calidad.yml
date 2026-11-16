@@ -230,8 +230,8 @@ jobs:
       # Un comentario que excluye código (cualquier forma de ignore de jscpd) hace fallar el
       # job, como un mutante Ignored. Se busca con git grep en el árbol de la rama, no en el diff,
       # con [:] para que este fichero, que va en el árbol, no se encuentre a sí mismo.
-      # También un .ignore en cualquier carpeta: jscpd lo respeta con --no-gitignore (medido en
-      # el PR 3 de VIC-21).
+      # También un .ignore en cualquier carpeta (jscpd lo respeta con --no-gitignore) y el código
+      # que no es UTF-8 (jscpd lo salta sin avisar): medido en el PR 3 de VIC-21.
       - name: Configuración de jscpd de main
         id: preparar
         run: |
@@ -268,15 +268,29 @@ jobs:
               return [f for f in open(fichero, "rb").read().decode("utf-8", "replace").split("\0") if f]
           silenciadores = [f.removeprefix("HEAD:") for f in nombres(sys.argv[1])]
           ignores = [f for f in nombres(sys.argv[2]) if os.path.basename(f) == ".ignore"]
+          codigo = (".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte", ".py",
+                    ".rb", ".go", ".rs", ".java", ".kt", ".kts", ".scala", ".c", ".h", ".cc", ".cpp", ".hpp",
+                    ".cs", ".php", ".swift", ".sh", ".css", ".scss", ".html", ".sql", ".lua", ".dart")
+          no_utf8 = []
+          for f in nombres(sys.argv[2]):
+              if f.lower().endswith(codigo) and os.path.isfile(f) and not os.path.islink(f):
+                  try:
+                      open(f, "rb").read().decode("utf-8")
+                  except UnicodeDecodeError:
+                      no_utf8.append(f)
           for f in silenciadores:
               print(f"::error file={limpio(f)}::Comentario de jscpd que excluye una región")
           for f in ignores:
               print(f"::error file={limpio(f)}::jscpd no analiza lo que lista un .ignore")
           if silenciadores:
               print("::error::Hay comentarios que esconden código a jscpd: lo que no se deba analizar se saca con ignore, en la configuración de main")
+          for f in no_utf8:
+              print(f"::error file={limpio(f)}::No es UTF-8: jscpd no lo analiza")
+          if no_utf8:
+              print("::error::Hay código que no es UTF-8: jscpd lo salta sin avisar; pásalo a UTF-8")
           if ignores:
               print("::error::Hay ficheros .ignore: jscpd los respeta aunque no use el .gitignore; lo que no se deba analizar se saca con ignore, en la configuración de main")
-          sys.exit(1 if silenciadores or ignores else 0)
+          sys.exit(1 if silenciadores or ignores or no_utf8 else 0)
           ' "$RUNNER_TEMP/silenciadores" "$RUNNER_TEMP/arbol"
 
       - name: Instalar jscpd
@@ -293,11 +307,12 @@ jobs:
       - name: jscpd
         run: |
           "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore \
-            --baseline-from-ref "$BASE" --fail-on-new-clones --reporters console,json --output "$RUNNER_TEMP/jscpd-informe"
+            --baseline-from-ref "$BASE" --fail-on-new-clones --max-size 200mb \
+            --reporters console,json --output "$RUNNER_TEMP/jscpd-informe"
 
       # Complejidad, código muerto y salud: solo como informe, no bloquea.
       - name: Informe de salud de jscpd
         if: ${{ !cancelled() && steps.preparar.outcome == 'success' && steps.instalar.outcome == 'success' }}
         run: |
-          "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore --dashboard \
+          "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore --max-size 200mb --dashboard \
             || echo "::warning::El informe de salud de jscpd ha salido con error; no bloquea."

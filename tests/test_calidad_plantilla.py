@@ -405,6 +405,8 @@ class TextoDeKnipYJscpd(unittest.TestCase):
         self.assertIn('git show "$BASE:.jscpd.json" > "$RUNNER_TEMP/.jscpd.json"', codigo)
         self.assertNotIn("--semantic", codigo)
         self.assertNotIn("npx", codigo)
+        # Sin --max-size, jscpd salta sin avisar los ficheros de más de 1 MB (medido en el PR 3).
+        self.assertEqual(codigo.count("--max-size 200mb"), 2)
 
     def test_jscpd_de_la_release_con_la_suma_del_registro(self):
         self.assertEqual(JSCPD_URL, "https://github.com/kucherenko/jscpd/releases/download/v5.4.3/"
@@ -643,6 +645,26 @@ class PrepararJscpd(RepoDePrueba):
         estado, texto, _ = self.preparar()
         self.assertEqual(estado, 0, texto)
 
+    def test_codigo_que_no_es_utf8_falla(self):
+        """jscpd salta sin avisar un fichero que no es UTF-8 (medido en el PR 3)."""
+        for nombre in ("src/a.js", "src/b.PY", "src/c.tsx"):
+            with self.subTest(nombre=nombre):
+                self.setUp()
+                self.main(self.CONFIG)
+                self.escribir(nombre, b"// \xff\n" + b"const a = 1;\n")
+                estado, texto, _ = self.preparar()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn(f"::error file={nombre}::No es UTF-8: jscpd no lo analiza", texto)
+                self.assertIn("::error::Hay código que no es UTF-8", texto)
+
+    def test_otros_ficheros_que_no_son_utf8_pasan(self):
+        self.main(self.CONFIG)
+        self.escribir("docs/manual.pdf", b"%PDF-1.4\n\xff\xfe\n")
+        self.escribir("datos.csv", "año;número\n".encode("latin-1"))
+        self.escribir("src/a.js", "// ñandú, en UTF-8\n".encode())
+        estado, texto, _ = self.preparar()
+        self.assertEqual(estado, 0, texto)
+
     def test_sin_comentarios_pasa(self):
         self.main(self.CONFIG)
         self.escribir("src/a.js", "// jscpd ignora esto solo si lo dice la configuración\n")
@@ -813,8 +835,8 @@ class JscpdEnLaCi(RepoDePrueba):
         self.assertGreaterEqual(len(self.informe().get("duplicates", [])), 1)
 
     def test_lo_que_ignora_la_configuracion_de_main_no_cuenta(self):
-        self.main()
-        self.escribir("docs/ejemplo.js", self.COPIA)
+        self.main({"ignore": ["**/copias/**"]})
+        self.escribir("src/copias/factura.js", self.COPIA)
         estado, texto, _ = self.jscpd()
         self.assertEqual(estado, 0, texto)
 
@@ -874,9 +896,11 @@ class JscpdEnLaCi(RepoDePrueba):
         estado, texto, _ = self.jscpd()
         self.assertEqual(estado, 1, texto)
 
-    def test_una_carpeta_con_nombre_ignorado_dentro_de_src_cuenta(self):
-        """La plantilla ancla a la raíz dist/, build/, docs/…: dentro de src/ se analizan."""
-        for nombre in ("src/build/factura.js", "src/reports/factura.js", "src/docs/factura.js", "src/factura.min.js"):
+    def test_una_carpeta_con_nombre_de_salida_cuenta(self):
+        """jscpd aplica los `ignore` a cualquier profundidad (medido en el PR 3): la plantilla solo
+        ignora Markdown y lockfiles, para que una carpeta build/ o node_modules/ no esconda código."""
+        for nombre in ("src/build/factura.js", "src/reports/factura.js", "src/docs/factura.js", "src/factura.min.js",
+                       "src/node_modules/factura.js", "src/.github/factura.js", "dist/factura.js", "docs/factura.js"):
             with self.subTest(nombre=nombre):
                 self.setUp()
                 self.main()
@@ -888,12 +912,9 @@ class JscpdEnLaCi(RepoDePrueba):
     def test_ficheros_raros_no_esconden_un_clon(self):
         grande = "".join(f"// {i:05d} " + "x" * 100 + "\n" for i in range(10000))
         casos = {
-            "src/factura.js": b"// \xff\xfe no es UTF-8\n" + self.COPIA.encode(),
             "src/grande.js": (self.COPIA + grande).encode(),
             "src/factura.cjs": self.COPIA.encode(),
             "src/factura.mjs": self.COPIA.encode(),
-            "src/factura.mts": self.COPIA.encode(),
-            "src/factura.cts": self.COPIA.encode(),
         }
         for nombre, contenido in casos.items():
             with self.subTest(nombre=nombre):
@@ -946,60 +967,31 @@ class JscpdEnLaCi(RepoDePrueba):
         self.assertEqual(estado, 0, texto)
         self.assertNotIn("::warning::El informe de salud", texto)
 
-    def test_explora_lo_que_jscpd_no_analiza(self):
-        """Exploración de la G4 (ronda 2): no comprueba nada, anota en la CI qué ficheros salta jscpd
-        y con qué opciones deja de saltarlos. Se quita cuando sus respuestas estén en el workflow."""
+    def test_explora_cross_formats(self):
+        """Exploración de la G4 (ronda 2): una copia de un .js en un .ts no cuenta como clon (formatos
+        distintos). Anota en la CI si --cross-formats lo cambia y con qué valor. No comprueba nada."""
         if not EN_LA_CI:
             self.skipTest("solo informa en la CI")
-        copia = self.COPIA.encode()
-        plantilla = (PLANTILLA / ".jscpd.json").read_text()
-        casos = []
-        for config in ("plantilla", "vacia"):
-            for base in (True, False):
-                for nombre in ("src/build/f.js", "src/reports/f.js", "src/docs/f.js", "src/dist/f.js",
-                               "build/f.js", "docs/f.js"):
-                    casos.append((nombre, copia, [], config, base, None))
-        for ext in ("ts", "mts", "cts", "tsx", "jsx", "mjs"):
-            for extra in ([], ["--cross-formats"]):
-                casos.append((f"src/x.{ext}", copia, extra, "vacia", False, None))
-        for ext in ("mts", "cts", "ts"):
-            casos.append((f"src/y.{ext}", copia, [], "vacia", False, "ts"))
-        casos.append(("src/g.js", copia + (b"// " + b"x" * 1021 + b"\n") * 1100, ["--max-size", "200mb"],
-                      "plantilla", True, None))
         filas = []
-        for nombre, contenido, extra, config, base, original in casos:
-            repo = pathlib.Path(tempfile.mkdtemp())
-            self.addCleanup(shutil.rmtree, repo)
-            shutil.copytree(FIXTURE_JSCPD, repo, dirs_exist_ok=True)
-            if original:
-                (repo / "src" / "precios.js").rename(repo / "src" / f"precios.{original}")
-            (repo / ".jscpd.json").write_text(plantilla if config == "plantilla" else '{"ignore": []}')
-            git(repo, "init", "-q", "-b", "main")
-            git(repo, "add", "-A")
-            git(repo, "commit", "-q", "-m", "base")
-            git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-            (repo / nombre).parent.mkdir(parents=True, exist_ok=True)
-            (repo / nombre).write_bytes(contenido)
-            git(repo, "add", "-A")
-            git(repo, "commit", "-q", "-m", "rama")
-            cfg = repo.parent / (repo.name + ".json")
-            shutil.copy(repo / ".jscpd.json", cfg)
-            self.addCleanup(cfg.unlink)
-            orden = [str(self.binario), ".", "--config", str(cfg), "--no-gitignore", "--reporters", "json",
-                     "--output", str(repo.parent / (repo.name + "-inf")), *extra]
-            if base:
-                orden += ["--baseline-from-ref", "refs/remotes/origin/main", "--fail-on-new-clones"]
-            self.addCleanup(shutil.rmtree, repo.parent / (repo.name + "-inf"), True)
-            r = subprocess.run(orden, cwd=repo, capture_output=True, text=True, timeout=300)
-            etiqueta = f"{nombre} [{config}{', base' if base else ''}{', original .' + original if original else ''}] {' '.join(extra)}"
-            try:
-                informe = json.loads((repo.parent / (repo.name + "-inf") / "jscpd-report.json").read_text())
-                total = (informe.get("statistics") or {}).get("total") or {}
-                filas.append(f"{etiqueta}: rc {r.returncode}, clones {len(informe.get('duplicates', []))}, "
-                             f"ficheros {total.get('sources')}")
-            except (OSError, ValueError):
-                filas.append(f"{etiqueta}: rc {r.returncode}, sin informe: " + (r.stderr or r.stdout)[-160:])
-        texto = "%0A".join(f.replace("%", "%25").replace("\r", "").replace("\n", " ") for f in filas)
+        for ext in ("ts", "tsx", "jsx", "mts"):
+            for valor in (None, "javascript,typescript,jsx,tsx", "javascript:typescript", "all", "true"):
+                repo = pathlib.Path(tempfile.mkdtemp())
+                self.addCleanup(shutil.rmtree, repo)
+                shutil.copytree(FIXTURE_JSCPD, repo, dirs_exist_ok=True)
+                (repo / "src" / f"x.{ext}").write_text(self.COPIA)
+                (repo / "c.json").write_text('{"ignore": []}')
+                extra = [] if valor is None else ["--cross-formats", valor]
+                r = subprocess.run([str(self.binario), "src", "--config", "c.json", "--no-gitignore", "--reporters",
+                                    "json", "--output", "inf", *extra], cwd=repo, capture_output=True, text=True,
+                                   timeout=120)
+                try:
+                    informe = json.loads((repo / "inf" / "jscpd-report.json").read_text())
+                    filas.append(f".{ext} {valor}: rc {r.returncode}, clones {len(informe.get('duplicates', []))}")
+                except (OSError, ValueError):
+                    filas.append(f".{ext} {valor}: rc {r.returncode}, " + (r.stderr or r.stdout)[-160:])
+        r = subprocess.run([str(self.binario), "--help"], capture_output=True, text=True, timeout=60)
+        ayuda = [l.strip() for l in r.stdout.splitlines() if "cross" in l.lower() or "max-size" in l.lower()]
+        texto = "%0A".join(f.replace("%", "%25").replace("\r", "").replace("\n", " ") for f in filas + ayuda)
         print(f"::warning title=EXPLORA jscpd::{texto}", flush=True)
 
     def test_mide_este_repo(self):
