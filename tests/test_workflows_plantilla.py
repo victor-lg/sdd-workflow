@@ -135,6 +135,7 @@ class BaseConEtiqueta(unittest.TestCase):
         self.global_.write_text("")
         self.entorno = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.global_), GIT_CONFIG_NOSYSTEM="1",
                             RUNNER_TEMP=str(self.temporal), GITHUB_WORKSPACE=str(self.repo))
+        self.entorno.pop("GIT_NO_REPLACE_OBJECTS", None)  # lo pone el workflow
         self.git("init", "-q", "-b", "main")
         for contenido in ("main", "etiqueta"):
             for nombre in CONFIGURACION:
@@ -199,6 +200,22 @@ class BaseConEtiqueta(unittest.TestCase):
         self.assertNotEqual(codigo, 0, salida)
         self.assertIn("::error::Sin rama base: sdd.yml solo corre en pull_request", salida)
         self.assertFalse((self.temporal / "sdd" / "checks.py").exists())
+
+    def test_sdd_sin_la_rama_remota_falla_con_un_error_claro(self):
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        codigo, salida = self.ejecutar("sdd.yml", "Tomar los checks de la rama base")
+        self.assertNotEqual(codigo, 0, salida)
+        self.assertIn("::error::Git no encuentra refs/remotes/origin/main", salida)
+
+    def test_los_objetos_de_refs_replace_no_cuentan(self):
+        """Un `git replace` del commit de main por el de la etiqueta no cambia lo que se lee."""
+        self.git("replace", self.main, "refs/tags/origin/main")
+        for workflow, nombre, copia in (("sdd.yml", "Tomar los checks de la rama base", self.temporal / "sdd" / "checks.py"),
+                                        ("seguridad.yml", "Configuración de gitleaks de main", self.repo / ".gitleaks.toml")):
+            with self.subTest(workflow=workflow):
+                codigo, salida = self.ejecutar(workflow, nombre)
+                self.assertEqual(codigo, 0, salida)
+                self.assertEqual(copia.read_text(), "# main\n")
 
 
 class SinOrigenAbreviado(unittest.TestCase):
