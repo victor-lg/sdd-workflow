@@ -946,6 +946,54 @@ class JscpdEnLaCi(RepoDePrueba):
         self.assertEqual(estado, 0, texto)
         self.assertNotIn("::warning::El informe de salud", texto)
 
+    def test_explora_lo_que_jscpd_no_analiza(self):
+        """Exploración de la G4 (ronda 2): no comprueba nada, anota en la CI qué ficheros salta jscpd
+        y con qué opciones deja de saltarlos. Se quita cuando sus respuestas estén en el workflow."""
+        if not EN_LA_CI:
+            self.skipTest("solo informa en la CI")
+        copia = self.COPIA.encode()
+        casos = []
+        for carpeta in ("build", "reports", "dist", "coverage", "out", "target", "vendor", "tmp", "temp", "lib",
+                        "bin", "public", "static", "generated", "gen", "test", "tests", "__tests__", "fixtures",
+                        "examples", "third_party", "bower_components", "jspm_packages", "node_modules", ".next",
+                        "cache", "logs", "release", "obj", "report", "docs"):
+            casos.append((f"src/{carpeta}/f.js", copia, []))
+        for lineas in (1500, 3000, 5000, 9000):
+            casos.append((f"src/l{lineas}.js", copia + b"// x\n" * lineas, []))
+        for kb in (200, 500, 900, 1100, 2000):
+            casos.append((f"src/k{kb}.js", copia + (b"// " + b"x" * 1021 + b"\n") * kb, []))
+        grande = copia + (b"// " + b"x" * 1021 + b"\n") * 1100
+        casos += [("src/g1.js", grande, ["--max-size", "100mb"]),
+                  ("src/g2.js", grande, ["--max-size", "100000000"]),
+                  ("src/g3.js", grande, ["--max-lines", "1000000"]),
+                  ("src/f.mts", copia, []), ("src/f.cts", copia, []), ("src/f.jsx", copia, []),
+                  ("src/f.tsx", copia, []),
+                  ("src/m.mts", copia, ["--formats-exts", "typescript:ts,tsx,mts,cts"]),
+                  ("src/m.cts", copia, ["--formats-exts", "typescript:ts,tsx,mts,cts"]),
+                  ("src/u.js", b"// \xff\xfe\n" + copia, []),
+                  ("src/u2.js", copia + b"// \xff\n", [])]
+        filas = []
+        for nombre, contenido, extra in casos:
+            repo = pathlib.Path(tempfile.mkdtemp())
+            self.addCleanup(shutil.rmtree, repo)
+            shutil.copytree(FIXTURE_JSCPD, repo, dirs_exist_ok=True)
+            (repo / nombre).parent.mkdir(parents=True, exist_ok=True)
+            (repo / nombre).write_bytes(contenido)
+            (repo / "c.json").write_text('{"ignore": []}')
+            r = subprocess.run([str(self.binario), "src", "--config", "c.json", "--no-gitignore", "--reporters",
+                                "json", "--output", "inf", *extra], cwd=repo, capture_output=True, text=True,
+                               timeout=300)
+            try:
+                informe = json.loads((repo / "inf" / "jscpd-report.json").read_text())
+                total = (informe.get("statistics") or {}).get("total") or {}
+                filas.append(f"{nombre} {' '.join(extra)}: rc {r.returncode}, clones "
+                             f"{len(informe.get('duplicates', []))}, ficheros {total.get('sources')}")
+            except (OSError, ValueError):
+                filas.append(f"{nombre} {' '.join(extra)}: rc {r.returncode}, sin informe: "
+                             + (r.stderr or r.stdout)[-200:].replace("\n", " "))
+        texto = "%0A".join(f.replace("%", "%25").replace("\r", "").replace("\n", " ") for f in filas)
+        print(f"::warning title=EXPLORA jscpd::{texto}", flush=True)
+
     def test_mide_este_repo(self):
         """El tiempo y los hallazgos de jscpd sobre este repo, con el .jscpd.json de la plantilla y sin
         clones nuevos (la base es el propio HEAD). No es un proyecto de producto: sirve de tamaño real."""
