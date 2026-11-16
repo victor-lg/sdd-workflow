@@ -1,5 +1,5 @@
 ---
-description: "N7 (sdd-implement, M27): una captura de referencia falla por un cambio que no pide el AC y el borrador propone regenerarla. El agente para: es una regresión, no se regenera."
+description: "N7 (sdd-implement, M27): una captura de referencia falla por un cambio que no pide el AC y el borrador propone regenerarla. El agente para: es una regresión y se arregla el código, sin regenerar ni sortear la captura. Su control positivo es n7-control-capturas-del-ac."
 tags: [N7, M27, sdd-implement]
 max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]
