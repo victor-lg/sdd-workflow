@@ -283,7 +283,7 @@ Decidida con el PR que la instala (PR 2 de VIC-21; Víctor, 2026-11-15, comentar
 
 ## Código que sobra y duplicación en la plantilla (bloque 3, VIC-21)
 
-Decididas con el PR que las instala (PR 3 de VIC-21; plan aprobado por Víctor el 2026-11-15): M23, parte fija. **Pendiente de la aprobación de ese PR.** Las dos solo informan o bloquean; ninguna cambia el código.
+Decididas con el PR que las instala (PR 3 de VIC-21; plan aprobado por Víctor el 2026-11-15): M23, parte fija. **Pendiente de la aprobación de ese PR.** Las dos solo informan o bloquean; ninguna cambia el código. La salida de knip, de jscpd y de Stryker lleva nombres de fichero de la rama, que podrían inyectar anotaciones en el log: cada paso la encierra entre `::stop-commands::` y un token al azar, y sus propios avisos van después (Víctor, 2026-11-16, tras la G4).
 
 ### knip (JS/TS)
 

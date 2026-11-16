@@ -389,6 +389,57 @@ def sonda(nombre, estado, texto, esperado=1):
         print(f"::notice title=SONDA {nombre}::salida {estado}%0A{resumen}", flush=True)
 
 
+class SinOrdenesDeLaHerramienta(unittest.TestCase):
+    """Víctor, 2026-11-16 (G4 del PR 3): la salida de Stryker, knip y jscpd lleva nombres de fichero
+    de la rama, que podrían inyectar anotaciones; cada paso la encierra en ::stop-commands::."""
+    PASOS = ("Stryker", "knip", "jscpd", "Informe de salud de jscpd")
+
+    def test_cada_herramienta_entre_stop_commands_y_su_token(self):
+        for paso in self.PASOS:
+            with self.subTest(paso=paso):
+                lineas = script(paso).splitlines()
+                self.assertIn("token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \\n')", lineas)
+                parar = lineas.index('echo "::stop-commands::$token"')
+                seguir = lineas.index('echo "::$token::"')
+                herramienta = next(i for i, l in enumerate(lineas)
+                                   if re.match(r'(node_modules/\.bin/(stryker|knip) |"\$RUNNER_TEMP/jscpd/jscpd" )', l))
+                self.assertLess(parar, herramienta)
+                self.assertLess(herramienta, seguir)
+                self.assertFalse([l for l in lineas[parar + 1:seguir] if "::" in l and "$token" not in l])
+
+    def falsa(self, temporal, estado):
+        (temporal / "jscpd").mkdir()
+        falso = temporal / "jscpd" / "jscpd"
+        falso.write_text(f"#!/bin/sh\nprintf 'src/a.js\\n::error::inyectada\\n::stop-commands::otro\\n'\nexit {estado}\n")
+        falso.chmod(0o755)
+
+    def ejecutar_falsa(self, paso, estado):
+        temporal = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temporal)
+        self.falsa(temporal, estado)
+        _, texto, _ = r = ejecutar(paso, temporal, temporal)
+        lineas = texto.splitlines()
+        parar = [l for l in lineas if l.startswith("::stop-commands::")]
+        self.assertEqual(len(parar), 2, texto)  # el del paso y el que intenta la herramienta
+        token = parar[0].removeprefix("::stop-commands::")
+        self.assertRegex(token, r"^[0-9a-f]{32}$")
+        self.assertLess(lineas.index(parar[0]), lineas.index("::error::inyectada"))
+        self.assertLess(lineas.index("::error::inyectada"), lineas.index(f"::{token}::"))
+        return r, lineas, token
+
+    def test_jscpd_sale_con_lo_que_sale_la_herramienta(self):
+        for estado in (0, 1, 2):
+            with self.subTest(estado=estado):
+                (salida, _, _), _, _ = self.ejecutar_falsa("jscpd", estado)
+                self.assertEqual(salida, estado)
+
+    def test_el_aviso_del_informe_de_salud_va_despues_del_token(self):
+        (salida, texto, _), lineas, token = self.ejecutar_falsa("Informe de salud de jscpd", 2)
+        self.assertEqual(salida, 0, texto)
+        aviso = "::warning::El informe de salud de jscpd ha salido con error; no bloquea."
+        self.assertLess(lineas.index(f"::{token}::"), lineas.index(aviso))
+
+
 class TextoDeKnipYJscpd(unittest.TestCase):
     def codigo(self):
         return re.sub(r"^\s*#.*\n", "", CALIDAD, flags=re.M)

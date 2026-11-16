@@ -115,8 +115,11 @@ jobs:
           print((json.load(open(sys.argv[1], encoding="utf-8")).get("jsonReporter") or {}).get("fileName") or "reports/mutation/mutation.json")
           ' "$RUNNER_TEMP/stryker.config.json")
           rm -f "$informe"
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
           node_modules/.bin/stryker run "$RUNNER_TEMP/stryker.config.json" --force --reporters clear-text,json 2>&1 | tee "$RUNNER_TEMP/stryker.log"
           estado=${PIPESTATUS[0]}
+          echo "::$token::"
           if grep -q "Final mutation score of NaN" "$RUNNER_TEMP/stryker.log"; then
             echo "::error::Stryker no ha probado ningún mutante: revisa mutate en stryker.config.json"; exit 1
           fi
@@ -199,12 +202,21 @@ jobs:
 
       # Solo informa: nunca --fix. Sale con 1 si hay hallazgos de una regla en "error" y con 2
       # si no puede cargar la configuración. --no-gitignore: el .gitignore es de la rama.
+      # Como en los pasos de Stryker y jscpd, ::stop-commands:: con un token al azar: la salida
+      # de la herramienta lleva nombres de fichero de la rama, que podrían inyectar anotaciones.
       - name: knip
         if: steps.preparar.outputs.knip == 'si'
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           [ -x node_modules/.bin/knip ] || { echo "::error::npm ci no instaló knip"; exit 1; }
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
+          set +e
           node_modules/.bin/knip --config "$RUNNER_TEMP/knip.json" --no-gitignore
+          estado=$?
+          set -e
+          echo "::$token::"
+          exit "$estado"
 
   duplicados:
     runs-on: ubuntu-latest
@@ -322,13 +334,26 @@ jobs:
       # no cuenta (medido en el PR 3 de VIC-21).
       - name: jscpd
         run: |
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
+          set +e
           "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore \
             --baseline-from-ref "$BASE" --fail-on-new-clones --max-size 200mb --cross-formats js-ts \
             --reporters console,json --output "$RUNNER_TEMP/jscpd-informe"
+          estado=$?
+          set -e
+          echo "::$token::"
+          exit "$estado"
 
       # Complejidad, código muerto y salud: solo como informe, no bloquea.
       - name: Informe de salud de jscpd
         if: ${{ !cancelled() && steps.preparar.outcome == 'success' && steps.instalar.outcome == 'success' }}
         run: |
-          "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore --max-size 200mb --cross-formats js-ts --dashboard \
-            || echo "::warning::El informe de salud de jscpd ha salido con error; no bloquea."
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
+          set +e
+          "$RUNNER_TEMP/jscpd/jscpd" . --config "$RUNNER_TEMP/.jscpd.json" --no-gitignore --max-size 200mb --cross-formats js-ts --dashboard
+          estado=$?
+          set -e
+          echo "::$token::"
+          [ "$estado" -eq 0 ] || echo "::warning::El informe de salud de jscpd ha salido con error; no bloquea."
