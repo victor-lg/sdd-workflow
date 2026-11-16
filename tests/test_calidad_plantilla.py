@@ -680,6 +680,15 @@ class KnipEnLaCi(unittest.TestCase):
         self.assertEqual(estado, 1, texto)
         self.assertIn("src/sobra.js", texto)
 
+    def test_una_carpeta_oculta_no_esconde_un_fichero(self):
+        """Con el `project` por defecto de knip, como en la plantilla."""
+        self.sobra()
+        (self.proyecto / ".util").mkdir()
+        (self.proyecto / ".util" / "oculto.js").write_text("export const oculto = 0;\n")
+        estado, texto, _ = self.knip({"files": "error"}, config={"entry": ["src/index.js"]})
+        self.assertEqual(estado, 1, texto)
+        self.assertIn(".util/oculto.js", texto)
+
     def test_una_configuracion_que_no_carga_falla(self):
         estado, texto, _ = self.knip({"exports": "error"}, config={"entry": 5})
         self.assertNotEqual(estado, 0, texto)
@@ -774,12 +783,54 @@ class JscpdEnLaCi(RepoDePrueba):
         estado, texto, _ = self.jscpd()
         self.assertEqual(estado, 1, texto)
 
+    def test_otra_configuracion_de_la_rama_no_cuenta(self):
+        self.main()
+        self.escribir(".config/jscpd.json", {"ignore": ["**/src/**"]})
+        self.escribir(".config/.jscpd.json", {"ignore": ["**/src/**"]})
+        self.escribir("src/factura.js", self.COPIA)
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 1, texto)
+
+    def test_un_fichero_grande_no_esconde_un_clon(self):
+        """jscpd 3 y 4 se saltaban los ficheros de más de 1000 líneas o 100 kB."""
+        self.main()
+        relleno = "".join(f"// {i:04d} " + "x" * 100 + "\n" for i in range(1200))
+        self.escribir("src/factura.js", self.COPIA + relleno)
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 1, texto)
+
+    def test_un_fichero_de_ignore_no_esconde_ficheros(self):
+        """jscpd recorre el árbol con el crate `ignore`, que por defecto lee .ignore y .rgignore."""
+        for nombre in (".ignore", ".rgignore"):
+            with self.subTest(nombre):
+                self.setUp()
+                self.main()
+                self.escribir(nombre, "src/factura.js\n")
+                self.escribir("src/factura.js", self.COPIA)
+                estado, texto, _ = self.jscpd()
+                self.assertEqual(estado, 1, texto)
+
+    def test_una_carpeta_oculta_no_esconde_un_clon(self):
+        self.main()
+        self.escribir(".util/factura.js", self.COPIA)
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 1, texto)
+
+    def test_una_tercera_copia_de_un_clon_heredado_falla(self):
+        self.escribir("src/factura.js", self.COPIA)
+        self.main()
+        self.escribir("src/albaran.js", self.COPIA.replace("totalFactura", "totalAlbaran"))
+        estado, texto, _ = self.jscpd()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("albaran.js", texto)
+
     def test_el_informe_de_salud_no_bloquea(self):
         self.main()
         self.escribir("src/factura.js", self.COPIA)
         self.jscpd()
         estado, texto, _ = ejecutar("Informe de salud de jscpd", self.repo, self.temporal)
         self.assertEqual(estado, 0, texto)
+        self.assertNotIn("::warning::El informe de salud", texto)
 
     def test_mide_este_repo(self):
         """El tiempo y los hallazgos de jscpd sobre este repo, con el .jscpd.json de la plantilla y sin
