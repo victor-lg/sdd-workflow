@@ -35,7 +35,7 @@ podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" \
   bash -c 'npm ci --ignore-scripts && for i in 1 2 3 4 5; do npx --no-install playwright test || exit 1; done'
 
 # 3. El rojo: con `padding: 12px` en lugar de 16px en `.panel-resumen` (app/index.html), tiene que
-#    fallar la captura panel-resumen (visto en Chromium el 2026-11-17; WebKit, sin confirmar).
+#    fallar la captura panel-resumen (visto en Chromium y en WebKit el 2026-11-17).
 #    Deshaz el cambio después.
 podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" \
   bash -c 'npm ci --ignore-scripts && npx --no-install playwright test'
