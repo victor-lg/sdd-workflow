@@ -48,7 +48,7 @@ jobs:
       - name: ¿Coinciden Playwright y su imagen?
         id: comprobar
         env:
-          IMAGEN: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:PENDIENTE
+          IMAGEN: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
         run: |
           if [ ! -f package.json ]; then
             echo "si=false" >> "$GITHUB_OUTPUT"
