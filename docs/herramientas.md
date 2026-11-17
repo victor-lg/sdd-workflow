@@ -412,13 +412,13 @@ El ejemplo `docs/ejemplos/e2e/` (M27) comprueba con axe cada ruta al llegar y ca
 - **Red:** solo `npm ci`, desde el registro de npm.
 - **Alternativa:** Lighthouse o `pa11y`, que lanzan su propio navegador y no se integran en los E2E de Playwright.
 - **Riesgo fuera del sandbox:** ninguno; corre en la CI o en el contenedor.
-- **Actualización:** Dependabot la sube en `package.json`. El `overrides` de `axe-core` se sube a mano, en el mismo PR.
+- **Actualización:** Dependabot la sube en `package.json`. El `overrides` de `axe-core` se sube a mano, en el mismo PR. El de `playwright-core` va atado a `@playwright/test` y a la imagen: se sube a la vez que ellos, en el PR propio `ci:` que sustituye al de Dependabot (guía de instalación, G1). Si no, el lockfile queda desalineado y `versiones` falla.
 - **Decisión:** adoptar en el ejemplo, con las reglas de `sdd-implement` (plugin 1.6.0): `new AxeBuilder({ page }).analyze()` tal cual, sin excluir reglas ni elementos salvo excepción escrita en la spec o en un ADR.
 
 ### Capturas de referencia
 
 - **Qué son:** las imágenes que compara `toHaveScreenshot` (`*-snapshots/`). Se generan con la imagen de Playwright del ejemplo de workflow, nunca en el PC, y la persona las aprueba en el PR que las añade o las cambia. Son R2 en `checks.py`, igual que `playwright.config.*`, que puede ponerles tolerancias o escribir las que faltan.
-- **Qué no cubre el control:** `checks.py` solo ve rutas. Las tolerancias o máscaras escritas en un fichero de test (`toHaveScreenshot({ maxDiffPixels })`, `mask`, `expect.configure`, `test.use`), un script de `package.json` que lance `--update-snapshots` (ya R2, por ser manifiesto) o una configuración con otro nombre pasada con `-c` dependen de la regla de `sdd-implement` y de la revisión. Es un límite aceptado: es una regla, no un control. Si un proyecto cambia la carpeta de las capturas con `snapshotPathTemplate`, añade la nueva a las rutas sensibles de su README.
+- **Qué no cubre el control:** `checks.py` solo ve rutas. Las tolerancias o máscaras escritas en un fichero de test (`toHaveScreenshot({ maxDiffPixels })`, `mask`, `expect.configure`, `test.use`), un script de `package.json` que lance `--update-snapshots` (ya R2, por ser manifiesto) una configuración con otro nombre pasada con `-c`, o un fichero que importe `playwright.config.*` y que fije tolerancias o `updateSnapshots` dependen de la regla de `sdd-implement` y de la revisión. Es un límite aceptado: es una regla, no un control. Si un proyecto cambia la carpeta de las capturas con `snapshotPathTemplate`, añade la nueva a las rutas sensibles de su README.
 - **Falsos positivos, medidos (Víctor, 2026-11-17):** las cuatro capturas del ejemplo, generadas en el contenedor de Playwright 1.65.0 (digest `9beb5460…73dbe`, desde `c2776e8`). Después, cinco ejecuciones seguidas sin `--update-snapshots`, con 4 passed cada vez: ningún falso positivo en 20 comparaciones. El rojo, con `padding: 12px` en `.panel-resumen`, hace fallar `panel-resumen`. Se vio en Chromium; WebKit está sin confirmar, porque la salida venía recortada.
 
 ## Evaluadas y no aprobadas

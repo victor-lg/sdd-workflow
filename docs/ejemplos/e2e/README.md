@@ -15,7 +15,9 @@ Ficheros:
 
 En un proyecto, `playwright.config.*`, `*-snapshots/` y `__screenshots__/` son R2 (`checks.py` de la plantilla). Si el proyecto cambia la carpeta de las capturas con `snapshotPathTemplate`, añade la nueva a las rutas sensibles de su README. Las tolerancias o máscaras escritas en un fichero de test no las ve `checks.py`: ahí manda la regla de `sdd-implement` y la revisión.
 
-**Con el workflow de tests** (`docs/ejemplos/workflows/tests-node-playwright.yml`): `.nvmrc` fija Node 24, que pide `setup-node`. El workflow corre además `node --test "tests/unit/**/*.test.js"` en el primer trozo: si el proyecto no tiene esos tests, adapta ese paso al copiar.
+**Con el workflow de tests** (`docs/ejemplos/workflows/tests-node-playwright.yml`): `.nvmrc` fija Node 24, que pide `setup-node`. El workflow corre además `node --test "tests/unit/**/*.test.js"` en el primer trozo: si el proyecto no tiene esos tests, adapta ese paso al copiar. Ajusta también `testDir` en `playwright.config.mjs`: aquí es la carpeta del ejemplo.
+
+**Al subir Playwright:** el `overrides` de `playwright-core` va con `@playwright/test` y con la imagen del workflow, en el mismo PR (guía de instalación, G1).
 
 ## Generar y comprobar las capturas
 
@@ -32,10 +34,11 @@ podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" \
 podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" \
   bash -c 'npm ci --ignore-scripts && for i in 1 2 3 4 5; do npx --no-install playwright test || exit 1; done'
 
-# 3. El rojo: con `padding: 12px` en lugar de 16px en `.panel-resumen` (app/index.html), falla
-#    la captura panel-resumen en los dos navegadores. Deshaz el cambio después.
+# 3. El rojo: con `padding: 12px` en lugar de 16px en `.panel-resumen` (app/index.html), tiene que
+#    fallar la captura panel-resumen (visto en Chromium el 2026-11-17; WebKit, sin confirmar).
+#    Deshaz el cambio después.
 podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" \
   bash -c 'npm ci --ignore-scripts && npx --no-install playwright test'
 ```
 
-Con Docker, las mismas órdenes con `docker run`, sin la `:Z` del volumen.
+Con Docker, las mismas órdenes con `docker run`, sin la `:Z` del volumen y con `--user "$(id -u):$(id -g)"`, para que `node_modules/`, `test-results/` y las capturas no queden con dueño root.

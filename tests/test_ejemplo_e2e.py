@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import re
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -62,9 +63,19 @@ class Capturas(unittest.TestCase):
         esperadas = {f"{c}-{n}-linux.png" for c in CAPTURAS for n in ("chromium", "webkit")}
         presentes = {f.name for f in carpeta.glob("*.png")} if carpeta.is_dir() else set()
         self.assertEqual(presentes, esperadas)
+        contenidos = {}
         for nombre in esperadas:
             with self.subTest(captura=nombre):
-                self.assertEqual((carpeta / nombre).read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+                datos = (carpeta / nombre).read_bytes()
+                self.assertEqual(datos[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertEqual(datos[12:16], b"IHDR")
+                ancho, alto = struct.unpack(">II", datos[16:24])
+                self.assertGreater(ancho * alto, 0)
+                self.assertTrue(datos.endswith(b"IEND\xaeB`\x82"), "PNG truncado")
+                contenidos[nombre] = datos
+        # Chromium y WebKit no dan los mismos píxeles: dos ficheros iguales serían una copia.
+        for captura in CAPTURAS:
+            self.assertNotEqual(contenidos[f"{captura}-chromium-linux.png"], contenidos[f"{captura}-webkit-linux.png"])
 
 
 class Dependencias(unittest.TestCase):
