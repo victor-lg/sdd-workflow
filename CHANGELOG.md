@@ -16,6 +16,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - En `docs/inventario-reglas.md`, M19 y M27 amplían REG-89. Los hooks, el agente y las demás skills no cambian.
   - Límite: la regla de las capturas es una instrucción. El control (las carpetas de capturas, R2 en `checks.py`) llega con el PR 3 de VIC-22.
   - Tras la evaluación de Víctor (2026-11-16): los cuatro casos nuevos piden cargar la skill antes de contestar (casi nunca la cargaban), el juez del 3D ya no exige que la respuesta explique el motivo ni que diga que mantiene las comprobaciones, y en `tests/test_evals_redaccion.py` el voto del juez es la primera palabra de su salida (`voto()`), y el prompt pide una sola palabra.
+  - Tras la segunda evaluación (2026-11-17): los criterios de `no-regenera.md` y `corre-sin-3d.md` pasan a reglas de decisión explícitas (qué es PASA, qué es FALLA y qué no cuenta en contra), con ejemplos de cada uno; el control `n7-control-e2e-capacidad-cara` exige la línea `VEREDICTO:` la última, sin nada detrás; y `lo-senala.md` (N6) vuelve a la versión de `main`.
 
 
 
