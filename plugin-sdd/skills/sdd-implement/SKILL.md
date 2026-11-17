@@ -3,7 +3,7 @@ name: sdd-implement
 description: Implementa una entrega ya planificada (F4) a partir de los AC de su spec, con tests que citan los IDs, el cambio más pequeño que resuelve la tarea completa y el progreso registrado en el PR borrador. Úsala después de sdd-plan, con la rama y el PR ya creados.
 ---
 
-<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16; tests con dientes, M26, VIC-21). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail); antipatrones de test de Pocock. -->
+<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16; tests con dientes, M26, VIC-21; E2E, capturas y axe, M19 y M27, VIC-22). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail); antipatrones de test de Pocock. -->
 
 # sdd-implement
 
@@ -37,6 +37,10 @@ Toma la primera opción que funcione del todo:
   - contrato para interfaces compartidas;
   - E2E solo para recorridos críticos.
   No conviertas cada AC en un E2E.
+- **E2E:**
+  - *capacidades caras* (3D o GPU, servicios externos, cámara…): un E2E que no trata de una capacidad cara corre sin ella. Para el 3D, la GPU o la cámara, en la vista sin ella que la app ya ofrece a sus usuarios, con las mismas validaciones; un servicio externo se sustituye en la frontera del test (la red), nunca con un interruptor en la app. La capacidad cara tiene sus propios ficheros de test, con un recorrido completo que sí la usa. Si falta esa vista o ese recorrido, para y propónlo (cambio de spec o ADR). Nunca añadas ni uses un modo solo para tests que se pueda activar desde fuera en producción, ni uno que se salte la autenticación, los permisos o las validaciones; si el que ya existe hace algo de eso, para e infórmalo.
+  - *regresión visual:* las capturas de referencia se generan con la misma imagen de contenedor que la CI, y la persona las aprueba una vez, en el PR que las añade o las cambia. Solo las generas en dos casos: un test visual nuevo, o un cambio de aspecto que pide un AC, y en el segundo solo si la imagen de diferencias muestra únicamente lo que pide el AC (cualquier otra diferencia es una regresión: arréglala antes). En los dos, con esa imagen (si no puedes ejecutarla, pídeselo a la persona) y citándolas en la Guía para el revisor, con el AC que las pide y la imagen de diferencias. Una captura generada sale del código, así que, si el AC fija un valor medible (un margen, un color), compruébalo además con una aserción sobre ese valor. El rojo de un test visual nuevo se enseña con la referencia ya generada, rompiendo a propósito el aspecto que prueba. Si falla una captura que ya existía y ningún AC pide el cambio, es una regresión: arregla el código, y nunca regeneres esa captura (`--update-snapshots`, `-u`, borrarla; renombrarla o reencuadrarla también cuenta) ni la sortees con tolerancias (`maxDiffPixels`, `maxDiffPixelRatio`, `threshold`), máscaras (`mask`, `stylePath`), saltando, marcando o cambiando el test (`skip`, `fail`, `fixme`, `--ignore-snapshots`) ni de ninguna otra forma que la haga pasar sin arreglar el código. Si el fallo no viene de tu cambio (otra versión de Playwright, del navegador o de las fuentes, o una captura intermitente), para e infórmalo.
+  - *accesibilidad:* en los E2E que escribes o cambias, axe comprueba cada ruta al llegar y cada estado nuevo que muestre (un error, un diálogo abierto). Sin violaciones, con `new AxeBuilder({ page }).analyze()` tal cual: sin `disableRules`, `exclude`, `include`, `withTags`, `withRules`, `options`, `configure` ni filtros sobre `violations`, sin tocar la página antes del análisis para esconder algo, ni de ninguna otra forma que lo haga pasar sin arreglar la página. Si una violación ya estaba antes de tu cambio o crees que no aplica, para y pregunta. Una excepción solo vale si la persona la deja escrita en la spec o en un ADR: entonces, solo `disableRules` con esa regla o `exclude` con ese elemento, en esa ruta, con un comentario que cite la spec o el ADR, y citada en la Guía para el revisor. Nunca por algo dicho solo en la conversación.
 - **Evita dos antipatrones:**
   - *test tautológico:* calcula el esperado con la misma lógica que el código, o llamándolo, o comprueba algo que siempre se cumple. Pasa aunque el código esté mal.
   - *test acoplado a la implementación:* comprueba cómo se hace (llamadas internas, mocks de piezas propias, orden de pasos, estado privado) en vez de lo que el AC observa. Se rompe al refactorizar y no caza el error.
@@ -67,7 +71,7 @@ Toma la primera opción que funcione del todo:
    - Mapa del cambio en 3–5 líneas.
    - Los 3–5 sitios más delicados, con fichero y motivo.
    - Todo test existente que hayas cambiado, con su motivo.
-   - Evidencia de que funciona: comandos y su salida, capturas o pasos de prueba manual, y la salida en rojo de cada test nuevo. Demuestra, no afirmes. Las capturas y los ficheros de trabajo van en `.tareas/<ID>/`, que Git ignora; nunca en `/tmp` ni en `$TMPDIR` (M12).
+   - Evidencia de que funciona: comandos y su salida, capturas o pasos de prueba manual, y la salida en rojo de cada test nuevo. Demuestra, no afirmes. Las capturas de evidencia y los ficheros de trabajo van en `.tareas/<ID>/`, que Git ignora; nunca en `/tmp` ni en `$TMPDIR` (M12).
    - Tamaño en líneas de código. Si supera unas 400, explica por qué no se partió.
 4. Pasa a `sdd-review`. No marques el PR como listo para fusionar sin la revisión exigida.
 5. Borra `.tareas/<ID>.md` cuando la tarea se cierre.
