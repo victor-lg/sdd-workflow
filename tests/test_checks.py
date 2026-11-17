@@ -519,6 +519,7 @@ class TestFicherosSensibles(unittest.TestCase):
         """VIC-22, PR 3 (M27): las capturas las aprueba la persona; la configuración puede sortearlas."""
         for ruta in ["e2e/ejemplo.spec.mjs-snapshots/panel-resumen-chromium-linux.png",
                      "tests/e2e/visual.spec.ts-snapshots/a/b.png", "docs/ejemplos/e2e/x.spec.mjs-snapshots/y.png",
+                     "__screenshots__/a.png", "e2e/__screenshots__/b/c.png",
                      "playwright.config.ts", "web/playwright.config.mjs", "Playwright.Config.JS",
                      "playwright-ct.config.ts", "a/playwright-ct.config.js"]:
             with self.subTest(ruta=ruta):

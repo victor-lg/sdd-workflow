@@ -8,7 +8,13 @@ const RAIZ = join(fileURLToPath(new URL(".", import.meta.url)), "app");
 const TIPOS = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript" };
 
 createServer(async (peticion, respuesta) => {
-  const ruta = new URL(peticion.url, "http://localhost").pathname;
+  let ruta;
+  try {
+    ruta = new URL(peticion.url, "http://localhost").pathname;
+  } catch {
+    respuesta.writeHead(400).end();
+    return;
+  }
   const fichero = normalize(join(RAIZ, ruta === "/" ? "index.html" : ruta));
   if (!fichero.startsWith(RAIZ + sep)) {
     respuesta.writeHead(403).end();

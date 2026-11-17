@@ -13,7 +13,9 @@ Ficheros:
 - `package.json`, `package-lock.json`: versiones exactas. El `overrides` fija `playwright-core` en la versión de la imagen: sin él, `@axe-core/playwright` metía otra y el job `versiones` del workflow fallaría (`docs/herramientas.md`);
 - `ejemplo.spec.mjs-snapshots/`: las capturas de referencia, una por captura y navegador.
 
-En un proyecto, `playwright.config.*` y `*-snapshots/` son R2 (`checks.py` de la plantilla).
+En un proyecto, `playwright.config.*`, `*-snapshots/` y `__screenshots__/` son R2 (`checks.py` de la plantilla). Si el proyecto cambia la carpeta de las capturas con `snapshotPathTemplate`, añade la nueva a las rutas sensibles de su README. Las tolerancias o máscaras escritas en un fichero de test no las ve `checks.py`: ahí manda la regla de `sdd-implement` y la revisión.
+
+**Con el workflow de tests** (`docs/ejemplos/workflows/tests-node-playwright.yml`): `.nvmrc` fija Node 24, que pide `setup-node`. El workflow corre además `node --test "tests/unit/**/*.test.js"` en el primer trozo: si el proyecto no tiene esos tests, adapta ese paso al copiar.
 
 ## Generar y comprobar las capturas
 
@@ -24,15 +26,16 @@ IMAGEN=mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505
 
 # 1. Generar las referencias (solo un test visual nuevo o un cambio de aspecto que pide un AC).
 podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" \
-  bash -c 'npm ci --ignore-scripts && npx playwright test --update-snapshots'
+  bash -c 'npm ci --ignore-scripts && npx --no-install playwright test --update-snapshots'
 
 # 2. Falsos positivos: cinco ejecuciones seguidas sin --update-snapshots, todas en verde.
 podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" \
-  bash -c 'npm ci --ignore-scripts && for i in 1 2 3 4 5; do npx playwright test || exit 1; done'
+  bash -c 'npm ci --ignore-scripts && for i in 1 2 3 4 5; do npx --no-install playwright test || exit 1; done'
 
 # 3. El rojo: con `padding: 12px` en lugar de 16px en `.panel-resumen` (app/index.html), falla
 #    la captura panel-resumen en los dos navegadores. Deshaz el cambio después.
-podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" bash -c 'npx playwright test'
+podman run --rm -v "$PWD":/e2e:Z -w /e2e "$IMAGEN" \
+  bash -c 'npm ci --ignore-scripts && npx --no-install playwright test'
 ```
 
 Con Docker, las mismas órdenes con `docker run`, sin la `:Z` del volumen.

@@ -25,7 +25,7 @@ CAPTURAS = ["panel-resumen", "formulario-con-aviso"]
 
 class TextoDelEjemplo(unittest.TestCase):
     def test_axe_tal_cual_al_llegar_y_en_el_estado_nuevo(self):
-        self.assertIn("new AxeBuilder({ page }).analyze()", SPEC)
+        self.assertIn("const { violations } = await new AxeBuilder({ page }).analyze();\n  expect(violations).toEqual([]);", SPEC)
         for prohibido in ("disableRules", "exclude", "include", "withTags", "withRules", "options(", "configure",
                           "violations.filter"):
             with self.subTest(prohibido=prohibido):
@@ -35,6 +35,11 @@ class TextoDelEjemplo(unittest.TestCase):
                 self.assertEqual(test.count("sinViolaciones(page)"), 1)
                 # Al llegar (antes de rellenar nada) o en el estado nuevo (tras el aviso).
                 self.assertLess(test.index("page.goto"), test.index("sinViolaciones(page)"))
+                if ".click()" in test:
+                    self.assertLess(test.index('toHaveText("El grosor tiene que ser positivo")'),
+                                    test.index("sinViolaciones(page)"))
+                else:
+                    self.assertNotIn(".fill(", test[:test.index("sinViolaciones(page)")])
 
     def test_capturas_sin_tolerancias_ni_mascaras(self):
         for prohibido in ("maxDiffPixels", "maxDiffPixelRatio", "threshold", "mask", "stylePath", "test.skip",
@@ -51,7 +56,8 @@ class TextoDelEjemplo(unittest.TestCase):
 
 class Capturas(unittest.TestCase):
     def test_estan_las_de_referencia_en_linux(self):
-        """Una por captura y navegador, generadas en la imagen de la CI (README.md del ejemplo)."""
+        """Una por captura y navegador, generadas en la imagen de la CI (README.md del ejemplo). Sin navegador en
+        la CI, solo se comprueba que están y que son PNG: que sean correctas lo aprueba la persona al generarlas."""
         carpeta = EJEMPLO / "ejemplo.spec.mjs-snapshots"
         esperadas = {f"{c}-{n}-linux.png" for c in CAPTURAS for n in ("chromium", "webkit")}
         presentes = {f.name for f in carpeta.glob("*.png")} if carpeta.is_dir() else set()

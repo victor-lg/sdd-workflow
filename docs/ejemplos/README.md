@@ -6,4 +6,4 @@ Material probado en proyectos reales, para copiar y adaptar. No forma parte de l
 - `e2e/`: un E2E de Playwright con regresión visual y axe, con las reglas de `sdd-implement` (M27). Las capturas de referencia se generan con la imagen del workflow de tests; su README dice cómo. Se copia con el workflow de tests.
 - `workflows/deploy-pages.yml`: publicación manual en GitHub Pages, solo desde `main` y solo por la cuenta propietaria (D25).
 
-Los dos los añade una persona (el agente no tiene el permiso `workflow`), en un PR `ci: …` de nivel R2.
+Los dos workflows los añade una persona (el agente no tiene el permiso `workflow`), en un PR `ci: …` de nivel R2. El ejemplo de `e2e/` lo puede copiar el agente, también en R2.

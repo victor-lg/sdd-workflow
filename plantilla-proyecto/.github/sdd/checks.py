@@ -89,7 +89,11 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 ".jscpd-baseline.json", "*/.jscpd-baseline.json",
                 # Regresión visual (M27): las capturas de referencia las aprueba la persona, y la
                 # configuración de Playwright puede ponerles tolerancias o escribir las que faltan.
-                "*-snapshots/*", "playwright.config.*", "*/playwright.config.*",
+                # Las carpetas por defecto de Playwright; si un proyecto cambia la suya con
+                # `snapshotPathTemplate`, la añade a las rutas sensibles de su README. Las
+                # tolerancias escritas en un fichero de test no se ven aquí (límite aceptado).
+                "*-snapshots/*", "__screenshots__/*", "*/__screenshots__/*",
+                "playwright.config.*", "*/playwright.config.*",
                 "playwright-ct.config.*", "*/playwright-ct.config.*",
                 # npm lo lee en `npm ci` y en `npm test` (script-shell, node-options), también dentro de Stryker.
                 ".npmrc", "*/.npmrc",
