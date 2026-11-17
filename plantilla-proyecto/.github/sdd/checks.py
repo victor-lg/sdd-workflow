@@ -87,6 +87,10 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 # baseline que lee con --baseline.
                 ".jscpd.json", "*/.jscpd.json", ".config/jscpd.json", "*/.config/jscpd.json",
                 ".jscpd-baseline.json", "*/.jscpd-baseline.json",
+                # Regresión visual (M27): las capturas de referencia las aprueba la persona, y la
+                # configuración de Playwright puede ponerles tolerancias o escribir las que faltan.
+                "*-snapshots/*", "playwright.config.*", "*/playwright.config.*",
+                "playwright-ct.config.*", "*/playwright-ct.config.*",
                 # npm lo lee en `npm ci` y en `npm test` (script-shell, node-options), también dentro de Stryker.
                 ".npmrc", "*/.npmrc",
                 # Un submódulo trae código que no ve ningún escáner (también sus gitlinks, ver main).

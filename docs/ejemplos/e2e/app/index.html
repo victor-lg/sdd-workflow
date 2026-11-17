@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Materiales</title>
+  <style>
+    body { font: 16px/1.5 sans-serif; margin: 0; padding: 24px; color: #1a1a1a; background: #ffffff; }
+    main { max-width: 32rem; }
+    label { display: block; margin-bottom: 4px; }
+    input { font: inherit; padding: 6px 8px; border: 1px solid #555555; }
+    button { font: inherit; margin-top: 12px; padding: 6px 16px; color: #ffffff; background: #1f4e8c; border: 0; }
+    .panel-resumen { margin-top: 24px; padding: 16px; border: 1px solid #555555; }
+    [role="alert"] { margin-top: 12px; color: #9b1c1c; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Materiales</h1>
+    <form id="materiales" novalidate>
+      <label for="grosor">Grosor (mm)</label>
+      <input id="grosor" name="grosor" type="number" step="0.1" value="2">
+      <div><button type="submit">Guardar</button></div>
+      <p id="aviso" role="alert" hidden></p>
+    </form>
+    <section class="panel-resumen" aria-labelledby="titulo-resumen">
+      <h2 id="titulo-resumen">Resumen</h2>
+      <p>Grosor guardado: <output id="guardado">2</output> mm</p>
+    </section>
+  </main>
+  <script>
+    document.getElementById("materiales").addEventListener("submit", (evento) => {
+      evento.preventDefault();
+      const grosor = Number(document.getElementById("grosor").value);
+      const aviso = document.getElementById("aviso");
+      if (!(grosor > 0)) {
+        aviso.textContent = "El grosor tiene que ser positivo";
+        aviso.hidden = false;
+        return;
+      }
+      aviso.hidden = true;
+      document.getElementById("guardado").textContent = String(grosor);
+    });
+  </script>
+</body>
+</html>

@@ -515,6 +515,21 @@ class TestFicherosSensibles(unittest.TestCase):
             with self.subTest(ruta=ruta):
                 self.assertEqual(riesgo([ruta]).errores, [])
 
+    def test_capturas_de_referencia_y_configuracion_de_playwright(self):
+        """VIC-22, PR 3 (M27): las capturas las aprueba la persona; la configuración puede sortearlas."""
+        for ruta in ["e2e/ejemplo.spec.mjs-snapshots/panel-resumen-chromium-linux.png",
+                     "tests/e2e/visual.spec.ts-snapshots/a/b.png", "docs/ejemplos/e2e/x.spec.mjs-snapshots/y.png",
+                     "playwright.config.ts", "web/playwright.config.mjs", "Playwright.Config.JS",
+                     "playwright-ct.config.ts", "a/playwright-ct.config.js"]:
+            with self.subTest(ruta=ruta):
+                errores = riesgo([ruta]).errores
+                self.assertEqual(len(errores), 1, errores)
+                self.assertIn("exige R2", errores[0])
+        for ruta in ["e2e/snapshots.md", "e2e/ejemplo.spec.mjs", "docs/playwright.md", "playwright.md",
+                     "e2e/capturas/ejemplo.png"]:
+            with self.subTest(ruta=ruta):
+                self.assertEqual(riesgo([ruta]).errores, [])
+
     def test_configuracion_de_knip_y_jscpd(self):
         """VIC-21, PR 3: los 8 nombres que knip carga solo (KNIP_CONFIG_LOCATIONS de la 6.45.1) y
         los 3 que busca jscpd, más su baseline, en cualquier carpeta y sin distinguir mayúsculas."""

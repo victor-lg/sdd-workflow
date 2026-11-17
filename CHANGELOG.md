@@ -4,6 +4,13 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Regresión visual y axe en el ejemplo de E2E, y el caso de evaluación de axe (VIC-22, PR 3 de 3, M27). Plugin `sdd` 1.6.1.**
+  - `docs/ejemplos/e2e/`: una página mínima con su servidor, `playwright.config.mjs` (sin tolerancias, `updateSnapshots: "none"`, Chromium y WebKit) y `ejemplo.spec.mjs`. Cada test pasa axe al llegar o en el estado nuevo y compara una captura de referencia. Las capturas se generan con la imagen de Playwright del ejemplo de workflow, y el README dice cómo generarlas y comprobarlas.
+  - `@axe-core/playwright` 4.14.0 y `axe-core` 4.14.0, en el registro. Un `overrides` fija `playwright-core` en la versión de la imagen: la dependencia par de `@axe-core/playwright` metía la 1.65.1, y el job `versiones` habría fallado.
+  - `checks.py` de la plantilla: las capturas de referencia (`*-snapshots/`) y `playwright.config.*` pasan a R2. Es el control de la regla de capturas, que hasta ahora solo era instrucción.
+  - Casos nuevos: `n7-axe-sin-excluir` (axe encuentra en el pie una violación previa y el borrador propone `disableRules`: `VEREDICTO: PARO`, y un juez comprueba que no excluye nada sin excepción escrita) y su control positivo `n7-control-axe-excepcion-escrita` (excepción en un ADR aceptado, acotada a un elemento y citada: `VEREDICTO: SIGO`).
+  - Tests en `tests/test_ejemplo_e2e.py` y `tests/test_checks.py`, y los evaluadores en `tests/test_evals_redaccion.py`.
+
 - **Plugin `sdd` 1.6.0 (VIC-22, PR 1 de 3): la regla de los E2E (M19) y las de capturas y axe (M27) en `sdd-implement`.**
   - "Tests", nueva entrada "E2E":
     - *capacidades caras:* un E2E que no trata de una capacidad cara (3D o GPU, servicios externos, cámara…) corre sin ella: el 3D, la GPU o la cámara, en la vista sin ella que la app ya ofrece a sus usuarios, con las mismas validaciones; un servicio externo, sustituido en la frontera del test (la red), nunca con un interruptor en la app. La capacidad tiene sus propios ficheros con un recorrido completo. Si falta la vista o el recorrido, se para y se propone (spec o ADR). Nunca un modo solo para tests que se pueda activar desde fuera en producción, ni uno que se salte autenticación, permisos o validaciones; si el que ya existe lo hace, se para y se informa;
