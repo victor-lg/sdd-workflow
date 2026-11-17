@@ -509,7 +509,8 @@ curl -sI -H 'Accept: application/vnd.oci.image.index.v1+json' \
 ```
 
       Con Docker, `docker buildx imagetools inspect mcr.microsoft.com/playwright:v1.66.0-noble` da el mismo digest en la línea `Digest:`. Con esa orden se sacó el de la calculadora; el del ejemplo, con `curl`.
-   2. En `.github/workflows/tests.yml`, cambia la línea `IMAGEN:` del job `versiones` por `mcr.microsoft.com/playwright:v1.66.0-noble@sha256:<digest>`. Hazlo desde la web, eligiendo **"Commit directly to the `ci/…` branch"**.
+   2. En `.github/workflows/tests.yml`, cambia la línea `IMAGEN:` del job `versiones` por `mcr.microsoft.com/playwright:v1.66.0-noble@sha256:<digest>`. Hazlo desde la web, eligiendo **"Commit directly to the `ci/…` branch"**, con un mensaje que siga las convenciones (`ci: sube la imagen de Playwright a 1.66.0`): el PR ya no es de Dependabot y `checks.py` comprueba sus commits.
+   3. Desde ese commit, el agente no hace rebase ni force-push de la rama: reescribiría un commit que toca `.github/workflows/`, y GitHub rechaza el push porque el agente no tiene el permiso `workflow`.
 4. `versiones` solo queda en verde cuando están los dos commits: el del paquete y el de la imagen.
 5. Anota la versión y el digest en `docs/herramientas.md` del proyecto, si lo lleva.
 

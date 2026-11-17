@@ -161,4 +161,9 @@ jobs:
         run: |
           echo "Versiones: $VERSIONES. ¿Hay código?: ${HAY:-no se sabe}. E2E: $E2E."
           test "$VERSIONES" = "success"
-          if [ "$HAY" = "true" ]; then test "$E2E" = "success"; fi
+          # Falla cerrado: una salida `si` vacía o mal escrita no deja el check en verde sin E2E.
+          case "$HAY" in
+            true) test "$E2E" = "success" ;;
+            false) ;;
+            *) echo "::error::versiones no dijo si hay código (si=$HAY)"; exit 1 ;;
+          esac

@@ -54,8 +54,8 @@ class RepoDePrueba(unittest.TestCase):
         salida = pathlib.Path(self.temporal.name) / "salida"
         salida.write_text("")
         entorno = dict(os.environ, GITHUB_OUTPUT=str(salida), **env)
-        # Como GitHub Actions con `shell: bash` por defecto: bash -e.
-        r = subprocess.run(["bash", "-e", "-c", definicion["run"]], cwd=self.carpeta, env=entorno,
+        # Como GitHub Actions con `shell: bash` por defecto.
+        r = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", definicion["run"]], cwd=self.carpeta, env=entorno,
                            capture_output=True, text=True, timeout=60)
         return r.returncode, r.stdout + r.stderr, dict(l.split("=", 1) for l in salida.read_text().splitlines() if l)
 
@@ -67,7 +67,8 @@ class TextoDelEjemplo(unittest.TestCase):
 
     def test_la_imagen_se_escribe_una_vez_y_por_digest(self):
         """Una sola imagen en el fichero, la del job `versiones`, fijada por el digest de su índice."""
-        self.assertEqual(len(re.findall(r"playwright:v[\d.]+-noble@sha256:", TEXTO)), 1)
+        # Cualquier clave YAML con una imagen de Playwright, con digest o sin él (no los mensajes del script).
+        self.assertEqual(len(re.findall(r"(?m)^\s*[\w-]+:\s*\S*mcr\.microsoft\.com/playwright", TEXTO)), 1)
         imagen = paso("versiones", "¿Coinciden Playwright y su imagen?")["env"]["IMAGEN"]
         self.assertRegex(imagen, f"^{IMAGEN.pattern}$")
 
@@ -93,6 +94,7 @@ class TextoDelEjemplo(unittest.TestCase):
         ci = runs.index("npm ci --ignore-scripts")
         unitarios = next(i for i, p in enumerate(pasos) if p.get("name") == "Tests unitarios")
         self.assertEqual(pasos[unitarios]["if"], "matrix.trozo == 1")
+        self.assertEqual(pasos[unitarios]["run"], 'node --test "tests/unit/**/*.test.js"')
         self.assertEqual(runs[-1], "npx playwright test --shard=${{ matrix.trozo }}/3")
         self.assertLess(ci, unitarios)
         self.assertLess(unitarios, len(pasos) - 1)
@@ -242,16 +244,18 @@ class Versiones(RepoDePrueba):
 
     def test_lockfile_con_otra_forma_falla_con_mensaje(self):
         self.escribir("package.json", {"name": "p"})
-        for contenido, mensaje in [("{no es json", "no es JSON válido"), ("[]", 'no tiene "packages"'),
-                                   (json.dumps({"lockfileVersion": 3, "packages": {"node_modules/@playwright/test": {"version": "1.65.0"},
-                                                                 "node_modules/playwright": "x"}}),
-                                    "no es un objeto")]:
+        for contenido, mensaje in [
+            ("{no es json", "::error::package-lock.json no es JSON válido"),
+            ("[]", '::error::package-lock.json no tiene "packages"'),
+            (json.dumps({"lockfileVersion": 3, "packages": {"node_modules/@playwright/test": {"version": "1.65.0"},
+                                                            "node_modules/playwright": "x"}}),
+             '::error::package-lock.json tiene una entrada de "packages" que no es un objeto'),
+        ]:
             with self.subTest(contenido=contenido):
                 self.escribir("package-lock.json", contenido)
                 codigo, texto, _ = self.comprobar()
                 self.assertNotEqual(codigo, 0)
-                self.assertIn(f"::error::package-lock.json {mensaje}" if "JSON" in mensaje or "packages" in mensaje
-                              else "::error::package-lock.json tiene una entrada", texto)
+                self.assertIn(mensaje, texto)
                 self.assertNotIn("Traceback", texto)
 
     def test_sin_playwright_en_el_lockfile_falla(self):
@@ -276,8 +280,11 @@ class CheckFinal(RepoDePrueba):
             ("success", "true", "failure", 1),
             ("success", "true", "cancelled", 1),
             ("success", "true", "skipped", 1),
+            ("success", "", "skipped", 1),          # salida `si` vacía: falla cerrado
+            ("success", "verdadero", "success", 1),
             ("failure", "", "skipped", 1),          # versiones distintas
             ("cancelled", "", "skipped", 1),
+            ("cancelled", "true", "success", 1),   # versiones no terminó bien, aunque llegara a escribir `si`
         ]:
             with self.subTest(versiones=versiones, hay=hay, e2e=e2e):
                 self.assertEqual(self.final(versiones, hay, e2e) != 0, bool(espera))
