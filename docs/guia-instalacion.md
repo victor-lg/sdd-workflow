@@ -506,7 +506,7 @@ curl -sI -H 'Accept: application/vnd.oci.image.index.v1+json' \
   https://mcr.microsoft.com/v2/playwright/manifests/v1.66.0-noble | grep -i docker-content-digest
 ```
 
-   Con Docker, `docker buildx imagetools inspect mcr.microsoft.com/playwright:v1.66.0-noble` da el mismo digest en la línea `Digest:` (es como se sacó el de la calculadora).
+   Con Docker, `docker buildx imagetools inspect mcr.microsoft.com/playwright:v1.66.0-noble` da el mismo digest en la línea `Digest:`. Con esa orden se sacó el de la calculadora; el del ejemplo, con `curl`.
 
 3. En `.github/workflows/tests.yml`, cambia la línea `IMAGEN:` del job `versiones` por `mcr.microsoft.com/playwright:v1.66.0-noble@sha256:<digest>`. Hazlo desde la web, en la rama del PR: el agente no puede tocar workflows.
 4. Anota la versión y el digest en `docs/herramientas.md` del proyecto, si lo lleva.
@@ -525,8 +525,6 @@ sudo env "PATH=$PATH" npx -y playwright@1.58.2 install-deps chromium webkit
 ```
 
 Quedan en `~/.cache/ms-playwright`, y el agente los usa desde el sandbox (verificado con Chromium 156 y WebKit 27.2). Repítelo cuando cambie la versión de Playwright.
-
-Las capturas de referencia de la regresión visual no salen de aquí: se generan con la imagen de la CI (G1), porque las fuentes y el navegador del PC dan otros píxeles.
 
 ### G3. Publicación en GitHub Pages con subdominio propio
 

@@ -287,12 +287,12 @@ Decidida con el PR que la instala (PR 2 de VIC-21; Víctor, 2026-11-15, comentar
 
 ### `actions/setup-node`
 
-- **Qué hace:** instala Node en el runner para el job `mutaciones` (`node-version: 24`), solo si el proyecto usa Stryker.
+- **Qué hace:** instala Node en el runner para el job `mutaciones` (`node-version: 24`), solo si el proyecto usa Stryker. En el ejemplo de tests (`docs/ejemplos/workflows/tests-node-playwright.yml`, VIC-22), instala la versión de `.nvmrc` en cada trozo E2E, con `cache: npm`.
 - **Versión:** v7.1.0 (2026-10-08), fijada por el SHA de su commit, `949feb2413d6458794dcd2491c4babbbce0c15c1`, leído en el PR 2 de la API de GitHub (`repos/actions/setup-node/git/ref/tags/v7.1.0`, objeto de tipo `commit`). MIT. Dependabot la sube, como `actions/checkout`.
 - **Tiempo:** **medido** en la calculadora (calculadora-discos#48, runs 43913962175 y 43919204327; duración del paso según la API de GitHub): de 1 a 5 s, en `mutaciones` y en `codigo-sobrante`.
 - **Red:** sí, para descargar Node.
 - **Alternativa:** el Node que trae `ubuntu-latest`, cuya versión cambia con la imagen del runner sin que se vea en el repo.
-- **Qué toca y qué lee:** descarga Node de `actions/node-versions` (GitHub) o de `nodejs.org`, con el `github.token` del job, que solo tiene `contents: read`. Con `package-manager-cache: false` no restaura ni guarda la caché de npm, que en la 7.1.0 se activa sola si `package.json` declara `packageManager`.
+- **Qué toca y qué lee:** descarga Node de `actions/node-versions` (GitHub) o de `nodejs.org`, con el `github.token` del job, que solo tiene `contents: read`. Con `package-manager-cache: false` no restaura ni guarda la caché de npm, que en la 7.1.0 se activa sola si `package.json` declara `packageManager`. En el ejemplo de tests, con `cache: npm`, restaura y guarda la caché de `~/.npm` por el hash del lockfile; la de un PR queda limitada a su ref, así que no llega a `main`. Como en el ejemplo anterior (v7.0.0), que ya la usaba.
 - **Riesgo fuera del sandbox:** ninguno; solo corre en la CI.
 - **Decisión:** adoptar en `calidad.yml`.
 

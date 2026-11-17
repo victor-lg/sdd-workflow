@@ -69,20 +69,30 @@ jobs:
               fallar(f"La imagen de Playwright tiene que ser mcr.microsoft.com/playwright:vX.Y.Z-noble fijada por digest (@sha256:…), y es {limpio(imagen)}")
           etiqueta = m.group(1)
           try:
-              paquetes = json.load(open("package-lock.json", encoding="utf-8")).get("packages")
+              bloqueo = json.load(open("package-lock.json", encoding="utf-8"))
           except FileNotFoundError:
               fallar("Falta package-lock.json: sin él no se sabe qué versión de Playwright se instala")
+          except ValueError:
+              fallar("package-lock.json no es JSON válido")
+          paquetes = bloqueo.get("packages") if isinstance(bloqueo, dict) else None
           if not isinstance(paquetes, dict):
               fallar("package-lock.json no tiene \"packages\" (lockfileVersion 2 o 3): regenéralo con npm 7 o posterior")
           if "node_modules/@playwright/test" not in paquetes:
               fallar("package-lock.json no tiene @playwright/test")
           # playwright y playwright-core son los que eligen los navegadores; @playwright/test los arrastra.
           # También las copias anidadas (node_modules/x/node_modules/playwright-core).
+          # Un alias de npm ("pwc": "npm:playwright-core@…") deja otra ruta con el nombre real en "name".
+          # Es una protección contra descuidos, no una barrera: la rama controla también sus tests.
+          vigilados = ("@playwright/test", "playwright", "playwright-core")
           for ruta, datos in sorted(paquetes.items()):
+              if not isinstance(datos, dict):
+                  fallar("package-lock.json tiene una entrada de \"packages\" que no es un objeto")
               nombre = re.fullmatch(r"(?:.*/)?node_modules/(@playwright/test|playwright|playwright-core)", ruta)
-              version = (datos or {}).get("version")
+              nombre = nombre.group(1) if nombre else (datos.get("name") if datos.get("name") in vigilados else None)
+              version = datos.get("version")
+              if nombre and version is None:
+                  fallar(f"{nombre} no tiene versión en package-lock.json (¿un enlace local?): no se puede comparar con la imagen")
               if nombre and version != etiqueta:
-                  nombre = nombre.group(1)
                   version = limpio(version)
                   fallar(f"{nombre} está en {version} (package-lock.json) y la imagen de este workflow es la v{etiqueta}. "
                          f"Sube la imagen a mcr.microsoft.com/playwright:v{version}-noble con su digest (guía de instalación "

@@ -83,11 +83,36 @@ class TextoDelEjemplo(unittest.TestCase):
         self.assertEqual(e2e["container"], {"image": "${{ needs.versiones.outputs.imagen }}"})
         self.assertEqual(e2e["strategy"]["matrix"]["trozo"], [1, 2, 3])
         self.assertFalse(e2e["strategy"]["fail-fast"])
-        self.assertIn("--shard=${{ matrix.trozo }}/3", TEXTO)
+
+    def test_pasos_de_los_trozos(self):
+        """En orden: checkout, Node, npm ci, unitarios solo en el primer trozo, y su trozo de E2E."""
+        pasos = JOBS["e2e"]["steps"]
+        usos = [p.get("uses", "").split("@")[0] for p in pasos]
+        runs = [p.get("run", "") for p in pasos]
+        self.assertEqual(usos[:2], ["actions/checkout", "actions/setup-node"])
+        ci = runs.index("npm ci --ignore-scripts")
+        unitarios = next(i for i, p in enumerate(pasos) if p.get("name") == "Tests unitarios")
+        self.assertEqual(pasos[unitarios]["if"], "matrix.trozo == 1")
+        self.assertEqual(runs[-1], "npx playwright test --shard=${{ matrix.trozo }}/3")
+        self.assertLess(ci, unitarios)
+        self.assertLess(unitarios, len(pasos) - 1)
 
     def test_no_instala_navegadores(self):
         """Los trae la imagen: `playwright install` volvería a descargarlos (y con --with-deps, a esperar a apt)."""
-        self.assertNotIn("playwright install", TEXTO)
+        for job in JOBS.values():
+            for p in job["steps"]:
+                self.assertNotIn("playwright install", p.get("run", ""))
+
+    def test_cableado_entre_jobs(self):
+        """Una errata en una salida o un resultado dejaría el check `tests` en verde sin E2E (G4 de #47)."""
+        self.assertEqual(paso("versiones", "¿Coinciden Playwright y su imagen?")["id"], "comprobar")
+        self.assertEqual(JOBS["versiones"]["outputs"], {"si": "${{ steps.comprobar.outputs.si }}",
+                                                         "imagen": "${{ steps.comprobar.outputs.imagen }}"})
+        self.assertEqual(paso("tests", "¿Han pasado las versiones y los 3 trozos?")["env"], {
+            "VERSIONES": "${{ needs.versiones.result }}",
+            "HAY": "${{ needs.versiones.outputs.si }}",
+            "E2E": "${{ needs.e2e.result }}",
+        })
 
     def test_check_final_tests(self):
         tests = JOBS["tests"]
@@ -105,6 +130,7 @@ class TextoDelEjemplo(unittest.TestCase):
         for accion, ref in usos:
             with self.subTest(accion=accion):
                 self.assertRegex(ref, r"^[0-9a-f]{40}$")
+                # La de checkout es la de los otros workflows (sdd.yml); el registro anota las nuevas.
                 if accion != "actions/checkout":
                     self.assertTrue(ref in REGISTRO, f"{accion}@{ref} no está en docs/herramientas.md")
 
@@ -194,6 +220,39 @@ class Versiones(RepoDePrueba):
         codigo, texto, _ = self.comprobar()
         self.assertNotEqual(codigo, 0)
         self.assertIn('::error::package-lock.json no tiene "packages"', texto)
+
+    def test_alias_de_npm_distinto_falla(self):
+        self.escribir("package.json", {"name": "p"})
+        bloqueo = con("1.65.0")
+        bloqueo["packages"]["node_modules/pwc"] = {"name": "playwright-core", "version": "1.60.0"}
+        self.escribir("package-lock.json", bloqueo)
+        codigo, texto, _ = self.comprobar()
+        self.assertNotEqual(codigo, 0)
+        self.assertIn("::error::playwright-core está en 1.60.0", texto)
+
+    def test_entrada_sin_version_falla_con_su_mensaje(self):
+        self.escribir("package.json", {"name": "p"})
+        bloqueo = con("1.65.0")
+        bloqueo["packages"]["node_modules/playwright"] = {"link": True, "resolved": "../pw"}
+        self.escribir("package-lock.json", bloqueo)
+        codigo, texto, _ = self.comprobar()
+        self.assertNotEqual(codigo, 0)
+        self.assertIn("::error::playwright no tiene versión en package-lock.json", texto)
+        self.assertNotIn("None", texto)
+
+    def test_lockfile_con_otra_forma_falla_con_mensaje(self):
+        self.escribir("package.json", {"name": "p"})
+        for contenido, mensaje in [("{no es json", "no es JSON válido"), ("[]", 'no tiene "packages"'),
+                                   (json.dumps({"lockfileVersion": 3, "packages": {"node_modules/@playwright/test": {"version": "1.65.0"},
+                                                                 "node_modules/playwright": "x"}}),
+                                    "no es un objeto")]:
+            with self.subTest(contenido=contenido):
+                self.escribir("package-lock.json", contenido)
+                codigo, texto, _ = self.comprobar()
+                self.assertNotEqual(codigo, 0)
+                self.assertIn(f"::error::package-lock.json {mensaje}" if "JSON" in mensaje or "packages" in mensaje
+                              else "::error::package-lock.json tiene una entrada", texto)
+                self.assertNotIn("Traceback", texto)
 
     def test_sin_playwright_en_el_lockfile_falla(self):
         self.escribir("package.json", {"name": "p"})
