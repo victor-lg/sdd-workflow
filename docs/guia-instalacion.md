@@ -499,7 +499,7 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
 **Subir Playwright: paquete e imagen en el mismo PR.** El job `versiones` falla cuando `@playwright/test` del `package-lock.json` no es la versión de la imagen. Dependabot sube el paquete pero no la imagen (calculadora-discos#42), y su PR no se puede completar sin perder la excepción de `checks.py`, que exige que todos los commits sean de Dependabot. Por eso (decisión de Víctor, 2026-11-17, VIC-22):
 
 1. Cuando Dependabot abre un PR que sube `@playwright/test`, **se cierra** con un comentario que enlaza al PR propio del paso 2.
-2. **El agente** abre ese PR propio, `ci: sube Playwright a 1.66.0` (por ejemplo), con `package.json` y `package-lock.json`. En ese momento `versiones` falla, y es lo esperado.
+2. **El agente** abre ese PR propio, `ci: sube Playwright a 1.66.0` (por ejemplo), con `package.json` y `package-lock.json`. Si `package.json` fija `playwright-core` en `overrides` (lo hace el ejemplo de `e2e/`, por axe), lo sube también. En ese momento `versiones` falla, y es lo esperado.
 3. **La persona** sube la línea de la imagen en la misma rama, porque toca `.github/workflows/` y el agente no tiene el permiso `workflow`:
    1. Saca el digest del índice de la imagen. Desde una terminal con red, fuera del sandbox:
 
