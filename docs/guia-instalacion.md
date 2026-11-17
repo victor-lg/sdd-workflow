@@ -503,10 +503,10 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
 3. **La persona** sube la línea de la imagen en la misma rama, porque toca `.github/workflows/` y el agente no tiene el permiso `workflow`:
    1. Saca el digest del índice de la imagen. Desde una terminal con red, fuera del sandbox:
 
-```bash
-curl -sI -H 'Accept: application/vnd.oci.image.index.v1+json' \
-  https://mcr.microsoft.com/v2/playwright/manifests/v1.66.0-noble | grep -i docker-content-digest
-```
+      ```bash
+      curl -sI -H 'Accept: application/vnd.oci.image.index.v1+json' \
+        https://mcr.microsoft.com/v2/playwright/manifests/v1.66.0-noble | grep -i docker-content-digest
+      ```
 
       Con Docker, `docker buildx imagetools inspect mcr.microsoft.com/playwright:v1.66.0-noble` da el mismo digest en la línea `Digest:`. Con esa orden se sacó el de la calculadora; el del ejemplo, con `curl`.
    2. En `.github/workflows/tests.yml`, cambia la línea `IMAGEN:` del job `versiones` por `mcr.microsoft.com/playwright:v1.66.0-noble@sha256:<digest>`. Hazlo desde la web, eligiendo **"Commit directly to the `ci/…` branch"**, con un mensaje que siga las convenciones (`ci: sube la imagen de Playwright a 1.66.0`): el PR ya no es de Dependabot y `checks.py` comprueba sus commits.

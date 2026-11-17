@@ -187,7 +187,17 @@ class Versiones(RepoDePrueba):
         self.escribir("package-lock.json", bloqueo)
         codigo, texto, _ = self.comprobar()
         self.assertNotEqual(codigo, 0)
-        self.assertIn("::error::playwright-core está en 1.60.0", texto)
+        self.assertIn("::error::playwright-core está en 1.60.0 en node_modules/otro/node_modules/playwright-core", texto)
+        self.assertIn("alinea esa copia en el lockfile", texto)
+        self.assertNotIn("Sube la imagen", texto)
+
+    def test_la_raiz_que_se_llama_como_playwright_no_cuenta(self):
+        self.escribir("package.json", {"name": "playwright"})
+        bloqueo = con("1.65.0")
+        bloqueo["packages"][""].update({"name": "playwright", "version": "0.1.0"})
+        self.escribir("package-lock.json", bloqueo)
+        codigo, texto, _ = self.comprobar()
+        self.assertEqual(codigo, 0, texto)
 
     def test_la_version_del_lockfile_no_abre_ordenes(self):
         """La versión sale del lockfile de la rama: un salto de línea no puede empezar otra orden de workflow."""

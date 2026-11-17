@@ -85,6 +85,8 @@ jobs:
           # Es una protección contra descuidos, no una barrera: la rama controla también sus tests.
           vigilados = ("@playwright/test", "playwright", "playwright-core")
           for ruta, datos in sorted(paquetes.items()):
+              if ruta == "":
+                  continue  # la raíz es el propio proyecto, aunque se llame como uno de los vigilados
               if not isinstance(datos, dict):
                   fallar("package-lock.json tiene una entrada de \"packages\" que no es un objeto")
               nombre = re.fullmatch(r"(?:.*/)?node_modules/(@playwright/test|playwright|playwright-core)", ruta)
@@ -92,6 +94,9 @@ jobs:
               version = datos.get("version")
               if nombre and version is None:
                   fallar(f"{nombre} no tiene versión en package-lock.json (¿un enlace local?): no se puede comparar con la imagen")
+              if nombre and version != etiqueta and ruta != "node_modules/@playwright/test" and paquetes["node_modules/@playwright/test"].get("version") == etiqueta:
+                  fallar(f"{nombre} está en {limpio(version)} en {limpio(ruta)} (package-lock.json), y @playwright/test y la imagen "
+                         f"en {etiqueta}: alinea esa copia en el lockfile (npm dedupe o la dependencia que la arrastra); la imagen está bien.")
               if nombre and version != etiqueta:
                   version = limpio(version)
                   fallar(f"{nombre} está en {version} (package-lock.json) y la imagen de este workflow es la v{etiqueta}. "
@@ -108,7 +113,8 @@ jobs:
   #
   # El job corre como root dentro del contenedor y Chromium arranca sin su sandbox. Se acepta
   # porque no da más privilegios que antes: el token es de solo lectura, el job no usa secretos y
-  # los E2E solo cargan la app local.
+  # los E2E solo cargan la app local. El runner monta su socket de Docker en el contenedor, pero
+  # fuera de él el job ya tenía sudo sin contraseña en la misma VM efímera.
   e2e:
     name: e2e (${{ matrix.trozo }}/3)
     needs: versiones
