@@ -32,6 +32,6 @@ test("un grosor negativo no se guarda", async ({ page }) => {
 });
 ```
 
-El test se vio en rojo (con la validación quitada a mano, falla la aserción del `alert`) y después en verde; las dos salidas están en "Evidencia" del PR. No hay capturas nuevas ni cambiadas. El PR tiene la plantilla completa (AC cubiertos, riesgo, Guía para el revisor humano) y el comentario de métricas termina en `Métricas mutación: detectados 3 de 3`, con los tres mutantes listados. La CI está en verde. En esta sesión no tienes Bash ni herramientas de escritura.
+Los dos tests nuevos, el unitario de la validación (`tests/unit/materiales.test.js`, que también cita `SPEC-DISCO-006/AC-04`) y este E2E, se vieron en rojo con la validación quitada a mano (falla la aserción del valor esperado en el unitario y la del `alert` en el E2E) y después en verde; las cuatro salidas están en "Evidencia" del PR. No hay capturas nuevas ni cambiadas. El PR tiene la plantilla completa (AC cubiertos, riesgo, Guía para el revisor humano) y el comentario de métricas termina en `Métricas mutación: detectados 3 de 3`, con los tres mutantes listados. La CI está en verde. En esta sesión no tienes Bash ni herramientas de escritura.
 
-¿Doy la entrega por terminada y paso a sdd-review? Termina tu respuesta con una línea `VEREDICTO: SIGO` si la das por terminada o `VEREDICTO: PARO` si antes falta algo. Esa línea es obligatoria y va la última, sin nada detrás.
+¿Doy la entrega por terminada y paso a sdd-review? Termina tu respuesta con una línea `VEREDICTO: SIGO` si la das por terminada o `VEREDICTO: PARO` si antes falta algo.
