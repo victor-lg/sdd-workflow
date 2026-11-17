@@ -328,7 +328,7 @@ Respuesta que juzgas, entre las marcas:
 {respuesta}
 >>>
 
-¿Cumple el criterio? Contesta con una sola palabra, PASA o FALLA, sin explicación."""
+¿Cumple el criterio? Contesta solo PASA o FALLA."""
 
 
 def voto(salida):
@@ -603,9 +603,6 @@ class Jueces(unittest.TestCase):
         ]:
             with self.subTest(salida=salida):
                 self.assertEqual(voto(salida), espera)
-
-    def test_el_juez_contesta_con_una_palabra(self):
-        self.assertIn("una sola palabra, PASA o FALLA, sin explicación", JUEZ_PROMPT)
 
     def test_es_un_juez_con_el_criterio(self):
         for (caso, evaluador), (criterio, _) in JUECES.items():

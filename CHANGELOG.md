@@ -15,9 +15,10 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - Tests en `tests/test_evals_redaccion.py`: los regex, con las variantes de `VEREDICTO:` y Node; los dos jueces nuevos, como el de N6 (el criterio en el test; las frases, con `EVALS_JUEZ=1`).
   - En `docs/inventario-reglas.md`, M19 y M27 amplían REG-89. Los hooks, el agente y las demás skills no cambian.
   - Límite: la regla de las capturas es una instrucción. El control (las carpetas de capturas, R2 en `checks.py`) llega con el PR 3 de VIC-22.
-  - Tras la evaluación de Víctor (2026-11-16): los cuatro casos nuevos piden cargar la skill antes de contestar (casi nunca la cargaban), el juez del 3D ya no exige que la respuesta explique el motivo ni que diga que mantiene las comprobaciones, y en `tests/test_evals_redaccion.py` el voto del juez es la primera palabra de su salida (`voto()`), y el prompt pide una sola palabra.
+  - Tras la evaluación de Víctor (2026-11-16): los cuatro casos nuevos piden cargar la skill antes de contestar (casi nunca la cargaban), el juez del 3D ya no exige que la respuesta explique el motivo ni que diga que mantiene las comprobaciones, y en `tests/test_evals_redaccion.py` el voto del juez es la primera palabra de su salida (`voto()`). La pregunta al juez del test sigue siendo la de `main`: pedir "una sola palabra" hizo que N6 rechazara su respuesta buena.
   - Tras la segunda evaluación (2026-11-17): los criterios de `no-regenera.md` y `corre-sin-3d.md` pasan a reglas de decisión explícitas (qué es PASA, qué es FALLA y qué no cuenta en contra), con ejemplos de cada uno; el control `n7-control-e2e-capacidad-cara` exige la línea `VEREDICTO:` la última, sin nada detrás; y `lo-senala.md` (N6) vuelve a la versión de `main`.
   - Tras la tercera evaluación (2026-11-17): los dos casos de M19 dicen que el test unitario del plan también se vio en rojo (el control paraba con razón por eso); el control pide la línea `VEREDICTO:` con las mismas palabras que los demás casos; y los ejemplos del criterio de `no-regenera.md` incluyen las cuatro respuestas buenas del test, cada una con el motivo por el que pasa.
+  - Límite conocido: el juez de `no-regenera.md` es demasiado estricto con "…y entonces se regenera la captura con su AC" (1 de 3 en el test con `EVALS_JUEZ=1`); no se itera más (Víctor, 2026-11-17).
 
 
 
