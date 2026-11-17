@@ -496,20 +496,22 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
    - Los PR que ya estaban abiertos se quedan esperando ese check. Ciérralos y vuelve a abrirlos para lanzarlo.
    - No uses "Update branch": crearía un push tuyo que tú mismo no podrías aprobar.
 
-**Subir la imagen de Playwright.** El job `versiones` falla cuando `@playwright/test` del `package-lock.json` no es la versión de la imagen. Lo normal es que pase en un PR de Dependabot, que sube el paquete pero no la imagen (calculadora-discos#42). En ese mismo PR:
+**Subir Playwright: paquete e imagen en el mismo PR.** El job `versiones` falla cuando `@playwright/test` del `package-lock.json` no es la versión de la imagen. Dependabot sube el paquete pero no la imagen (calculadora-discos#42), y su PR no se puede completar sin perder la excepción de `checks.py`, que exige que todos los commits sean de Dependabot. Por eso (decisión de Víctor, 2026-11-17, VIC-22):
 
-1. Lee la versión nueva en el mensaje del error (por ejemplo, `1.66.0`).
-2. Saca el digest del índice de su imagen. Desde una terminal con red, fuera del sandbox:
+1. Cuando Dependabot abre un PR que sube `@playwright/test`, **se cierra** con un comentario que enlaza al PR propio del paso 2.
+2. **El agente** abre ese PR propio, `ci: sube Playwright a 1.66.0` (por ejemplo), con `package.json` y `package-lock.json`. En ese momento `versiones` falla, y es lo esperado.
+3. **La persona** sube la línea de la imagen en la misma rama, porque toca `.github/workflows/` y el agente no tiene el permiso `workflow`:
+   1. Saca el digest del índice de la imagen. Desde una terminal con red, fuera del sandbox:
 
 ```bash
 curl -sI -H 'Accept: application/vnd.oci.image.index.v1+json' \
   https://mcr.microsoft.com/v2/playwright/manifests/v1.66.0-noble | grep -i docker-content-digest
 ```
 
-   Con Docker, `docker buildx imagetools inspect mcr.microsoft.com/playwright:v1.66.0-noble` da el mismo digest en la línea `Digest:`. Con esa orden se sacó el de la calculadora; el del ejemplo, con `curl`.
-
-3. En `.github/workflows/tests.yml`, cambia la línea `IMAGEN:` del job `versiones` por `mcr.microsoft.com/playwright:v1.66.0-noble@sha256:<digest>`. Hazlo desde la web, en la rama del PR: el agente no puede tocar workflows.
-4. Anota la versión y el digest en `docs/herramientas.md` del proyecto, si lo lleva.
+      Con Docker, `docker buildx imagetools inspect mcr.microsoft.com/playwright:v1.66.0-noble` da el mismo digest en la línea `Digest:`. Con esa orden se sacó el de la calculadora; el del ejemplo, con `curl`.
+   2. En `.github/workflows/tests.yml`, cambia la línea `IMAGEN:` del job `versiones` por `mcr.microsoft.com/playwright:v1.66.0-noble@sha256:<digest>`. Hazlo desde la web, eligiendo **"Commit directly to the `ci/…` branch"**.
+4. `versiones` solo queda en verde cuando están los dos commits: el del paquete y el de la imagen.
+5. Anota la versión y el digest en `docs/herramientas.md` del proyecto, si lo lleva.
 
 ### G2. Navegadores de Playwright (fuera del sandbox)
 
