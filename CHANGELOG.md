@@ -4,6 +4,13 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **El ejemplo de workflow de tests, con el contenedor de Playwright por digest y tres trozos (VIC-22, PR 2 de 3, M6).**
+  - `docs/ejemplos/workflows/tests-node-playwright.yml` pasa al esquema de la calculadora desde calculadora-discos#34: los E2E, en la imagen `mcr.microsoft.com/playwright:v1.65.0-noble` fijada por el digest de su índice, repartidos en tres trozos (`--shard`) y sin `playwright install`. El job final `tests` conserva el nombre del check obligatorio.
+  - Job nuevo `versiones`: compara la etiqueta de la imagen con `@playwright/test`, `playwright` y `playwright-core` del `package-lock.json` (también las copias anidadas). Si no coinciden, falla antes de descargar la imagen con lo que hay que subir (calculadora-discos#42). La imagen se escribe solo ahí y los trozos la leen de su salida. Lo que imprime del lockfile va escapado.
+  - `actions/setup-node`, de v7.0.0 a v7.1.0, la del registro.
+  - Tests en `tests/test_ejemplo_tests_playwright.py`: el texto del workflow y los pasos de `versiones` y `tests`, ejecutados con bash sobre carpetas de prueba.
+  - `docs/herramientas.md`: la imagen, con su decisión. Renovate se queda fuera: basta con el job `versiones` (Víctor, 2026-11-16). Guía de instalación, G1: el PR de Dependabot que sube Playwright se cierra y se sustituye por uno propio `ci:`, con el paquete del agente y la imagen de la persona en la misma rama (Víctor, 2026-11-17); y cómo sacar el digest.
+
 - **La base con la ref completa en `seguridad.yml` y `sdd.yml` de la plantilla (VIC-26).** Leen `refs/remotes/origin/<base>`, como `calidad.yml` desde VIC-21: con `origin/main`, Git resolvía antes una etiqueta llamada así, que la rama puede empujar, y la configuración de gitleaks, osv-scanner y Semgrep, y la versión de `checks.py`, salían de ella. `sdd.yml` pasa a tener `GIT_NO_REPLACE_OBJECTS` y falla con un error claro si no hay rama base (fuera de `pull_request`). El `--base` por defecto de `checks.py` también es la ref completa. Tests en `tests/test_workflows_plantilla.py`: los pasos, con bash, sobre un repo con la etiqueta `origin/main` en otro commit.
 
 - **Código que sobra y duplicación nueva en la CI de la plantilla (VIC-21, PR 3 de 3; M23, parte fija).**

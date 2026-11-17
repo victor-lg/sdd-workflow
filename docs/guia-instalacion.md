@@ -492,9 +492,28 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
 1. Copia `docs/ejemplos/workflows/tests-node-playwright.yml` del repo del workflow, adaptado al stack.
 2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci/vic-N-tests`, con el ID de la issue). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci/vic-N-tests` branch"**; si no, GitHub crea ramas nuevas (`ci/vic-N-tests-1`…).
 3. Abre un PR `ci: workflow de tests`, R2. Antes de fusionarlo, pide a una sesión del agente que lo revise con `sdd-review` (2 revisores; ADR-0006). Después, fusiónalo con tu excepción de administrador.
-4. En el ruleset de `main`, añade `tests` a los checks obligatorios.
+4. En el ruleset de `main`, añade `tests` a los checks obligatorios. Solo ese: `versiones` y los trozos `e2e (n/3)` los resume él.
    - Los PR que ya estaban abiertos se quedan esperando ese check. Ciérralos y vuelve a abrirlos para lanzarlo.
    - No uses "Update branch": crearía un push tuyo que tú mismo no podrías aprobar.
+
+**Subir Playwright: paquete e imagen en el mismo PR.** El job `versiones` falla cuando `@playwright/test` del `package-lock.json` no es la versión de la imagen. Dependabot sube el paquete pero no la imagen (calculadora-discos#42), y su PR no se puede completar sin perder la excepción de `checks.py`, que exige que todos los commits sean de Dependabot. Por eso (decisión de Víctor, 2026-11-17, VIC-22):
+
+1. Cuando Dependabot abre un PR que sube `@playwright/test`, **se cierra** con un comentario que enlaza al PR propio del paso 2.
+2. **El agente** abre ese PR propio, `ci: sube Playwright a 1.66.0` (por ejemplo), con `package.json` y `package-lock.json`. En ese momento `versiones` falla, y es lo esperado.
+3. **La persona** sube la línea de la imagen en la misma rama, porque toca `.github/workflows/` y el agente no tiene el permiso `workflow`:
+   1. Saca el digest del índice de la imagen. Desde una terminal con red, fuera del sandbox:
+
+      ```bash
+      curl -sI -H 'Accept: application/vnd.oci.image.index.v1+json' \
+        https://mcr.microsoft.com/v2/playwright/manifests/v1.66.0-noble | grep -i docker-content-digest
+      ```
+
+      Con Docker, `docker buildx imagetools inspect mcr.microsoft.com/playwright:v1.66.0-noble` da el mismo digest en la línea `Digest:`. Con esa orden se sacó el de la calculadora; el del ejemplo, con `curl`.
+   2. En `.github/workflows/tests.yml`, cambia la línea `IMAGEN:` del job `versiones` por `mcr.microsoft.com/playwright:v1.66.0-noble@sha256:<digest>`. Hazlo desde la web, eligiendo **"Commit directly to the `ci/…` branch"**, con un mensaje que siga las convenciones (`ci: sube la imagen de Playwright a 1.66.0`): el PR ya no es de Dependabot y `checks.py` comprueba sus commits.
+   3. Desde ese commit, el agente no hace rebase ni force-push de la rama: reescribiría un commit que toca `.github/workflows/`, y GitHub rechaza el push porque el agente no tiene el permiso `workflow`.
+4. `versiones` solo queda en verde cuando están los dos commits: el del paquete y el de la imagen.
+5. Tras el commit de la imagen, pide a una sesión del agente `sdd-review` sobre el diff final (R2). Como el último push es tuyo, no puedes aprobarlo: fusiónalo con tu excepción de administrador, igual que los PR de workflows (ADR-0006 §7; decisión de Víctor, 2026-11-17).
+6. Anota la versión y el digest en `docs/herramientas.md` del proyecto, si lo lleva.
 
 ### G2. Navegadores de Playwright (fuera del sandbox)
 

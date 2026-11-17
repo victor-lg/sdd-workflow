@@ -1,12 +1,13 @@
-# Ejemplo del workflow SDD + IA v0.18: tests para un stack Node + Playwright.
-# Origen: calculadora-discos (ADR-0001), en uso desde 2026-10-21. Adáptalo al stack que fije el ADR del proyecto.
+# Ejemplo del workflow SDD + IA v1.1: tests para un stack Node + Playwright.
+# Origen: calculadora-discos (ADR-0001), en uso desde 2026-10-21; contenedor y trozos desde #34 (VIC-12);
+# el job `versiones`, desde VIC-22 (M6). Adáptalo al stack que fije el ADR del proyecto.
 #
 # Tests del stack (ADR-0001 §3.7). Lo añade una persona: el token del agente
 # no tiene el permiso `workflow` (N5).
 #
-# Mientras no exista package.json (antes de la primera entrega), el job
-# termina en verde sin ejecutar nada, para poder marcarlo ya como check
-# obligatorio sin bloquear los PR de documentación.
+# Mientras no exista package.json (antes de la primera entrega), el check `tests`
+# termina en verde sin ejecutar nada, para poder marcarlo ya como obligatorio sin
+# bloquear los PR de documentación.
 
 name: tests
 
@@ -22,40 +23,153 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests:
+  # La imagen de Playwright se escribe solo aquí: los trozos la leen de la salida de este job.
+  # Su versión tiene que ser exactamente la de @playwright/test del package-lock.json: con otra,
+  # los navegadores de la imagen no sirven y fallan todos los E2E (calculadora-discos#42).
+  # Dependabot sube el paquete, pero no la imagen de un workflow: este job falla, con lo que
+  # hay que subir, antes de descargarla. La sube una persona (guía de instalación, G1).
+  versiones:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      si: ${{ steps.comprobar.outputs.si }}
+      imagen: ${{ steps.comprobar.outputs.imagen }}
     steps:
       # Fijada por SHA (v7.0.1, 2026-07-17), igual que en sdd.yml.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: ¿Hay código que probar?
-        id: hay
+      # Imagen oficial de Playwright: trae Chromium, WebKit y sus dependencias del sistema, así
+      # que no hay que instalarlos en cada ejecución (con --with-deps se agotaban los 15 minutos
+      # esperando al servidor de paquetes de Ubuntu; calculadora-discos#12 y #14). Fijada por el
+      # digest de su índice multiplataforma, igual que las acciones por SHA: una etiqueta se puede
+      # volver a publicar con otro contenido. Registrada en docs/herramientas.md del workflow.
+      - name: ¿Coinciden Playwright y su imagen?
+        id: comprobar
+        env:
+          IMAGEN: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
         run: |
-          if [ -f package.json ]; then echo "si=true" >> "$GITHUB_OUTPUT"
-          else echo "si=false" >> "$GITHUB_OUTPUT"; echo "Sin package.json: no hay tests todavía."; fi
+          if [ ! -f package.json ]; then
+            echo "si=false" >> "$GITHUB_OUTPUT"
+            echo "Sin package.json: no hay tests todavía."
+            exit 0
+          fi
+          python3 -I -c '
+          import json, os, re, sys
+          def limpio(texto):
+              # Lo que sale del lockfile de la rama no puede abrir otra orden de workflow en el log.
+              return str(texto).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          def fallar(mensaje):
+              print(f"::error::{mensaje}")
+              sys.exit(1)
+          imagen = os.environ["IMAGEN"]
+          m = re.fullmatch(r"mcr\.microsoft\.com/playwright:v(\d+\.\d+\.\d+)-noble@sha256:[0-9a-f]{64}", imagen)
+          if not m:
+              fallar(f"La imagen de Playwright tiene que ser mcr.microsoft.com/playwright:vX.Y.Z-noble fijada por digest (@sha256:…), y es {limpio(imagen)}")
+          etiqueta = m.group(1)
+          try:
+              bloqueo = json.load(open("package-lock.json", encoding="utf-8"))
+          except FileNotFoundError:
+              fallar("Falta package-lock.json: sin él no se sabe qué versión de Playwright se instala")
+          except ValueError:
+              fallar("package-lock.json no es JSON válido")
+          paquetes = bloqueo.get("packages") if isinstance(bloqueo, dict) else None
+          if not isinstance(paquetes, dict):
+              fallar("package-lock.json no tiene \"packages\" (lockfileVersion 2 o 3): regenéralo con npm 7 o posterior")
+          if "node_modules/@playwright/test" not in paquetes:
+              fallar("package-lock.json no tiene @playwright/test")
+          # playwright y playwright-core son los que eligen los navegadores; @playwright/test los arrastra.
+          # También las copias anidadas (node_modules/x/node_modules/playwright-core).
+          # Un alias de npm ("pwc": "npm:playwright-core@…") deja otra ruta con el nombre real en "name".
+          # Es una protección contra descuidos, no una barrera: la rama controla también sus tests.
+          vigilados = ("@playwright/test", "playwright", "playwright-core")
+          for ruta, datos in sorted(paquetes.items()):
+              if ruta == "":
+                  continue  # la raíz es el propio proyecto, aunque se llame como uno de los vigilados
+              if not isinstance(datos, dict):
+                  fallar("package-lock.json tiene una entrada de \"packages\" que no es un objeto")
+              nombre = re.fullmatch(r"(?:.*/)?node_modules/(@playwright/test|playwright|playwright-core)", ruta)
+              nombre = nombre.group(1) if nombre else (datos.get("name") if datos.get("name") in vigilados else None)
+              version = datos.get("version")
+              if nombre and version is None:
+                  fallar(f"{nombre} no tiene versión en package-lock.json (¿un enlace local?): no se puede comparar con la imagen")
+              if nombre and version != etiqueta and ruta != "node_modules/@playwright/test" and paquetes["node_modules/@playwright/test"].get("version") == etiqueta:
+                  fallar(f"{nombre} está en {limpio(version)} en {limpio(ruta)} (package-lock.json), y @playwright/test y la imagen "
+                         f"en {etiqueta}: alinea esa copia en el lockfile (npm dedupe o la dependencia que la arrastra); la imagen está bien.")
+              if nombre and version != etiqueta:
+                  version = limpio(version)
+                  fallar(f"{nombre} está en {version} (package-lock.json) y la imagen de este workflow es la v{etiqueta}. "
+                         f"Sube la imagen a mcr.microsoft.com/playwright:v{version}-noble con su digest (guía de instalación "
+                         f"del workflow, G1): Dependabot sube el paquete, pero no la imagen.")
+          print(f"Playwright {etiqueta}: el lockfile y la imagen coinciden.")
+          '
+          echo "si=true" >> "$GITHUB_OUTPUT"
+          echo "imagen=$IMAGEN" >> "$GITHUB_OUTPUT"
 
-      # Fijada por SHA (v7.0.0, 2026-07-14). Versión de Node en .nvmrc (≥ 22).
-      - if: steps.hay.outputs.si == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+  # Los E2E se reparten en 3 trozos que corren a la vez (calculadora-discos#34): en la CI no hay
+  # GPU, el dibujo 3D se pinta por software y cada E2E tarda unas 4 veces más. Cada trozo tiene
+  # sus propios 15 minutos.
+  #
+  # El job corre como root dentro del contenedor y Chromium arranca sin su sandbox. Se acepta
+  # porque no da más privilegios que antes: el token es de solo lectura, el job no usa secretos y
+  # los E2E solo cargan la app local. El runner monta su socket de Docker en el contenedor, pero
+  # fuera de él el job ya tenía sudo sin contraseña en la misma VM efímera.
+  e2e:
+    name: e2e (${{ matrix.trozo }}/3)
+    needs: versiones
+    if: needs.versiones.outputs.si == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        trozo: [1, 2, 3]
+    container:
+      image: ${{ needs.versiones.outputs.imagen }}
+    steps:
+      # Fijada por SHA (v7.0.1, 2026-07-17), igual que en sdd.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Fijada por SHA (v7.1.0, 2026-10-08), como en calidad.yml. Versión de Node en .nvmrc (≥ 22).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
 
-      - if: steps.hay.outputs.si == 'true'
-        name: Instalar dependencias (versiones exactas del lockfile, sin scripts de instalación)
+      - name: Instalar dependencias (versiones exactas del lockfile, sin scripts de instalación)
         run: npm ci --ignore-scripts
 
-      - if: steps.hay.outputs.si == 'true'
+      # Los unitarios son rápidos: solo en el primer trozo.
+      - if: matrix.trozo == 1
         name: Tests unitarios
         run: node --test "tests/unit/**/*.test.js"
 
-      - if: steps.hay.outputs.si == 'true'
-        name: Navegadores de Playwright
-        run: npx playwright install --with-deps chromium webkit
+      - name: Tests E2E (Chromium y WebKit), trozo ${{ matrix.trozo }} de 3
+        run: npx playwright test --shard=${{ matrix.trozo }}/3
 
-      - if: steps.hay.outputs.si == 'true'
-        name: Tests E2E (Chromium y WebKit)
-        run: npx playwright test
+  # El check obligatorio del ruleset se llama "tests": este job lo mantiene. Sale en verde si
+  # `versiones` pasa y, cuando hay código, los 3 trozos terminan bien (también falla si alguno
+  # se cancela o se salta).
+  tests:
+    needs: [versiones, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: ¿Han pasado las versiones y los 3 trozos?
+        env:
+          VERSIONES: ${{ needs.versiones.result }}
+          HAY: ${{ needs.versiones.outputs.si }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          echo "Versiones: $VERSIONES. ¿Hay código?: ${HAY:-no se sabe}. E2E: $E2E."
+          test "$VERSIONES" = "success"
+          # Falla cerrado: una salida `si` vacía o mal escrita no deja el check en verde sin E2E.
+          case "$HAY" in
+            true) test "$E2E" = "success" ;;
+            false) ;;
+            *) echo "::error::versiones no dijo si hay código (si=$HAY)"; exit 1 ;;
+          esac
