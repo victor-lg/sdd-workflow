@@ -3,6 +3,7 @@
 El job `versiones` falla con un mensaje claro si el package-lock.json y la imagen no tienen la misma versión de
 Playwright (calculadora-discos#42: Dependabot subió el paquete y no la imagen). Sus pasos se ejecutan aquí con
 bash sobre carpetas de prueba; en GitHub Actions no corre nunca en este repo, solo en los proyectos que lo copian."""
+import importlib.util
 import json
 import os
 import pathlib
@@ -19,6 +20,10 @@ TEXTO = (RAIZ / "docs" / "ejemplos" / "workflows" / "tests-node-playwright.yml")
 WORKFLOW = yaml.safe_load(TEXTO)
 JOBS = WORKFLOW["jobs"]
 REGISTRO = (RAIZ / "docs" / "herramientas.md").read_text(encoding="utf-8")
+_spec = importlib.util.spec_from_file_location("nombres_de_jobs", RAIZ / "tests" / "nombres_de_jobs.py")
+nombres_de_jobs = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(nombres_de_jobs)
+nombre_del_job = nombres_de_jobs.nombre_del_job
 IMAGEN = re.compile(r"mcr\.microsoft\.com/playwright:v(\d+\.\d+\.\d+)-noble@sha256:[0-9a-f]{64}")
 
 
@@ -32,15 +37,6 @@ def lockfile(**versiones):
     for ruta, version in versiones.items():
         paquetes[ruta] = {"version": version, "dev": True}
     return {"name": "p", "lockfileVersion": 3, "requires": True, "packages": paquetes}
-
-
-def nombre_del_job(expresion, draft):
-    """El nombre que da GitHub a un job con `name: ${{ github.event.pull_request.draft && 'A' || 'B' }}`.
-    Falla si la expresión depende de otra cosa que el evento: un run relanzado conserva el evento de
-    cuando se lanzó, así que un run de borrador relanzado sigue llamándose A (VIC-33, G4 de #49)."""
-    m = re.fullmatch(r"\$\{\{ github\.event\.pull_request\.draft && '([^']+)' \|\| '([^']+)' \}\}", expresion)
-    assert m, f"el nombre no sale solo del evento: {expresion}"
-    return m.group(1) if draft else m.group(2)
 
 
 def con(version):
@@ -354,7 +350,7 @@ class CheckFinal(RepoDePrueba):
     def test_borrador_exige_lo_barato(self):
         for versiones, hay, unitarios, e2e, espera in [
             ("success", "false", "skipped", "skipped", 0),     # sin package.json, sin aviso
-            ("success", "true", "success", "success", 0),      # pasó a borrador con los E2E ya corridos
+            ("success", "true", "success", "success", 0),      # no ocurre (trozos y BORRADOR salen del mismo evento); si corrieron, cuentan
             ("success", "true", "failure", "skipped", 1),
             ("success", "true", "cancelled", "skipped", 1),
             ("success", "true", "skipped", "skipped", 1),

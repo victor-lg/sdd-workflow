@@ -88,7 +88,7 @@ En ese repo:
     - *Require review from Code Owners*;
   - *Require approval of the most recent reviewable push*: el último push lo aprueba alguien distinto de quien lo hizo;
   - *Bypass list*: solo el rol de administrador (tú), en modo **"Allow for pull requests only"**: ni siquiera tú empujas directo a `main`.
-  - Los checks requeridos (`checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`) se añaden en el bloque C, cuando GitHub ya los conoce.
+  - Los checks requeridos (`checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`) se añaden en el bloque C, cuando GitHub ya los conoce. Nunca uno que acabe en « (borrador)».
 - **Settings → Code security** (M38): activa *Dependabot alerts*. Las actualizaciones de versión las abre Dependabot solo, con `.github/dependabot.yml` (una vez al mes, agrupadas). Sus PR tocan dependencias: son R2 y los apruebas tú. Si activas también *Dependabot security updates*, abre además un PR por vulnerabilidad, sin esperar al mes.
 - **La tarea mensual** de osv-scanner (`osv-mensual.yml`, el día 1) corre sola sobre `main`; si encuentra algo, GitHub te avisa por correo de la ejecución fallida. Para lanzarla a mano: *Actions → osv-mensual → Run workflow*, sobre `main`. No la marques como check requerido.
 
@@ -379,8 +379,8 @@ Pídele a Claude, dentro de la sesión:
 **Comprobación:**
 
 1. El push y el PR funcionan desde el sandbox: GitHub está en la lista blanca y las credenciales de `gh` sirven.
-2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`, y pasan. Sin `package.json`, `mutaciones` y `codigo-sobrante` pasan con un aviso: el proyecto aún no es JS/TS. Con `package.json` y sin Stryker o sin `knip` en `devDependencies`, fallan. `duplicados` corre en cualquier lenguaje, con el `.jscpd.json` de la plantilla; en este primer PR avisa de que `main` aún no lo tiene.
-3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. `semgrep`, solo si ya comprobaste su digest (A3, paso 3).
+2. En el PR corren los checks `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`, y pasan. El PR se abre en borrador, y en borrador `mutaciones` sale como `mutaciones (borrador)`, sin Stryker (VIC-33): márcalo listo (*Ready for review*) para que corra `mutaciones` y GitHub lo conozca. Sin `package.json`, `mutaciones` y `codigo-sobrante` pasan con un aviso: el proyecto aún no es JS/TS. Con `package.json` y sin Stryker o sin `knip` en `devDependencies`, fallan. `duplicados` corre en cualquier lenguaje, con el `.jscpd.json` de la plantilla; en este primer PR avisa de que `main` aún no lo tiene.
+3. Ahora que GitHub los conoce, añádelos al ruleset: *Require status checks to pass* → `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante` y `duplicados`, cada uno con la fuente **GitHub Actions** (no *any source*): el token del agente puede crear *commit statuses* con esos nombres. **Nunca añadas `mutaciones (borrador)` ni `tests (borrador)`**: valen sin Stryker ni E2E, y el verde de un borrador serviría para fusionar el mismo commit al marcarlo listo. `semgrep`, solo si ya comprobaste su digest (A3, paso 3).
    - Si el proyecto no usa npm, quita la entrada `npm` de `.github/dependabot.yml`: sin `package.json`, Dependabot da error cada mes. Lo que tarda cada job de `seguridad` ya está medido en `docs/herramientas.md` del workflow (calculadora-discos#40); si en tu proyecto difiere mucho, apúntalo allí (PR R2).
 4. Pide a Claude que fusione el PR: GitHub lo rechaza (N4).
 5. Tú lo apruebas y lo fusionas desde el navegador.

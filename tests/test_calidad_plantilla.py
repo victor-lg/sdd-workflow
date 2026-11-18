@@ -4,6 +4,7 @@ con bash los scripts de sus pasos, como en la CI, sobre repos de prueba: la conf
 `main`, el umbral tiene que ser mayor que 0 y un test debilitado hace fallar el job. Los de Stryker
 necesitan node y npm (y red para `npm ci`). Los que ejecutan knip y jscpd de verdad corren en la CI
 (`validar`); en local se saltan si no encuentran el binario."""
+import importlib.util
 import json
 import os
 import pathlib
@@ -26,6 +27,9 @@ FIXTURE_KNIP = RAIZ / "tests" / "fixtures" / "knip"
 FIXTURE_JSCPD = RAIZ / "tests" / "fixtures" / "jscpd"
 PLANTILLA = RAIZ / "plantilla-proyecto"
 EN_LA_CI = os.environ.get("GITHUB_ACTIONS") == "true"
+_spec = importlib.util.spec_from_file_location("nombres_de_jobs", RAIZ / "tests" / "nombres_de_jobs.py")
+nombres_de_jobs = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(nombres_de_jobs)
 PAQUETE = {"name": "p", "private": True, "devDependencies": {"@stryker-mutator/core": "10.1.1"}}
 CONFIG = {"mutate": ["src/**/*.js"], "testRunner": "command", "thresholds": {"break": 80}}
 
@@ -115,8 +119,7 @@ class Borrador(unittest.TestCase):
     def test_el_check_requerido_no_existe_en_borrador(self):
         """El nombre sale solo del evento: un run de borrador relanzado con el PR ya listo sigue llamándose
         `mutaciones (borrador)`. knip y jscpd conservan su nombre: corren enteros también en borrador."""
-        sys.path.insert(0, str(RAIZ / "tests"))
-        from test_ejemplo_tests_playwright import nombre_del_job
+        nombre_del_job = nombres_de_jobs.nombre_del_job
         self.assertEqual(nombre_del_job(self.JOBS["mutaciones"]["name"], draft=True), "mutaciones (borrador)")
         self.assertEqual(nombre_del_job(self.JOBS["mutaciones"]["name"], draft=False), "mutaciones")
         for nombre in ("codigo-sobrante", "duplicados"):

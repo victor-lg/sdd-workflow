@@ -204,7 +204,9 @@ jobs:
         run: |
           echo "Versiones: $VERSIONES. ¿Hay código?: ${HAY:-no se sabe}. Unitarios: $UNITARIOS. E2E: $E2E. ¿Borrador?: ${BORRADOR:-no se sabe}."
           test "$VERSIONES" = "success"
-          # Falla cerrado: una salida `si` o `borrador` vacía o mal escrita no deja el check en verde sin E2E.
+          # Falla cerrado: una salida `si` vacía o mal escrita no deja el check en verde sin E2E. Sin
+          # código (si=false) no hay E2E que exigir y no mira el borrador; con código, un borrador que
+          # no sea true ni false falla.
           case "$HAY" in
             true) ;;
             false) exit 0 ;;
