@@ -492,7 +492,8 @@ Se hace cuando el ADR técnico del proyecto está aceptado. Lo del ejemplo es pa
 1. Copia `docs/ejemplos/workflows/tests-node-playwright.yml` del repo del workflow, adaptado al stack.
 2. Súbelo **tú** desde la web de GitHub: *Add file → Create new file* → `.github/workflows/tests.yml` → *Commit changes → Create a new branch* (`ci/vic-N-tests`, con el ID de la issue). Si añades más ficheros a esa rama, elige **"Commit directly to the `ci/vic-N-tests` branch"**; si no, GitHub crea ramas nuevas (`ci/vic-N-tests-1`…).
 3. Abre un PR `ci: workflow de tests`, R2. Antes de fusionarlo, pide a una sesión del agente que lo revise con `sdd-review` (2 revisores; ADR-0006). Después, fusiónalo con tu excepción de administrador.
-4. En el ruleset de `main`, añade `tests` a los checks obligatorios. Solo ese: `versiones` y los trozos `e2e (n/3)` los resume él.
+4. En el ruleset de `main`, añade `tests` a los checks obligatorios. Solo ese: `versiones`, `unitarios` y los trozos `e2e (n/3)` los resume él.
+   - Mientras el PR está en borrador, los E2E no corren y `tests` sale en verde con un aviso; corren al marcarlo listo y en cada push posterior (VIC-33). `mutaciones`, de `calidad.yml`, hace lo mismo con Stryker. Nunca pongas un `if:` que salte el job `tests` o `mutaciones`: un check requerido saltado cuenta como superado.
    - Los PR que ya estaban abiertos se quedan esperando ese check. Ciérralos y vuelve a abrirlos para lanzarlo.
    - No uses "Update branch": crearía un push tuyo que tú mismo no podrías aprobar.
 

@@ -16,6 +16,8 @@ import textwrap
 import time
 import unittest
 
+import yaml
+
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 CALIDAD = (RAIZ / "plantilla-proyecto" / ".github" / "workflows" / "calidad.yml").read_text(encoding="utf-8")
 REGISTRO = (RAIZ / "docs" / "herramientas.md").read_text(encoding="utf-8")
@@ -85,6 +87,56 @@ class TextoDeCalidad(unittest.TestCase):
             with self.subTest(sha=sha):
                 self.assertIn(sha, REGISTRO)
 
+
+
+class Borrador(unittest.TestCase):
+    """VIC-33: en borrador, `mutaciones` valida la configuración y avisa, pero no lanza Stryker. El job no se
+    salta nunca (un check requerido saltado cuenta como superado) y el borrador sale de la API."""
+    WORKFLOW = yaml.safe_load(CALIDAD)
+    JOBS = WORKFLOW["jobs"]
+    PASOS = JOBS["mutaciones"]["steps"]
+
+    def paso(self, nombre):
+        return next(p for p in self.PASOS if p.get("name") == nombre)
+
+    def test_corre_al_marcar_el_pr_listo(self):
+        self.assertEqual(self.WORKFLOW[True]["pull_request"]["types"], ["opened", "synchronize", "reopened", "ready_for_review"])
+
+    def test_ningun_job_se_salta(self):
+        for nombre, job in self.JOBS.items():
+            with self.subTest(job=nombre):
+                self.assertNotIn("if", list(job))
+
+    def test_solo_mutaciones_lee_los_pr(self):
+        self.assertEqual(self.JOBS["mutaciones"]["permissions"], {"contents": "read", "pull-requests": "read"})
+        for nombre in ("codigo-sobrante", "duplicados"):
+            with self.subTest(job=nombre):
+                self.assertNotIn("permissions", self.JOBS[nombre])
+
+    def test_la_consulta_es_la_del_ejemplo(self):
+        """La misma que la del job `tests` del ejemplo, cuyos tests la ejecutan con un `gh` falso
+        (tests/test_ejemplo_tests_playwright.py, clase Borrador)."""
+        ejemplo = yaml.safe_load((RAIZ / "docs" / "ejemplos" / "workflows" / "tests-node-playwright.yml").read_text(encoding="utf-8"))
+        consulta = self.PASOS[0]
+        self.assertEqual(consulta["name"], "¿Está el PR en borrador?")
+        self.assertEqual(consulta["id"], "borrador")
+        self.assertNotIn("if", consulta)
+        self.assertEqual(consulta, next(p for p in ejemplo["jobs"]["tests"]["steps"] if p.get("id") == "borrador"))
+
+    def test_stryker_solo_fuera_del_borrador(self):
+        fuera = "steps.preparar.outputs.stryker == 'si' && steps.borrador.outputs.borrador == 'false'"
+        nodo = next(p for p in self.PASOS if p.get("uses", "").startswith("actions/setup-node@"))
+        self.assertEqual(nodo["if"], fuera)
+        self.assertEqual(self.paso("Stryker")["if"], fuera)
+        # La configuración se valida también en borrador: es barato y avisa antes.
+        self.assertNotIn("if", self.paso("Configuración de Stryker de main"))
+
+    def test_en_borrador_lo_dice(self):
+        aviso = self.paso("Aviso de borrador")
+        self.assertEqual(aviso["if"], "steps.preparar.outputs.stryker == 'si' && steps.borrador.outputs.borrador == 'true'")
+        r = subprocess.run(["bash", "-e", "-c", aviso["run"]], capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("::warning::PR en borrador: Stryker no ha corrido.", r.stdout)
 
 class RepoDePrueba(unittest.TestCase):
     """Un repo con `main` y una rama, para ejecutar el paso PASO. CONFIG_PASO es el fichero de

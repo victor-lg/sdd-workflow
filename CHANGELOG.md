@@ -4,6 +4,13 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **CI barata mientras el PR está en borrador (VIC-33).**
+  - `calidad.yml` de la plantilla y el ejemplo `tests-node-playwright.yml` corren también con `ready_for_review`. En borrador no corren los trozos E2E ni Stryker; al marcar el PR listo, y en cada push posterior, corre todo. Los unitarios pasan a un job propio, `unitarios`, que corre siempre.
+  - Los jobs `tests` y `mutaciones` (checks requeridos) no se saltan nunca: un job requerido saltado cuenta como superado. En borrador salen en verde con un `::warning::` que dice qué no ha corrido; fuera del borrador, `tests` exige los tres trozos. El borrador sale de la API en ese momento (`pull-requests: read`, solo en esos dos jobs), no del evento: relanzar un run del borrador después de marcar el PR listo no da el verde barato. Si la API falla, falla.
+  - `sdd-implement`: antes de empujar, el agente ejecuta en su sandbox lo que pueda de lo que corre la CI (unitarios, Stryker, knip) y empuja una vez por ronda de G4. La CI sigue siendo la autoridad.
+  - Coste, en `docs/herramientas.md`: 40,7 minutos facturados por push de media en 20 pushes de la calculadora (cada job redondeado al minuto); unos 10,3 en borrador, estimados con esos mismos runs. Falta medirlo con los workflows nuevos en la calculadora, que sube Víctor.
+  - Tests en `tests/test_ejemplo_tests_playwright.py` (el job `tests` en los dos estados y la consulta a la API con un `gh` falso) y `tests/test_calidad_plantilla.py`.
+
 - **Regresión visual y axe en el ejemplo de E2E, y el caso de evaluación de axe (VIC-22, PR 3 de 3, M27). Plugin `sdd` 1.6.1.**
   - `docs/ejemplos/e2e/`: una página mínima con su servidor, `playwright.config.mjs` (sin tolerancias, `updateSnapshots: "none"`, Chromium y WebKit) y `ejemplo.spec.mjs`. Cada test pasa axe al llegar o en el estado nuevo y compara una captura de referencia. Las capturas se generan con la imagen de Playwright del ejemplo de workflow, y el README dice cómo generarlas y comprobarlas. Falsos positivos medidos por Víctor en el contenedor: ninguno en 20 comparaciones (`docs/herramientas.md`).
   - `@axe-core/playwright` 4.14.0 y `axe-core` 4.14.0, en el registro. Un `overrides` fija `playwright-core` en la versión de la imagen: la dependencia par de `@axe-core/playwright` metía la 1.65.1, y el job `versiones` habría fallado.

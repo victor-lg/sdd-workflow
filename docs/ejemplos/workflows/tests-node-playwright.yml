@@ -8,12 +8,17 @@
 # Mientras no exista package.json (antes de la primera entrega), el check `tests`
 # termina en verde sin ejecutar nada, para poder marcarlo ya como obligatorio sin
 # bloquear los PR de documentación.
+#
+# Borrador barato, listo completo (VIC-33): mientras el PR está en borrador solo corren
+# `versiones` y los unitarios; los E2E, al marcarlo listo (`ready_for_review`) y en cada push
+# posterior. El check `tests` lo dice con un aviso, nunca en silencio.
 
 name: tests
 
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -107,9 +112,34 @@ jobs:
           echo "si=true" >> "$GITHUB_OUTPUT"
           echo "imagen=$IMAGEN" >> "$GITHUB_OUTPUT"
 
+  # Los unitarios son rápidos y no necesitan la imagen de Playwright: corren también en borrador.
+  unitarios:
+    needs: versiones
+    if: needs.versiones.outputs.si == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Fijada por SHA (v7.0.1, 2026-07-17), igual que en sdd.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Fijada por SHA (v7.1.0, 2026-10-08), como en calidad.yml. Versión de Node en .nvmrc (≥ 22).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Instalar dependencias (versiones exactas del lockfile, sin scripts de instalación)
+        run: npm ci --ignore-scripts
+
+      - name: Tests unitarios
+        run: node --test "tests/unit/**/*.test.js"
+
   # Los E2E se reparten en 3 trozos que corren a la vez (calculadora-discos#34): en la CI no hay
   # GPU, el dibujo 3D se pinta por software y cada E2E tarda unas 4 veces más. Cada trozo tiene
-  # sus propios 15 minutos.
+  # sus propios 15 minutos. En borrador no corren: el job `tests` comprueba después, con la API,
+  # que el PR sigue en borrador (un run relanzado conserva el evento de cuando lo estaba).
   #
   # El job corre como root dentro del contenedor y Chromium arranca sin su sandbox. Se acepta
   # porque no da más privilegios que antes: el token es de solo lectura, el job no usa secretos y
@@ -118,7 +148,7 @@ jobs:
   e2e:
     name: e2e (${{ matrix.trozo }}/3)
     needs: versiones
-    if: needs.versiones.outputs.si == 'true'
+    if: needs.versiones.outputs.si == 'true' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -142,34 +172,63 @@ jobs:
       - name: Instalar dependencias (versiones exactas del lockfile, sin scripts de instalación)
         run: npm ci --ignore-scripts
 
-      # Los unitarios son rápidos: solo en el primer trozo.
-      - if: matrix.trozo == 1
-        name: Tests unitarios
-        run: node --test "tests/unit/**/*.test.js"
-
       - name: Tests E2E (Chromium y WebKit), trozo ${{ matrix.trozo }} de 3
         run: npx playwright test --shard=${{ matrix.trozo }}/3
 
-  # El check obligatorio del ruleset se llama "tests": este job lo mantiene. Sale en verde si
-  # `versiones` pasa y, cuando hay código, los 3 trozos terminan bien (también falla si alguno
-  # se cancela o se salta).
+  # El check obligatorio del ruleset se llama "tests": este job lo mantiene. Un job requerido que
+  # se salta cuenta como superado, así que este no se salta nunca y decide él:
+  # - sin código (sin package.json), verde si `versiones` pasa;
+  # - con código, exige `versiones` y los unitarios, y además
+  #   - fuera del borrador, los 3 trozos (falla si alguno falla, se cancela o se salta);
+  #   - en borrador, verde con un aviso de que los E2E no han corrido.
+  # El borrador sale de la API en este momento, no del evento: un run relanzado después de
+  # marcar el PR listo traería el evento de cuando estaba en borrador.
   tests:
-    needs: [versiones, e2e]
+    needs: [versiones, unitarios, e2e]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
-      - name: ¿Han pasado las versiones y los 3 trozos?
+      - name: ¿Está el PR en borrador?
+        id: borrador
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          borrador=$(gh api "repos/$REPO/pulls/$PR" --jq .draft) || { echo "::error::No se ha podido consultar si el PR está en borrador"; exit 1; }
+          case "$borrador" in
+            true|false) echo "borrador=$borrador" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::La API no dice si el PR está en borrador (draft=$borrador)"; exit 1 ;;
+          esac
+
+      - name: ¿Han pasado las versiones, los unitarios y los 3 trozos?
         env:
           VERSIONES: ${{ needs.versiones.result }}
           HAY: ${{ needs.versiones.outputs.si }}
+          UNITARIOS: ${{ needs.unitarios.result }}
           E2E: ${{ needs.e2e.result }}
+          BORRADOR: ${{ steps.borrador.outputs.borrador }}
         run: |
-          echo "Versiones: $VERSIONES. ¿Hay código?: ${HAY:-no se sabe}. E2E: $E2E."
+          echo "Versiones: $VERSIONES. ¿Hay código?: ${HAY:-no se sabe}. Unitarios: $UNITARIOS. E2E: $E2E. ¿Borrador?: ${BORRADOR:-no se sabe}."
           test "$VERSIONES" = "success"
-          # Falla cerrado: una salida `si` vacía o mal escrita no deja el check en verde sin E2E.
+          # Falla cerrado: una salida `si` o `borrador` vacía o mal escrita no deja el check en verde sin E2E.
           case "$HAY" in
-            true) test "$E2E" = "success" ;;
-            false) ;;
+            true) ;;
+            false) exit 0 ;;
             *) echo "::error::versiones no dijo si hay código (si=$HAY)"; exit 1 ;;
           esac
+          test "$UNITARIOS" = "success" || { echo "::error::Los unitarios no han terminado bien ($UNITARIOS)"; exit 1; }
+          case "$BORRADOR" in
+            true)
+              if [ "$E2E" = "skipped" ]; then
+                echo "::warning::PR en borrador: los E2E no han corrido. Corren al marcarlo listo (gh pr ready) y en cada push posterior."
+                exit 0
+              fi ;;
+            false) ;;
+            *) echo "::error::No se sabe si el PR está en borrador (borrador=$BORRADOR)"; exit 1 ;;
+          esac
+          test "$E2E" = "success" || { echo "::error::Los E2E no han terminado bien ($E2E)"; exit 1; }

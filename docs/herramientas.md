@@ -285,9 +285,21 @@ Decidida con el PR que la instala (PR 2 de VIC-21; Víctor, 2026-11-15, comentar
 - **Riesgo fuera del sandbox:** ninguno en el PC; solo corre en la CI y, si el agente lanza Stryker en local, dentro del sandbox.
 - **Decisión:** adoptar en la calculadora, con calculadora-discos#48 (fusionado el 2026-11-16). Otro proyecto con tests de `node:test` lo añade en su propio PR R2. La plantilla sigue con `command`.
 
+## CI barata mientras el PR está en borrador (bloque 3, VIC-33)
+
+Cada push a un PR de la calculadora costaba unos 41 minutos de Actions, casi todo en los tres trozos E2E y en `mutaciones`. El 2026-11-18 la cuenta llevaba $15,76 de los $18 incluidos en noviembre, el 89 % de la calculadora, y con el presupuesto de Actions en $0 la CI se para al agotarlos hasta el día 1.
+
+- **Qué cambia:** `calidad.yml` de la plantilla y el ejemplo de tests corren también con `ready_for_review`. Mientras el PR está en borrador, los trozos E2E no corren y `mutaciones` valida la configuración sin lanzar Stryker. Al marcarlo listo, y en cada push posterior, corre todo. Los unitarios pasan a un job propio, `unitarios`, que corre siempre.
+- **Los checks requeridos no se saltan:** un job requerido que se salta cuenta como superado. `tests` y `mutaciones` corren siempre. En borrador salen en verde con un `::warning::` que dice qué no ha corrido; fuera del borrador, `tests` exige los tres trozos.
+- **El borrador sale de la API:** lo consultan `tests` y `mutaciones` con `gh api repos/…/pulls/N --jq .draft`, con `pull-requests: read` solo en esos dos jobs. Un run relanzado conserva el evento de cuando se lanzó: con el evento, relanzar un run del borrador después de marcar el PR listo daría el verde barato. Si la API falla o no contesta `true` o `false`, el job falla.
+- **Límite aceptado:** entre `gh pr ready` y el momento en que GitHub pone en pendiente los checks del run nuevo, el verde del borrador sigue a la vista unos segundos. Quien fusione en ese hueco lo haría sin E2E. Hoy fusiona una persona, a mano y después de G4.
+- **Cómo se mide:** GitHub factura cada job redondeado al minuto, así que diez jobs de 10 s cuestan 10 minutos. La API de *timing* de Actions devuelve 0 en este repo privado; la medida es la duración de cada job (`started_at` a `completed_at`, por la API de jobs de cada intento), redondeada al minuto, sumada por push (*head SHA*), sin los saltados (Víctor, 2026-11-18).
+- **Antes (medido):** calculadora-discos#51, #52, #53, #55, #56 y #57, 20 pushes con el workflow de tests: **40,7 minutos por push de media** (de 23 a 57). Los trozos E2E, de 2 a 13 minutos cada uno; `mutaciones`, de 7 a 19.
+- **Después (estimado con esos mismos runs):** los mismos jobs sin los trozos ni Stryker, más `unitarios` y `mutaciones` sin Stryker a 1 minuto cada uno: **10,3 minutos por push en borrador de media** (de 7 a 16). Son unos 10 jobs de menos de un minuto. Bajar de ahí obligaría a fusionar checks requeridos, y queda fuera (Víctor, 2026-11-18). El criterio de VIC-33 es «unos 10 minutos facturados en borrador, sin E2E ni Stryker». **Pendiente de medir** con los workflows nuevos en la calculadora: los sube Víctor.
+
 ### `actions/setup-node`
 
-- **Qué hace:** instala Node en el runner para el job `mutaciones` (`node-version: 24`), solo si el proyecto usa Stryker. En el ejemplo de tests (`docs/ejemplos/workflows/tests-node-playwright.yml`, VIC-22), instala la versión de `.nvmrc` en cada trozo E2E, con `cache: npm`.
+- **Qué hace:** instala Node en el runner para el job `mutaciones` (`node-version: 24`), solo si el proyecto usa Stryker. En el ejemplo de tests (`docs/ejemplos/workflows/tests-node-playwright.yml`, VIC-22), instala la versión de `.nvmrc` en cada trozo E2E y, desde VIC-33, en el job `unitarios`, con `cache: npm`.
 - **Versión:** v7.1.0 (2026-10-08), fijada por el SHA de su commit, `949feb2413d6458794dcd2491c4babbbce0c15c1`, leído en el PR 2 de la API de GitHub (`repos/actions/setup-node/git/ref/tags/v7.1.0`, objeto de tipo `commit`). MIT. Dependabot la sube, como `actions/checkout`.
 - **Tiempo:** **medido** en la calculadora (calculadora-discos#48, runs 43913962175 y 43919204327; duración del paso según la API de GitHub): de 1 a 5 s, en `mutaciones` y en `codigo-sobrante`.
 - **Red:** sí, para descargar Node.
