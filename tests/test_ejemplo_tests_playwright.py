@@ -3,6 +3,7 @@
 El job `versiones` falla con un mensaje claro si el package-lock.json y la imagen no tienen la misma versión de
 Playwright (calculadora-discos#42: Dependabot subió el paquete y no la imagen). Sus pasos se ejecutan aquí con
 bash sobre carpetas de prueba; en GitHub Actions no corre nunca en este repo, solo en los proyectos que lo copian."""
+import importlib.util
 import json
 import os
 import pathlib
@@ -19,6 +20,10 @@ TEXTO = (RAIZ / "docs" / "ejemplos" / "workflows" / "tests-node-playwright.yml")
 WORKFLOW = yaml.safe_load(TEXTO)
 JOBS = WORKFLOW["jobs"]
 REGISTRO = (RAIZ / "docs" / "herramientas.md").read_text(encoding="utf-8")
+_spec = importlib.util.spec_from_file_location("nombres_de_jobs", RAIZ / "tests" / "nombres_de_jobs.py")
+nombres_de_jobs = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(nombres_de_jobs)
+nombre_del_job = nombres_de_jobs.nombre_del_job
 IMAGEN = re.compile(r"mcr\.microsoft\.com/playwright:v(\d+\.\d+\.\d+)-noble@sha256:[0-9a-f]{64}")
 
 
@@ -53,7 +58,8 @@ class RepoDePrueba(unittest.TestCase):
         definicion = paso(job, nombre)
         salida = pathlib.Path(self.temporal.name) / "salida"
         salida.write_text("")
-        entorno = dict(os.environ, GITHUB_OUTPUT=str(salida), **env)
+        entorno = dict(os.environ, GITHUB_OUTPUT=str(salida))
+        entorno.update(env)
         # Como GitHub Actions con `shell: bash` por defecto.
         r = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", definicion["run"]], cwd=self.carpeta, env=entorno,
                            capture_output=True, text=True, timeout=60)
@@ -64,6 +70,31 @@ class TextoDelEjemplo(unittest.TestCase):
     def test_solo_pull_request_y_lectura(self):
         self.assertEqual(list(WORKFLOW[True]), ["pull_request"])
         self.assertEqual(WORKFLOW["permissions"], {"contents": "read"})
+
+    def test_corre_al_marcar_el_pr_listo(self):
+        """VIC-33: sin `ready_for_review`, los E2E no correrían hasta el siguiente push tras salir del borrador."""
+        self.assertEqual(WORKFLOW[True]["pull_request"]["types"], ["opened", "synchronize", "reopened", "ready_for_review"])
+
+    def test_ningun_job_pide_mas_permisos(self):
+        for nombre, job in JOBS.items():
+            with self.subTest(job=nombre):
+                self.assertNotIn("permissions", job)
+
+    def test_el_check_requerido_no_existe_en_borrador(self):
+        """En borrador el job final se llama `tests (borrador)`: su verde barato nunca cuenta como el check
+        requerido `tests`, ni en el hueco hasta que GitHub crea el job del run de `ready_for_review`, ni
+        al relanzar un run de borrador con el PR ya listo (G4 de #49)."""
+        expresion = JOBS["tests"]["name"]
+        self.assertEqual(nombre_del_job(expresion, draft=True), "tests (borrador)")
+        self.assertEqual(nombre_del_job(expresion, draft=False), "tests")
+
+    def test_el_borrador_sale_siempre_del_evento(self):
+        """El nombre, los trozos y el aviso miran lo mismo: si uno mirara la API y otro el evento, un PR que
+        vuelve a borrador a mitad de un run podría dar el verde barato con el nombre del check requerido."""
+        self.assertIn("!github.event.pull_request.draft", JOBS["e2e"]["if"])
+        self.assertEqual(paso("tests", CheckFinal.PASO)["env"]["BORRADOR"], "${{ github.event.pull_request.draft }}")
+        self.assertNotIn("gh api", TEXTO)
+        self.assertNotIn("steps.borrador", TEXTO)
 
     def test_la_imagen_se_escribe_una_vez_y_por_digest(self):
         """Una sola imagen en el fichero, la del job `versiones`, fijada por el digest de su índice."""
@@ -80,24 +111,26 @@ class TextoDelEjemplo(unittest.TestCase):
     def test_los_trozos_usan_la_imagen_de_versiones(self):
         e2e = JOBS["e2e"]
         self.assertEqual(e2e["needs"], "versiones")
-        self.assertEqual(e2e["if"], "needs.versiones.outputs.si == 'true'")
+        self.assertEqual(e2e["if"], "needs.versiones.outputs.si == 'true' && !github.event.pull_request.draft")
         self.assertEqual(e2e["container"], {"image": "${{ needs.versiones.outputs.imagen }}"})
         self.assertEqual(e2e["strategy"]["matrix"]["trozo"], [1, 2, 3])
         self.assertFalse(e2e["strategy"]["fail-fast"])
 
     def test_pasos_de_los_trozos(self):
-        """En orden: checkout, Node, npm ci, unitarios solo en el primer trozo, y su trozo de E2E."""
+        """En orden: checkout, Node, npm ci y su trozo de E2E. Los unitarios tienen su job (VIC-33)."""
         pasos = JOBS["e2e"]["steps"]
-        usos = [p.get("uses", "").split("@")[0] for p in pasos]
-        runs = [p.get("run", "") for p in pasos]
-        self.assertEqual(usos[:2], ["actions/checkout", "actions/setup-node"])
-        ci = runs.index("npm ci --ignore-scripts")
-        unitarios = next(i for i, p in enumerate(pasos) if p.get("name") == "Tests unitarios")
-        self.assertEqual(pasos[unitarios]["if"], "matrix.trozo == 1")
-        self.assertEqual(pasos[unitarios]["run"], 'node --test "tests/unit/**/*.test.js"')
-        self.assertEqual(runs[-1], "npx playwright test --shard=${{ matrix.trozo }}/3")
-        self.assertLess(ci, unitarios)
-        self.assertLess(unitarios, len(pasos) - 1)
+        self.assertEqual([p.get("uses", "").split("@")[0] for p in pasos[:2]], ["actions/checkout", "actions/setup-node"])
+        self.assertEqual([p.get("run") for p in pasos[2:]], ["npm ci --ignore-scripts", "npx playwright test --shard=${{ matrix.trozo }}/3"])
+
+    def test_unitarios_tambien_en_borrador(self):
+        """VIC-33: los unitarios son baratos y corren en borrador, sin la imagen de Playwright."""
+        unitarios = JOBS["unitarios"]
+        self.assertEqual(unitarios["needs"], "versiones")
+        self.assertEqual(unitarios["if"], "needs.versiones.outputs.si == 'true'")
+        self.assertNotIn("container", unitarios)
+        pasos = unitarios["steps"]
+        self.assertEqual([p.get("uses", "").split("@")[0] for p in pasos[:2]], ["actions/checkout", "actions/setup-node"])
+        self.assertEqual([p.get("run") for p in pasos[2:]], ["npm ci --ignore-scripts", 'node --test "tests/unit/**/*.test.js"'])
 
     def test_no_instala_navegadores(self):
         """Los trae la imagen: `playwright install` volvería a descargarlos (y con --with-deps, a esperar a apt)."""
@@ -110,16 +143,21 @@ class TextoDelEjemplo(unittest.TestCase):
         self.assertEqual(paso("versiones", "¿Coinciden Playwright y su imagen?")["id"], "comprobar")
         self.assertEqual(JOBS["versiones"]["outputs"], {"si": "${{ steps.comprobar.outputs.si }}",
                                                          "imagen": "${{ steps.comprobar.outputs.imagen }}"})
-        self.assertEqual(paso("tests", "¿Han pasado las versiones y los 3 trozos?")["env"], {
+        self.assertEqual(paso("tests", CheckFinal.PASO)["env"], {
             "VERSIONES": "${{ needs.versiones.result }}",
             "HAY": "${{ needs.versiones.outputs.si }}",
+            "UNITARIOS": "${{ needs.unitarios.result }}",
             "E2E": "${{ needs.e2e.result }}",
+            "BORRADOR": "${{ github.event.pull_request.draft }}",
         })
 
     def test_check_final_tests(self):
+        """No se salta nunca: un job requerido saltado cuenta como superado (VIC-33)."""
         tests = JOBS["tests"]
-        self.assertEqual(tests["needs"], ["versiones", "e2e"])
+        self.assertEqual(tests["needs"], ["versiones", "unitarios", "e2e"])
         self.assertEqual(tests["if"], "always()")
+        self.assertEqual([p["name"] for p in tests["steps"]], [CheckFinal.PASO])
+        self.assertTrue(all("if" not in p for p in tests["steps"]))
 
     def test_tiempo_maximo_en_cada_job(self):
         for nombre, job in JOBS.items():
@@ -137,7 +175,7 @@ class TextoDelEjemplo(unittest.TestCase):
                     self.assertTrue(ref in REGISTRO, f"{accion}@{ref} no está en docs/herramientas.md")
 
     def test_sin_credenciales_en_el_checkout(self):
-        for job in ("versiones", "e2e"):
+        for job in ("versiones", "unitarios", "e2e"):
             checkout = next(p for p in JOBS[job]["steps"] if p.get("uses", "").startswith("actions/checkout@"))
             self.assertIs(checkout["with"]["persist-credentials"], False)
 
@@ -277,27 +315,63 @@ class Versiones(RepoDePrueba):
 
 
 class CheckFinal(RepoDePrueba):
-    """El job `tests`, que mantiene el nombre del check obligatorio."""
-    PASO = "¿Han pasado las versiones y los 3 trozos?"
+    """El job `tests`, que mantiene el nombre del check obligatorio, en los dos estados del PR (VIC-33)."""
+    PASO = "¿Han pasado las versiones, los unitarios y los 3 trozos?"
 
-    def final(self, versiones, hay, e2e):
-        return self.ejecutar("tests", self.PASO, {"VERSIONES": versiones, "HAY": hay, "E2E": e2e})[0]
+    def final(self, versiones, hay, unitarios, e2e, borrador):
+        return self.ejecutar("tests", self.PASO, {"VERSIONES": versiones, "HAY": hay, "UNITARIOS": unitarios,
+                                                  "E2E": e2e, "BORRADOR": borrador})
 
-    def test_resultados(self):
-        for versiones, hay, e2e, espera in [
-            ("success", "true", "success", 0),
-            ("success", "false", "skipped", 0),     # sin package.json
-            ("success", "true", "failure", 1),
-            ("success", "true", "cancelled", 1),
-            ("success", "true", "skipped", 1),
-            ("success", "", "skipped", 1),          # salida `si` vacía: falla cerrado
-            ("success", "verdadero", "success", 1),
-            ("failure", "", "skipped", 1),          # versiones distintas
-            ("cancelled", "", "skipped", 1),
-            ("cancelled", "true", "success", 1),   # versiones no terminó bien, aunque llegara a escribir `si`
+    def test_listo_exige_los_trozos(self):
+        for versiones, hay, unitarios, e2e, espera in [
+            ("success", "true", "success", "success", 0),
+            ("success", "false", "skipped", "skipped", 0),     # sin package.json
+            ("success", "true", "success", "failure", 1),
+            ("success", "true", "success", "cancelled", 1),
+            ("success", "true", "success", "skipped", 1),      # relanzado con el evento del borrador
+            ("success", "true", "failure", "success", 1),
+            ("success", "true", "skipped", "success", 1),
+            ("success", "", "skipped", "skipped", 1),          # salida `si` vacía: falla cerrado
+            ("success", "verdadero", "success", "success", 1),
+            ("failure", "", "skipped", "skipped", 1),          # versiones distintas
+            ("cancelled", "", "skipped", "skipped", 1),
+            ("cancelled", "true", "success", "success", 1),    # versiones no terminó bien, aunque llegara a escribir `si`
         ]:
-            with self.subTest(versiones=versiones, hay=hay, e2e=e2e):
-                self.assertEqual(self.final(versiones, hay, e2e) != 0, bool(espera))
+            with self.subTest(versiones=versiones, hay=hay, unitarios=unitarios, e2e=e2e):
+                codigo, texto, _ = self.final(versiones, hay, unitarios, e2e, "false")
+                self.assertEqual(codigo != 0, bool(espera), texto)
+                self.assertNotIn("::warning::", texto)
+
+    def test_borrador_verde_con_aviso_sin_e2e(self):
+        codigo, texto, _ = self.final("success", "true", "success", "skipped", "true")
+        self.assertEqual(codigo, 0, texto)
+        self.assertIn("::warning::PR en borrador: los E2E no han corrido.", texto)
+
+    def test_borrador_exige_lo_barato(self):
+        for versiones, hay, unitarios, e2e, espera in [
+            ("success", "false", "skipped", "skipped", 0),     # sin package.json, sin aviso
+            ("success", "true", "success", "success", 0),      # no ocurre (trozos y BORRADOR salen del mismo evento); si corrieron, cuentan
+            ("success", "true", "failure", "skipped", 1),
+            ("success", "true", "cancelled", "skipped", 1),
+            ("success", "true", "skipped", "skipped", 1),
+            ("success", "true", "success", "failure", 1),      # si corrieron, cuentan
+            ("success", "true", "success", "cancelled", 1),
+            ("failure", "", "skipped", "skipped", 1),
+            ("success", "", "skipped", "skipped", 1),
+        ]:
+            with self.subTest(versiones=versiones, hay=hay, unitarios=unitarios, e2e=e2e):
+                codigo, texto, _ = self.final(versiones, hay, unitarios, e2e, "true")
+                self.assertEqual(codigo != 0, bool(espera), texto)
+                self.assertNotIn("::warning::", texto)
+
+    def test_sin_saber_si_hay_borrador_falla(self):
+        for borrador in ("", "null", "verdadero"):
+            with self.subTest(borrador=borrador):
+                codigo, texto, _ = self.final("success", "true", "success", "skipped", borrador)
+                self.assertNotEqual(codigo, 0, texto)
+                self.assertIn("::error::No se sabe si el PR está en borrador", texto)
+                codigo, texto, _ = self.final("success", "true", "success", "success", borrador)
+                self.assertNotEqual(codigo, 0, texto)
 
 
 if __name__ == "__main__":

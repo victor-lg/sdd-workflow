@@ -4,6 +4,7 @@ con bash los scripts de sus pasos, como en la CI, sobre repos de prueba: la conf
 `main`, el umbral tiene que ser mayor que 0 y un test debilitado hace fallar el job. Los de Stryker
 necesitan node y npm (y red para `npm ci`). Los que ejecutan knip y jscpd de verdad corren en la CI
 (`validar`); en local se saltan si no encuentran el binario."""
+import importlib.util
 import json
 import os
 import pathlib
@@ -16,6 +17,8 @@ import textwrap
 import time
 import unittest
 
+import yaml
+
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 CALIDAD = (RAIZ / "plantilla-proyecto" / ".github" / "workflows" / "calidad.yml").read_text(encoding="utf-8")
 REGISTRO = (RAIZ / "docs" / "herramientas.md").read_text(encoding="utf-8")
@@ -24,6 +27,9 @@ FIXTURE_KNIP = RAIZ / "tests" / "fixtures" / "knip"
 FIXTURE_JSCPD = RAIZ / "tests" / "fixtures" / "jscpd"
 PLANTILLA = RAIZ / "plantilla-proyecto"
 EN_LA_CI = os.environ.get("GITHUB_ACTIONS") == "true"
+_spec = importlib.util.spec_from_file_location("nombres_de_jobs", RAIZ / "tests" / "nombres_de_jobs.py")
+nombres_de_jobs = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(nombres_de_jobs)
 PAQUETE = {"name": "p", "private": True, "devDependencies": {"@stryker-mutator/core": "10.1.1"}}
 CONFIG = {"mutate": ["src/**/*.js"], "testRunner": "command", "thresholds": {"break": 80}}
 
@@ -84,6 +90,59 @@ class TextoDeCalidad(unittest.TestCase):
         for sha in re.findall(r"uses: (?!actions/checkout@)\S+@([0-9a-f]{40})", CALIDAD):
             with self.subTest(sha=sha):
                 self.assertIn(sha, REGISTRO)
+
+
+class Borrador(unittest.TestCase):
+    """VIC-33: en borrador, `mutaciones` valida la configuración y avisa, pero no lanza Stryker. El job no se
+    salta nunca (un check requerido saltado cuenta como superado) y en borrador se llama `mutaciones
+    (borrador)`, así que su verde barato nunca cuenta como el check requerido (G4 de #49)."""
+    WORKFLOW = yaml.safe_load(CALIDAD)
+    JOBS = WORKFLOW["jobs"]
+    PASOS = JOBS["mutaciones"]["steps"]
+
+    def paso(self, nombre):
+        return next(p for p in self.PASOS if p.get("name") == nombre)
+
+    def test_corre_al_marcar_el_pr_listo(self):
+        self.assertEqual(self.WORKFLOW[True]["pull_request"]["types"], ["opened", "synchronize", "reopened", "ready_for_review"])
+
+    def test_ningun_job_se_salta(self):
+        for nombre, job in self.JOBS.items():
+            with self.subTest(job=nombre):
+                self.assertNotIn("if", list(job))
+
+    def test_ningun_job_pide_mas_permisos(self):
+        for nombre, job in self.JOBS.items():
+            with self.subTest(job=nombre):
+                self.assertNotIn("permissions", job)
+
+    def test_el_check_requerido_no_existe_en_borrador(self):
+        """El nombre sale solo del evento: un run de borrador relanzado con el PR ya listo sigue llamándose
+        `mutaciones (borrador)`. knip y jscpd conservan su nombre: corren enteros también en borrador."""
+        nombre_del_job = nombres_de_jobs.nombre_del_job
+        self.assertEqual(nombre_del_job(self.JOBS["mutaciones"]["name"], draft=True), "mutaciones (borrador)")
+        self.assertEqual(nombre_del_job(self.JOBS["mutaciones"]["name"], draft=False), "mutaciones")
+        for nombre in ("codigo-sobrante", "duplicados"):
+            with self.subTest(job=nombre):
+                self.assertNotIn("name", self.JOBS[nombre])
+
+    def test_stryker_solo_fuera_del_borrador(self):
+        """Del evento, como el nombre: con la API, un PR que vuelve a borrador a mitad del run daría un
+        `mutaciones` sin Stryker. Las expresiones las evalúa GitHub: aquí se comprueba su texto."""
+        fuera = "steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft"
+        nodo = next(p for p in self.PASOS if p.get("uses", "").startswith("actions/setup-node@"))
+        self.assertEqual(nodo["if"], fuera)
+        self.assertEqual(self.paso("Stryker")["if"], fuera)
+        self.assertNotIn("gh api", CALIDAD)
+        # La configuración se valida también en borrador: es barato y avisa antes.
+        self.assertNotIn("if", self.paso("Configuración de Stryker de main"))
+
+    def test_en_borrador_lo_dice(self):
+        aviso = self.paso("Aviso de borrador")
+        self.assertEqual(aviso["if"], "steps.preparar.outputs.stryker == 'si' && github.event.pull_request.draft")
+        r = subprocess.run(["bash", "-e", "-c", aviso["run"]], capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("::warning::PR en borrador: Stryker no ha corrido.", r.stdout)
 
 
 class RepoDePrueba(unittest.TestCase):

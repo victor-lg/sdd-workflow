@@ -2,7 +2,7 @@
 #
 # En cada PR contra `main`: mutaciones con Stryker (JS/TS), código que sobra con knip (JS/TS)
 # y duplicación nueva con jscpd (cualquier lenguaje). El nombre de cada job es el check que se
-# marca como requerido en la regla de `main`. El agente no puede modificar este fichero: su
+# marca como requerido en la regla de `main` (en borrador, `mutaciones` lleva « (borrador)»). El agente no puede modificar este fichero: su
 # token no tiene el permiso `workflow` (ADR-0005, caso N5).
 #
 # Solo `pull_request` (nunca `pull_request_target`) y sin `workflow_dispatch`, por lo mismo
@@ -21,12 +21,21 @@
 # knip y jscpd siguen la misma regla: la configuración es la de `main`. knip sale de
 # node_modules, como Stryker; jscpd, de su release de GitHub con la suma fijada aquí, para que
 # un manifiesto de la rama no pueda sustituirlo. Ninguno respeta el .gitignore de la rama.
+#
+# Borrador barato, listo completo (VIC-33): mientras el PR está en borrador, `mutaciones` valida
+# la configuración pero no lanza Stryker, y lo dice con un aviso; corre entero al marcarlo listo
+# (`ready_for_review`) y en cada push posterior. El job no se salta nunca (un check requerido
+# saltado cuenta como superado) y en borrador se llama `mutaciones (borrador)`: el verde barato
+# nunca lleva el nombre del check requerido. El nombre y Stryker salen del evento, como en el
+# job `tests` del ejemplo de tests: un run de borrador relanzado conserva los dos. knip y jscpd
+# son baratos y corren siempre.
 
 name: calidad
 
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -44,6 +53,7 @@ env:
 
 jobs:
   mutaciones:
+    name: ${{ github.event.pull_request.draft && 'mutaciones (borrador)' || 'mutaciones' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -94,7 +104,7 @@ jobs:
 
       # Fijada por SHA (v7.1.0, 2026-10-08). Sin caché: la de un PR la escribe código de la rama.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: steps.preparar.outputs.stryker == 'si'
+        if: steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft
         with:
           node-version: 24
           package-manager-cache: false
@@ -106,7 +116,7 @@ jobs:
       # deba mutar se saca con `mutate`, en la configuración de `main`. Se mira en el informe
       # JSON de Stryker, no en el texto del diff, que tenía formas de esconderse (G4).
       - name: Stryker
-        if: steps.preparar.outputs.stryker == 'si'
+        if: steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           [ -x node_modules/.bin/stryker ] || { echo "::error::npm ci no instaló Stryker"; exit 1; }
@@ -140,6 +150,11 @@ jobs:
           ' "$informe" || { echo "::error::Hay mutantes Ignored: no cuentan en la puntuación"; exit 1; }
           fi
           exit "$estado"
+
+      - name: Aviso de borrador
+        if: steps.preparar.outputs.stryker == 'si' && github.event.pull_request.draft
+        run: |
+          echo "::warning::PR en borrador: Stryker no ha corrido. Corre al marcarlo listo (gh pr ready) y en cada push posterior."
 
   codigo-sobrante:
     runs-on: ubuntu-latest
