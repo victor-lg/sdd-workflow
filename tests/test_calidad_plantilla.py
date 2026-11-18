@@ -88,10 +88,10 @@ class TextoDeCalidad(unittest.TestCase):
                 self.assertIn(sha, REGISTRO)
 
 
-
 class Borrador(unittest.TestCase):
     """VIC-33: en borrador, `mutaciones` valida la configuración y avisa, pero no lanza Stryker. El job no se
-    salta nunca (un check requerido saltado cuenta como superado) y el borrador sale de la API."""
+    salta nunca (un check requerido saltado cuenta como superado) y en borrador se llama `mutaciones
+    (borrador)`, así que su verde barato nunca cuenta como el check requerido (G4 de #49)."""
     WORKFLOW = yaml.safe_load(CALIDAD)
     JOBS = WORKFLOW["jobs"]
     PASOS = JOBS["mutaciones"]["steps"]
@@ -107,36 +107,40 @@ class Borrador(unittest.TestCase):
             with self.subTest(job=nombre):
                 self.assertNotIn("if", list(job))
 
-    def test_solo_mutaciones_lee_los_pr(self):
-        self.assertEqual(self.JOBS["mutaciones"]["permissions"], {"contents": "read", "pull-requests": "read"})
+    def test_ningun_job_pide_mas_permisos(self):
+        for nombre, job in self.JOBS.items():
+            with self.subTest(job=nombre):
+                self.assertNotIn("permissions", job)
+
+    def test_el_check_requerido_no_existe_en_borrador(self):
+        """El nombre sale solo del evento: un run de borrador relanzado con el PR ya listo sigue llamándose
+        `mutaciones (borrador)`. knip y jscpd conservan su nombre: corren enteros también en borrador."""
+        sys.path.insert(0, str(RAIZ / "tests"))
+        from test_ejemplo_tests_playwright import nombre_del_job
+        self.assertEqual(nombre_del_job(self.JOBS["mutaciones"]["name"], draft=True), "mutaciones (borrador)")
+        self.assertEqual(nombre_del_job(self.JOBS["mutaciones"]["name"], draft=False), "mutaciones")
         for nombre in ("codigo-sobrante", "duplicados"):
             with self.subTest(job=nombre):
-                self.assertNotIn("permissions", self.JOBS[nombre])
-
-    def test_la_consulta_es_la_del_ejemplo(self):
-        """La misma que la del job `tests` del ejemplo, cuyos tests la ejecutan con un `gh` falso
-        (tests/test_ejemplo_tests_playwright.py, clase Borrador)."""
-        ejemplo = yaml.safe_load((RAIZ / "docs" / "ejemplos" / "workflows" / "tests-node-playwright.yml").read_text(encoding="utf-8"))
-        consulta = self.PASOS[0]
-        self.assertEqual(consulta["name"], "¿Está el PR en borrador?")
-        self.assertEqual(consulta["id"], "borrador")
-        self.assertNotIn("if", consulta)
-        self.assertEqual(consulta, next(p for p in ejemplo["jobs"]["tests"]["steps"] if p.get("id") == "borrador"))
+                self.assertNotIn("name", self.JOBS[nombre])
 
     def test_stryker_solo_fuera_del_borrador(self):
-        fuera = "steps.preparar.outputs.stryker == 'si' && steps.borrador.outputs.borrador == 'false'"
+        """Del evento, como el nombre: con la API, un PR que vuelve a borrador a mitad del run daría un
+        `mutaciones` sin Stryker. Las expresiones las evalúa GitHub: aquí se comprueba su texto."""
+        fuera = "steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft"
         nodo = next(p for p in self.PASOS if p.get("uses", "").startswith("actions/setup-node@"))
         self.assertEqual(nodo["if"], fuera)
         self.assertEqual(self.paso("Stryker")["if"], fuera)
+        self.assertNotIn("gh api", CALIDAD)
         # La configuración se valida también en borrador: es barato y avisa antes.
         self.assertNotIn("if", self.paso("Configuración de Stryker de main"))
 
     def test_en_borrador_lo_dice(self):
         aviso = self.paso("Aviso de borrador")
-        self.assertEqual(aviso["if"], "steps.preparar.outputs.stryker == 'si' && steps.borrador.outputs.borrador == 'true'")
+        self.assertEqual(aviso["if"], "steps.preparar.outputs.stryker == 'si' && github.event.pull_request.draft")
         r = subprocess.run(["bash", "-e", "-c", aviso["run"]], capture_output=True, text=True, timeout=10)
         self.assertEqual(r.returncode, 0)
         self.assertIn("::warning::PR en borrador: Stryker no ha corrido.", r.stdout)
+
 
 class RepoDePrueba(unittest.TestCase):
     """Un repo con `main` y una rama, para ejecutar el paso PASO. CONFIG_PASO es el fichero de

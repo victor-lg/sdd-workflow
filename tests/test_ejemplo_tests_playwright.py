@@ -34,6 +34,15 @@ def lockfile(**versiones):
     return {"name": "p", "lockfileVersion": 3, "requires": True, "packages": paquetes}
 
 
+def nombre_del_job(expresion, draft):
+    """El nombre que da GitHub a un job con `name: ${{ github.event.pull_request.draft && 'A' || 'B' }}`.
+    Falla si la expresión depende de otra cosa que el evento: un run relanzado conserva el evento de
+    cuando se lanzó, así que un run de borrador relanzado sigue llamándose A (VIC-33, G4 de #49)."""
+    m = re.fullmatch(r"\$\{\{ github\.event\.pull_request\.draft && '([^']+)' \|\| '([^']+)' \}\}", expresion)
+    assert m, f"el nombre no sale solo del evento: {expresion}"
+    return m.group(1) if draft else m.group(2)
+
+
 def con(version):
     return lockfile(**{"node_modules/@playwright/test": version, "node_modules/playwright": version,
                        "node_modules/playwright-core": version})
@@ -70,14 +79,26 @@ class TextoDelEjemplo(unittest.TestCase):
         """VIC-33: sin `ready_for_review`, los E2E no correrían hasta el siguiente push tras salir del borrador."""
         self.assertEqual(WORKFLOW[True]["pull_request"]["types"], ["opened", "synchronize", "reopened", "ready_for_review"])
 
-    def test_solo_el_job_final_lee_los_pr(self):
-        """El job `tests` consulta el borrador en la API; ningún otro job tiene más permisos que leer el código."""
+    def test_ningun_job_pide_mas_permisos(self):
         for nombre, job in JOBS.items():
             with self.subTest(job=nombre):
-                if nombre == "tests":
-                    self.assertEqual(job["permissions"], {"contents": "read", "pull-requests": "read"})
-                else:
-                    self.assertNotIn("permissions", job)
+                self.assertNotIn("permissions", job)
+
+    def test_el_check_requerido_no_existe_en_borrador(self):
+        """En borrador el job final se llama `tests (borrador)`: su verde barato nunca cuenta como el check
+        requerido `tests`, ni en el hueco hasta que GitHub crea el job del run de `ready_for_review`, ni
+        al relanzar un run de borrador con el PR ya listo (G4 de #49)."""
+        expresion = JOBS["tests"]["name"]
+        self.assertEqual(nombre_del_job(expresion, draft=True), "tests (borrador)")
+        self.assertEqual(nombre_del_job(expresion, draft=False), "tests")
+
+    def test_el_borrador_sale_siempre_del_evento(self):
+        """El nombre, los trozos y el aviso miran lo mismo: si uno mirara la API y otro el evento, un PR que
+        vuelve a borrador a mitad de un run podría dar el verde barato con el nombre del check requerido."""
+        self.assertIn("!github.event.pull_request.draft", JOBS["e2e"]["if"])
+        self.assertEqual(paso("tests", CheckFinal.PASO)["env"]["BORRADOR"], "${{ github.event.pull_request.draft }}")
+        self.assertNotIn("gh api", TEXTO)
+        self.assertNotIn("steps.borrador", TEXTO)
 
     def test_la_imagen_se_escribe_una_vez_y_por_digest(self):
         """Una sola imagen en el fichero, la del job `versiones`, fijada por el digest de su índice."""
@@ -131,19 +152,15 @@ class TextoDelEjemplo(unittest.TestCase):
             "HAY": "${{ needs.versiones.outputs.si }}",
             "UNITARIOS": "${{ needs.unitarios.result }}",
             "E2E": "${{ needs.e2e.result }}",
-            "BORRADOR": "${{ steps.borrador.outputs.borrador }}",
+            "BORRADOR": "${{ github.event.pull_request.draft }}",
         })
-        consulta = paso("tests", Borrador.PASO)
-        self.assertEqual(consulta["id"], "borrador")
-        self.assertEqual(consulta["env"], {"GH_TOKEN": "${{ github.token }}", "PR": "${{ github.event.pull_request.number }}",
-                                           "REPO": "${{ github.repository }}"})
 
     def test_check_final_tests(self):
         """No se salta nunca: un job requerido saltado cuenta como superado (VIC-33)."""
         tests = JOBS["tests"]
         self.assertEqual(tests["needs"], ["versiones", "unitarios", "e2e"])
         self.assertEqual(tests["if"], "always()")
-        self.assertEqual([p["name"] for p in tests["steps"]], [Borrador.PASO, CheckFinal.PASO])
+        self.assertEqual([p["name"] for p in tests["steps"]], [CheckFinal.PASO])
         self.assertTrue(all("if" not in p for p in tests["steps"]))
 
     def test_tiempo_maximo_en_cada_job(self):
@@ -299,40 +316,6 @@ class Versiones(RepoDePrueba):
         codigo, texto, _ = self.comprobar()
         self.assertNotEqual(codigo, 0)
         self.assertIn("::error::package-lock.json no tiene @playwright/test", texto)
-
-
-class Borrador(RepoDePrueba):
-    """El paso del job `tests` que pregunta a la API si el PR sigue en borrador, con un `gh` falso en el PATH."""
-    PASO = "¿Está el PR en borrador?"
-
-    def consultar(self, respuesta, estado=0):
-        bin_ = pathlib.Path(self.temporal.name) / "bin"
-        bin_.mkdir(exist_ok=True)
-        llamadas = pathlib.Path(self.temporal.name) / "llamadas"
-        llamadas.unlink(missing_ok=True)
-        gh = bin_ / "gh"
-        gh.write_text(f'#!/bin/sh\necho "$@" >> {llamadas}\nprintf %s "{respuesta}"\nexit {estado}\n')
-        gh.chmod(0o755)
-        env = {"PATH": f"{bin_}:{os.environ['PATH']}", "GH_TOKEN": "x", "PR": "7", "REPO": "o/r"}
-        codigo, texto, salidas = self.ejecutar("tests", self.PASO, env)
-        return codigo, texto, salidas, llamadas.read_text() if llamadas.exists() else ""
-
-    def test_pregunta_por_el_pr_y_devuelve_su_estado(self):
-        for draft in ("true", "false"):
-            with self.subTest(draft=draft):
-                codigo, texto, salidas, llamadas = self.consultar(draft)
-                self.assertEqual(codigo, 0, texto)
-                self.assertEqual(salidas, {"borrador": draft})
-                self.assertEqual(llamadas.split(), ["api", "repos/o/r/pulls/7", "--jq", ".draft"])
-
-    def test_falla_cerrado(self):
-        """Si la API falla o contesta otra cosa, no hay `borrador` y el check final falla."""
-        for respuesta, estado in [("", 1), ("true", 1), ("null", 0), ("", 0), ("verdadero", 0)]:
-            with self.subTest(respuesta=respuesta, estado=estado):
-                codigo, texto, salidas, _ = self.consultar(respuesta, estado)
-                self.assertNotEqual(codigo, 0, texto)
-                self.assertEqual(salidas, {})
-                self.assertIn("::error::", texto)
 
 
 class CheckFinal(RepoDePrueba):

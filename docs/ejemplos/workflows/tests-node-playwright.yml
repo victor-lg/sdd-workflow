@@ -11,7 +11,8 @@
 #
 # Borrador barato, listo completo (VIC-33): mientras el PR está en borrador solo corren
 # `versiones` y los unitarios; los E2E, al marcarlo listo (`ready_for_review`) y en cada push
-# posterior. El check `tests` lo dice con un aviso, nunca en silencio.
+# posterior. En borrador el job final se llama `tests (borrador)` y lo dice con un aviso: el
+# check requerido `tests` solo existe fuera del borrador.
 
 name: tests
 
@@ -138,8 +139,7 @@ jobs:
 
   # Los E2E se reparten en 3 trozos que corren a la vez (calculadora-discos#34): en la CI no hay
   # GPU, el dibujo 3D se pinta por software y cada E2E tarda unas 4 veces más. Cada trozo tiene
-  # sus propios 15 minutos. En borrador no corren: el job `tests` comprueba después, con la API,
-  # que el PR sigue en borrador (un run relanzado conserva el evento de cuando lo estaba).
+  # sus propios 15 minutos. En borrador no corren.
   #
   # El job corre como root dentro del contenedor y Chromium arranca sin su sandbox. Se acepta
   # porque no da más privilegios que antes: el token es de solo lectura, el job no usa secretos y
@@ -181,37 +181,26 @@ jobs:
   # - con código, exige `versiones` y los unitarios, y además
   #   - fuera del borrador, los 3 trozos (falla si alguno falla, se cancela o se salta);
   #   - en borrador, verde con un aviso de que los E2E no han corrido.
-  # El borrador sale de la API en este momento, no del evento: un run relanzado después de
-  # marcar el PR listo traería el evento de cuando estaba en borrador.
+  # En borrador se llama `tests (borrador)`: el check requerido `tests` no existe en el SHA hasta
+  # que corre el run de `ready_for_review`, y GitHub crea este job cuando acaban los trozos (G4 de
+  # sdd-workflow#49). Con el nombre de siempre, el verde barato serviría para fusionar en ese
+  # hueco, o si el run nuevo no llega a correr (un fork con la aprobación pendiente). El nombre,
+  # los trozos y el aviso salen del evento: un run de borrador relanzado conserva su evento y su
+  # nombre, y nunca pasa por `tests`.
   tests:
+    name: ${{ github.event.pull_request.draft && 'tests (borrador)' || 'tests' }}
     needs: [versiones, unitarios, e2e]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
     steps:
-      - name: ¿Está el PR en borrador?
-        id: borrador
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          borrador=$(gh api "repos/$REPO/pulls/$PR" --jq .draft) || { echo "::error::No se ha podido consultar si el PR está en borrador"; exit 1; }
-          case "$borrador" in
-            true|false) echo "borrador=$borrador" >> "$GITHUB_OUTPUT" ;;
-            *) echo "::error::La API no dice si el PR está en borrador (draft=$borrador)"; exit 1 ;;
-          esac
-
       - name: ¿Han pasado las versiones, los unitarios y los 3 trozos?
         env:
           VERSIONES: ${{ needs.versiones.result }}
           HAY: ${{ needs.versiones.outputs.si }}
           UNITARIOS: ${{ needs.unitarios.result }}
           E2E: ${{ needs.e2e.result }}
-          BORRADOR: ${{ steps.borrador.outputs.borrador }}
+          BORRADOR: ${{ github.event.pull_request.draft }}
         run: |
           echo "Versiones: $VERSIONES. ¿Hay código?: ${HAY:-no se sabe}. Unitarios: $UNITARIOS. E2E: $E2E. ¿Borrador?: ${BORRADOR:-no se sabe}."
           test "$VERSIONES" = "success"
