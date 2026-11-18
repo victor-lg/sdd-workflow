@@ -4,7 +4,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
-- **CI barata mientras el PR está en borrador (VIC-33).**
+- **CI barata mientras el PR está en borrador (VIC-33). Plugin `sdd` 1.7.0.**
   - `calidad.yml` de la plantilla y el ejemplo `tests-node-playwright.yml` corren también con `ready_for_review`. En borrador no corren los trozos E2E ni Stryker; al marcar el PR listo, y en cada push posterior, corre todo. Los unitarios pasan a un job propio, `unitarios`, que corre siempre.
   - Los jobs `tests` y `mutaciones` (checks requeridos) no se saltan nunca: un job requerido saltado cuenta como superado. En borrador salen en verde con un `::warning::` que dice qué no ha corrido; fuera del borrador, `tests` exige los tres trozos. El borrador sale de la API en ese momento (`pull-requests: read`, solo en esos dos jobs), no del evento: relanzar un run del borrador después de marcar el PR listo no da el verde barato. Si la API falla, falla.
   - `sdd-implement`: antes de empujar, el agente ejecuta en su sandbox lo que pueda de lo que corre la CI (unitarios, Stryker, knip) y empuja una vez por ronda de G4. La CI sigue siendo la autoridad.
