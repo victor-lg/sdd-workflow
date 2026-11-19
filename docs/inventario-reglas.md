@@ -228,3 +228,18 @@ Las líneas de "Antes" son las de `plantilla-proyecto/AGENTS.md` en el commit `d
 | REG-48, REG-49 | A:70 | Se quedan, con el hook `sesion-unica.py` nombrado |
 | REG-102 | — | Hook `guarda-gh.py`, nombrado (`gh pr ready`) |
 | X-01, X-02, X-03, X-04, X-06 | — | Hooks `guarda-git.py` y `guarda-ficheros.py`, nombrados |
+
+## Segunda poda de `AGENTS.md` (VIC-37)
+
+Antes del bloque 4 `plantilla-proyecto/AGENTS.md` había vuelto a crecer con los controles del bloque 3. Ninguna regla cambia ni sale del mapa: se quita lo que ya dice el mensaje del control que lo comprueba y se juntan las frases repetidas. Las skills no cambian.
+
+| Qué sale o cambia | Dónde queda |
+| --- | --- |
+| "Commits": el cuerpo tras una línea en blanco, el orden del pie y la prohibición de `fixup!`, `squash!` y `Revert "…"` | Errores del hook `commit-msg` y del check `commits` (`problemas_mensaje` en `checks.py`), que se ven antes de que exista el commit |
+| "Commits": `lefthook.json` | Añadido: el hook `commit-msg` es el de `lefthook.json` (hallazgo 1 de la G4 de VIC-25, VIC-28) |
+| `checks-sdd`: cada check, descrito en una frase | Ahora va por nombre de check, con lo que comprueba entre paréntesis. Las rutas de las capturas (`*-snapshots/`, `__screenshots__/`) salen: el mínimo lo calcula `riesgo` y su error dice el motivo |
+| `checks-sdd`: "rama… sigue las convenciones" | Añadido el formato, `<tipo>/vic-<N>-<descripcion>` (VIC-28) |
+| "Si crees que es un falso positivo, díselo a la persona", en `seguridad` y en gitleaks | Una vez, en la entradilla de "Lo que ya comprueba una máquina" |
+| `calidad`: las prohibiciones de Stryker, knip y jscpd, por herramienta | Juntas: no bajar el umbral ni la severidad, ni excluir código (`mutate`, `ignore`, comentarios). `__STRYKER_ACTIVE_MUTANT__` sigue aparte: no lo comprueba ningún control |
+| Hooks del plugin: la lista de formas de saltar los hooks de Git | La misma lista, entre paréntesis |
+| Entradilla: "los límites los imponen la configuración, los hooks del plugin, la CI y GitHub" | La entradilla de "Lo que ya comprueba una máquina" |
