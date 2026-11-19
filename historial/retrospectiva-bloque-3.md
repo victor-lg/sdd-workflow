@@ -79,16 +79,31 @@ No se propone quitar ningún control del bloque.
 1. **Una issue por decisión de fondo.** Si una entrega necesita un ADR que no estaba en su contrato, el ADR va en una issue nueva, y la entrega espera. VIC-31 habría sido tres issues.
 2. **Primero el corte más pequeño en la calculadora.** Antes de generalizar en la plantilla, una prueba mínima en el proyecto real (un job, un test, una ruta), para que las sorpresas lleguen pronto y baratas.
 3. **Tope por PR:** unas 400 líneas sin contar capturas ni lockfiles, como ya pide VIC-28, y las tres rondas de G4 como señal de partir, no como norma.
-4. **Coste en el contrato:** «Hecho cuando» incluye los minutos por push si la entrega añade un job, y el tiempo del trozo más lento si toca los E2E.
+4. **Coste en el contrato:** «Hecho cuando» incluye el tiempo de espera de la CI por push si la entrega añade un job, y el tiempo del trozo más lento si toca los E2E. (Propuesto con los minutos facturados; Víctor lo cambió al tiempo de espera, 2026-11-19.)
 5. **Bloques con varias issues desde el principio,** cada una con su «Hecho cuando»:
    - **Bloque 4:** formato de hallazgos y su check (reconciliación), diff calculado por la CI (M8), encargos del revisor (M13, M15, M1), revisor de mantenibilidad (M23), revisor en la CI (M34, R2 con su ADR) y la medición del coste.
    - **Bloque 5:** el ADR-0009 del workflow solo, en su PR (con la línea «No confundir con el ADR-0009 de la calculadora», como hacen sus ADR-0007 y 0008); después, ruleset y CODEOWNERS, M28 en la plantilla de issue y M4/M20, por separado.
    - **Bloque 6:** una skill por issue.
    - **Bloque 7:** el ADR-0010 primero; la tabla de modelos y el piloto de OpenCode, aparte.
 
+## Decisiones tomadas
+
+Víctor, 2026-11-19, en el PR de esta retrospectiva:
+
+| Tema | Decisión |
+| --- | --- |
+| Bloque 3 | Se cierra. VIC-29 y VIC-32 son condición de entrada del bloque 5, no del 4 |
+| VIC-34, runner propio | A *Backlog*, con la condición «si un repo vuelve a privado» |
+| VIC-28, cabos sueltos | Se parte como se propone: lo teórico, como límite aceptado; lo demás, en PR pequeños |
+| VIC-23, repos anidados | No se cierra: pasa al bloque 5 |
+| Poda de `AGENTS.md` | Una issue pequeña antes del bloque 4 |
+| Entregas de los bloques 4 a 7 | Se aceptan las cinco reglas; en la 4, el tiempo de espera de la CI en vez de los minutos facturados |
+| Rama de esta retrospectiva | Se queda con VIC-33 |
+
 ## Pendientes que salen de aquí
 
-- **Decisión de Víctor:** VIC-29 y VIC-32 como condición del bloque 5; qué se hace con VIC-34, VIC-28 y VIC-23; y la partición de los bloques 4 a 7.
+- **En Linear:** mover VIC-34 a *Backlog*, partir VIC-28, asignar VIC-23 al bloque 5 y crear la issue de la poda de `AGENTS.md`.
+- **En el plan:** llevar a `docs/plan-v1.1.md` la condición de entrada del bloque 5 y las reglas de entrega de los bloques 4 a 7.
 - **Inbox restante:** VIC-30 (three 0.187, el #43 de Dependabot sigue abierto) y VIC-35 (ya en *Ready*).
-- **Poner al día** el baseline de la calculadora (`picomatch`) y la nota de `docs/herramientas.md` sobre el repo privado.
+- **Poner al día** el baseline de la calculadora (`picomatch`). La nota de `docs/herramientas.md` sobre el repo privado se corrige en este mismo PR.
 - **Etiqueta v1.1.0:** cuando Víctor lo decida; esta retrospectiva no la crea.

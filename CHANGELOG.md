@@ -4,7 +4,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
-- **Retrospectiva del bloque 3 en `historial/retrospectiva-bloque-3.md`.** El «Hecho cuando» se cumple con el baseline de la calculadora, pero `mutaciones` y `duplicados` aún no son checks requeridos: se propone que VIC-29 y VIC-32 sean condición del bloque 5. Dos lecciones (los E2E con 3D en una CI sin GPU y la cuota de Actions), qué quitar o aplazar del Inbox (VIC-34, VIC-28, VIC-23) y entregas más pequeñas en los bloques 4 a 7. Pendiente de la decisión de Víctor.
+- **Retrospectiva del bloque 3 en `historial/retrospectiva-bloque-3.md`.** El «Hecho cuando» se cumple con el baseline de la calculadora, pero `mutaciones` y `duplicados` aún no son checks requeridos: se propone que VIC-29 y VIC-32 sean condición del bloque 5. Dos lecciones (los E2E con 3D en una CI sin GPU y la cuota de Actions), qué quitar o aplazar del Inbox (VIC-34, VIC-28, VIC-23) y entregas más pequeñas en los bloques 4 a 7. Decisiones de Víctor (2026-11-19), anotadas en el documento: VIC-29 y VIC-32, condición del bloque 5; VIC-34 a *Backlog*; VIC-28 partida; VIC-23 al bloque 5; la poda de `AGENTS.md`, antes del bloque 4; y las cinco reglas de entrega, con el tiempo de espera de la CI en el «Hecho cuando». `docs/herramientas.md` ya no llama privada a la calculadora.
 
 - **CI barata mientras el PR está en borrador (VIC-33). Plugin `sdd` 1.7.0.**
   - `calidad.yml` de la plantilla y el ejemplo `tests-node-playwright.yml` corren también con `ready_for_review`. En borrador no corren los trozos E2E ni Stryker; al marcar el PR listo, y en cada push posterior, corre todo. Los unitarios pasan a un job propio, `unitarios`, que corre en los dos estados si hay código.
