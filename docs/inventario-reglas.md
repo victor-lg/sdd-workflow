@@ -228,3 +228,17 @@ Las líneas de "Antes" son las de `plantilla-proyecto/AGENTS.md` en el commit `d
 | REG-48, REG-49 | A:70 | Se quedan, con el hook `sesion-unica.py` nombrado |
 | REG-102 | — | Hook `guarda-gh.py`, nombrado (`gh pr ready`) |
 | X-01, X-02, X-03, X-04, X-06 | — | Hooks `guarda-git.py` y `guarda-ficheros.py`, nombrados |
+
+## Segunda poda de `AGENTS.md` (VIC-37)
+
+Antes del bloque 4 `plantilla-proyecto/AGENTS.md` había vuelto a crecer con los controles del bloque 3. Ninguna regla cambia ni sale del mapa: se juntan las frases repetidas y se acorta lo que ya dice el control que lo comprueba. Las skills no cambian.
+
+| Qué sale o cambia | Dónde queda |
+| --- | --- |
+| "Commits": el cuerpo, el orden del pie y `fixup!`, `squash!` y `Revert "…"` | Se quedan, más cortos. Los comprueban el hook `commit-msg` y el check `commits` (`problemas_mensaje` en `checks.py`), pero el hook solo corre tras `lefthook install`, que es manual; sin él, el agente se enteraría en la CI, con el commit ya empujado (G4 del #51) |
+| "Commits": `lefthook.json` | Añadido: el hook `commit-msg` es el de `lefthook.json` (hallazgo 1 de la G4 de VIC-25, VIC-28) |
+| `checks-sdd`: cada check, descrito en una frase | Ahora va por nombre de check, con lo que comprueba entre paréntesis. Las rutas de las capturas (`*-snapshots/`, `__screenshots__/`) salen: el mínimo lo calcula `riesgo` y su informe («Nivel de riesgo») da el motivo de cada fichero |
+| `checks-sdd`: "rama… sigue las convenciones" | Añadido el formato, `<tipo>/vic-<N>-<descripcion>` (VIC-28) |
+| "Si crees que es un falso positivo, díselo a la persona", en `seguridad` y en gitleaks | Una vez, en la entradilla de "Lo que ya comprueba una máquina" |
+| `calidad`: las prohibiciones de Stryker, knip y jscpd, por herramienta | Juntas, con jscpd en cualquier lenguaje, como `calidad.yml`: no bajar el umbral ni la severidad, ni excluir código (`mutate`, `ignore`, comentarios). `__STRYKER_ACTIVE_MUTANT__` sigue aparte: no lo comprueba ningún control |
+| Entradilla: "los límites los imponen la configuración, los hooks del plugin, la CI y GitHub" | Sale. Es descripción, no una instrucción: la CI y los hooks los nombra "Lo que ya comprueba una máquina"; la aprobación y el merge humanos, "Lo que no te corresponde" |
