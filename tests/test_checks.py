@@ -747,7 +747,10 @@ class TestHallazgos(unittest.TestCase):
     def test_formato_roto_falla(self):
         for linea in ("- G4-1-A-01 debe corregirse, corregido en 1a2b3c4",
                       "- G4-1-A-01 · debe corregirse · resolución: corregido en 1a2b3c4",
-                      "- G4-1-A-01 · debe corregirse · prueba: x"):
+                      "- G4-1-A-01 · debe corregirse · prueba: x",
+                      "- G4-1-A-01 menor · prueba: x · resolución: corregido en 1a2b3c4",
+                      "- G4-1-A-01 · menor · extra · prueba: x · resolución: corregido en 1a2b3c4",
+                      "- G4-1-A-01 · menor · resolución: corregido en 1a2b3c4 · prueba: x"):
             with self.subTest(linea=linea):
                 inf = self.comprobar(linea)
                 self.assertEqual(len(inf.errores), 1)
@@ -807,9 +810,89 @@ class TestHallazgos(unittest.TestCase):
         cita = "prueba: `- G4-1-A-01 · menor · prueba: x · resolución: descartado` pasaba"
         inf = self.comprobar(f"- G4-1-A-02 · importante · {cita} · resolución: corregido en 1a2b3c4")
         self.assertEqual(inf.errores, [])
+        inf = self.comprobar("- G4-1-A-02 · importante · prueba: · resolución: x · resolución: corregido en 1a2b3c4")
+        self.assertEqual(inf.errores, [])
         inf = self.comprobar(f"- G4-1-A-02 · importante · {cita} · resolución: pendiente")
         self.assertEqual(len(inf.errores), 1)
         self.assertIn("no tiene resolución (`pendiente`)", inf.errores[0])
+
+    def test_titulos_en_bloques_de_codigo_no_son_respuestas(self):
+        """G4-2-A-01: citar el formato de `reviewer.md` en un bloque de código no crea un hallazgo."""
+        for cuerpo in ("```\n### G4-1-A-01 · debe corregirse\n```",
+                       "<details>\n\n~~~markdown\n**G4-1-A-01 · importante**\n~~~\n\n</details>"):
+            with self.subTest(cuerpo=cuerpo):
+                self.assertEqual(self.comprobar(cuerpo).errores, [])
+
+    def test_gravedad_del_revisor_al_principio_del_titulo(self):
+        """G4-2-A-04 y G4-2-B-04: la gravedad es la primera palabra tras el ID, con `·`, `:`, `—` o nada."""
+        lineas = checks.lineas_visibles("\n".join([
+            "### G4-1-A-01 · menor · no debe corregirse", "### G4-1-A-02: importante",
+            "**G4-1-A-03 — Debe corregirse**", "### G4-1-A-04", "### `G4-1-A-05` - menor"]))[0]
+        self.assertEqual(checks.gravedades_de_los_revisores(lineas),
+                         {"G4-1-A-01": "menor", "G4-1-A-02": "importante", "G4-1-A-03": "debe corregirse",
+                          "G4-1-A-04": checks.SIN_GRAVEDAD, "G4-1-A-05": "menor"})
+
+    def test_titulo_sin_gravedad_exige_linea_y_prueba(self):
+        """G4-2-B-04: un título sin `·` ni gravedad no se escapa; se trata como grave."""
+        inf = self.comprobar("<details>\n\n### G4-1-A-01\n\n</details>")
+        self.assertIn("no tiene su línea", " ".join(inf.errores))
+        inf = self.comprobar("<details>\n\n### G4-1-A-01\n\n</details>",
+                             "- G4-1-A-01 · menor · prueba: x · resolución: descartado")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("se descarta sin prueba", inf.errores[0])
+
+    def test_varias_apariciones_cuenta_la_gravedad_mayor(self):
+        """G4-2-B-03: una línea en negrita más abajo no rebaja la gravedad que dio el revisor."""
+        for orden in ((0, 1), (1, 0), (2, 1)):
+            titulos = ["### G4-1-A-01 · debe corregirse", "**G4-1-A-01 · menor**", "### G4-1-A-01"]
+            with self.subTest(orden=orden):
+                inf = self.comprobar("<details>\n\n" + "\n\n".join(titulos[i] for i in orden) + "\n\n</details>",
+                                     "- G4-1-A-01 · menor · prueba: x · resolución: descartado")
+                self.assertEqual(len(inf.errores), 1)
+                self.assertIn("se descarta sin prueba", inf.errores[0])
+
+    def test_comentario_dentro_de_codigo_es_texto(self):
+        """G4-2-B-01: un `<!--` en código no esconde lo que sigue hasta el próximo `-->`."""
+        sin_resolver = "- G4-1-A-01 · importante · prueba: x · resolución: pendiente"
+        for cita in ("<details>\n\nprueba: `<!--`\n\n</details>", "```\n<!--\n```", "con ``<!--`` dentro"):
+            with self.subTest(cita=cita):
+                inf = self.comprobar(cita, sin_resolver, "<!-- c -->")
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("no tiene resolución", inf.errores[0])
+        inf = self.comprobar("antes <!-- un comentario", sin_resolver, "que sigue --> después")
+        self.assertEqual(inf.errores, [])
+
+    def test_comentarios_en_medio_de_la_linea(self):
+        self.assertEqual(checks.lineas_visibles("a <!-- b --> c <!-- d\ne --> f")[0],
+                         [("a  c ", False), (" f", False)])
+
+    def test_cerca_dentro_de_un_comentario_no_abre(self):
+        inf = self.comprobar("<!--\n```\n-->", "- G4-1-A-01 · importante · prueba: x · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("no tiene resolución", inf.errores[0])
+
+    def test_comentario_sin_cerrar_falla(self):
+        # Sin la plantilla: sus comentarios cerrarían este, como en GitHub.
+        inf = ejecutar(checks.check_hallazgos, "<!--\n- G4-1-A-01 · importante · prueba: x · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("un comentario HTML", inf.errores[0])
+
+    def test_comillas_tras_la_cerca_no_la_abren(self):
+        """G4-2-B-02: en Markdown, ```` ```a`b ```` es código en línea, no una cerca."""
+        inf = self.comprobar("```a`b", "- G4-1-A-01 · importante · prueba: x · resolución: pendiente", "```", "```")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("no tiene resolución", inf.errores[0])
+
+    def test_lineas_largas_no_cuelgan_el_check(self):
+        """Sospecha de G4-2-B, medida: con la expresión de antes, una prueba de 60 000 espacios
+        tardaba más de 20 s."""
+        import time
+        for cuerpo in ("- G4-1-A-01 · menor · prueba:" + " " * 60000 + "x",
+                       "- G4-1-A-01 " + "· " * 30000, "` " * 30000, "<!--" * 16000, "`" * 60000):
+            with self.subTest(cuerpo=cuerpo[:20]):
+                inicio = time.monotonic()
+                ejecutar(checks.check_hallazgos, cuerpo)
+                self.assertLess(time.monotonic() - inicio, 2)
 
     def test_otras_menciones_del_id_no_cuentan(self):
         inf = self.comprobar("- Corregidos G4-1-A-01 y G4-1-A-02 en 1a2b3c4.",

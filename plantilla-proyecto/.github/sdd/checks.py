@@ -833,68 +833,124 @@ def ficheros_versionados() -> dict[str, str] | None:
 #   - G4-1-A-01 · debe corregirse · prueba: `app.js:12` · resolución: corregido en 1a2b3c4
 # Cuenta cualquier lista, casilla, cita o tabla que empiece por el ID, para que otra forma
 # falle por formato y no pase sin comprobar. Fuera de <details> y de bloques de código.
+# La descripción la escribe cualquiera: nada de expresiones con retroceso sobre una línea entera.
 HALLAZGO_ID = r"G4-[1-9]\d*-[A-Z]-\d{2,3}"
 RE_HALLAZGO = re.compile(rf"^\s*(?:>\s*)*(?:[-*+]|\d+[.)]|\|)\s*(?:\[[ xX]\]\s*)?[*`]*({HALLAZGO_ID})\b[*`]*(.*)$")
-# El hallazgo en la respuesta del revisor (`reviewer.md`): un título o una línea en negrita,
-# esté donde esté (también plegado), con la gravedad que le dio.
-RE_RESPUESTA = re.compile(rf"^\s*(?:#{{1,6}}\s+|\*\*)[*`]*({HALLAZGO_ID})\b[*`]*\s*·\s*(.*)$")
-# La prueba puede citar otra línea de hallazgo: la resolución es lo que sigue al último campo.
-RE_CAMPOS_HALLAZGO = re.compile(r"^\s*·\s*(?P<gravedad>[^·]*?)\s*·\s*prueba:\s*(?P<prueba>.*)"
-                                r"\s*·\s*resolución:\s*(?P<resolucion>.*?)\s*$", re.I)
+# El hallazgo en la respuesta del revisor (`reviewer.md`): un título o una línea en negrita que
+# empieza por el ID, esté donde esté (también plegado), con la gravedad que le dio.
+RE_RESPUESTA = re.compile(rf"^\s*(?:#{{1,6}}\s+|\*\*)[*`]*({HALLAZGO_ID})\b(.*)$")
+RE_CAMPO_PRUEBA = re.compile(r"·[ \t]*prueba:", re.I)
+RE_CAMPO_RESOLUCION = re.compile(r"·[ \t]*resolución:", re.I)
 GRAVEDADES = ("debe corregirse", "importante", "menor")
+SIN_GRAVEDAD = "sin gravedad"
 RE_CORREGIDO = re.compile(r"^corregido en `?[0-9a-f]{7,40}`?(?:(?:,| y) `?[0-9a-f]{7,40}`?)*$", re.I)
-RE_DESCARTADO = re.compile(r"^descartado(?::\s*(?P<prueba>.*))?$", re.I)
+RE_DESCARTADO = re.compile(r"^descartado(?::(?P<prueba>.*))?$", re.I)
 PREGUNTA = "pregunta a la persona"
 RE_PLEGADO = re.compile(r"<details\b|</details\s*>", re.I)
 RE_CERCA = re.compile(r"^ {0,3}(`{3,}|~{3,})")
-# Código en línea como en Markdown: una racha de N comillas invertidas solo cierra con otra de N.
-RE_CODIGO_EN_LINEA = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 
 
-def lineas_de_reconciliacion(cuerpo_pr: str) -> tuple[list[str], list[str]]:
-    """Las líneas del PR fuera de comentarios HTML, bloques de código y <details>, anidados o no,
-    y lo que queda sin cerrar. Un `<details>` en código, en línea o en bloque, es texto."""
-    texto = re.sub(r"<!--.*?-->", "", cuerpo_pr, flags=re.S)
-    lineas, plegado, cerca = [], 0, None
-    for linea in texto.splitlines():
+def sin_codigo_en_linea(linea: str) -> str:
+    """La línea con el código en línea cambiado por espacios, como en Markdown: una racha de N
+    comillas invertidas solo cierra con otra de N, y una sin pareja es texto."""
+    rachas = [(m.start(), m.end()) for m in re.finditer(r"`+", linea)]
+    siguiente, ultima = [None] * len(rachas), {}
+    for j in range(len(rachas) - 1, -1, -1):
+        largo = rachas[j][1] - rachas[j][0]
+        siguiente[j], ultima[largo] = ultima.get(largo), j
+    partes, i, k = [], 0, 0
+    while k < len(rachas):
+        j = siguiente[k]
+        if j is None:
+            k += 1
+            continue
+        a, b = rachas[k][0], rachas[j][1]
+        partes += [linea[i:a], " " * (b - a)]
+        i, k = b, j + 1
+    return "".join(partes) + linea[i:]
+
+
+def lineas_visibles(cuerpo_pr: str) -> tuple[list[tuple[str, bool]], list[str]]:
+    """Las líneas del PR como las muestra GitHub, sin comentarios HTML ni bloques de código, cada
+    una con si va plegada en <details> (anidados o no), y lo que queda sin cerrar. Un `<!--`, un
+    `<details>` o una cerca dentro de código es texto."""
+    lineas, plegado, cerca, comentario = [], 0, None, False
+    for linea in cuerpo_pr.splitlines():
         m = RE_CERCA.match(linea)
         if cerca:
             # Cierra una cerca del mismo carácter y al menos igual de larga, sin nada detrás.
             if m and m.group(1)[0] == cerca[0] and len(m.group(1)) >= len(cerca) and not linea[m.end():].strip():
                 cerca = None
             continue
-        if m:
+        # Tras una cerca de comillas invertidas, otra comilla invertida en la línea la hace texto.
+        if m and not comentario and not (m.group(1)[0] == "`" and "`" in linea[m.end():]):
             cerca = m.group(1)
             continue
+        oculta = sin_codigo_en_linea(linea)
+        tramos, i = [], 0
+        while True:
+            if comentario:
+                fin = oculta.find("-->", i)
+                if fin < 0:
+                    break
+                i, comentario = fin + 3, False
+            ini = oculta.find("<!--", i)
+            tramos.append((i, len(linea) if ini < 0 else ini))
+            if ini < 0:
+                break
+            i, comentario = ini + 4, True
         antes = plegado
-        for t in RE_PLEGADO.finditer(RE_CODIGO_EN_LINEA.sub("", linea)):
+        for t in RE_PLEGADO.finditer("".join(oculta[a:b] for a, b in tramos)):
             plegado = max(0, plegado + (-1 if t.group(0).startswith("</") else 1))
-        if antes == 0 and plegado == 0:
-            lineas.append(linea)
+        lineas.append(("".join(linea[a:b] for a, b in tramos), antes > 0 or plegado > 0))
     sin_cerrar = (["un `<details>` (ciérralo con `</details>`)"] if plegado else []) + \
-                 ([f"un bloque de código (ciérralo con `{cerca}`)"] if cerca else [])
+                 ([f"un bloque de código (ciérralo con `{cerca}`)"] if cerca else []) + \
+                 (["un comentario HTML (ciérralo con `-->`)"] if comentario else [])
     return lineas, sin_cerrar
 
 
-def gravedades_de_los_revisores(cuerpo_pr: str) -> dict[str, str]:
-    texto = re.sub(r"<!--.*?-->", "", cuerpo_pr, flags=re.S)
-    gravedades = {}
-    for linea in texto.splitlines():
+def gravedad_al_principio(texto: str) -> str:
+    texto = texto.lstrip(" \t*_`·:—–-").lower()
+    return next((g for g in GRAVEDADES if texto.startswith(g)), SIN_GRAVEDAD)
+
+
+def gravedades_de_los_revisores(lineas: list[tuple[str, bool]]) -> dict[str, str]:
+    """La gravedad de cada hallazgo de las respuestas; si un ID sale varias veces, la mayor. Sin
+    gravedad reconocible, cuenta como grave: para descartarlo hace falta prueba."""
+    gravedades: dict[str, str] = {}
+    for linea, _ in lineas:
         m = RE_RESPUESTA.match(linea)
         if m:
-            resto = m.group(2).lower()
-            gravedades[m.group(1)] = next((g for g in GRAVEDADES if g in resto), "")
+            gravedad, previa = gravedad_al_principio(m.group(2)), gravedades.get(m.group(1))
+            if previa is None or (previa != SIN_GRAVEDAD and
+                                  (gravedad == SIN_GRAVEDAD or GRAVEDADES.index(gravedad) < GRAVEDADES.index(previa))):
+                gravedades[m.group(1)] = gravedad
     return gravedades
 
 
+def campos_de_hallazgo(campos: str) -> tuple[str, str, str] | None:
+    """Gravedad, prueba y resolución de `· <gravedad> · prueba: … · resolución: …`. La prueba
+    puede citar otra línea de hallazgo: la resolución es lo que sigue al último campo."""
+    resto = campos.strip()
+    prueba = RE_CAMPO_PRUEBA.search(resto)
+    resoluciones = list(RE_CAMPO_RESOLUCION.finditer(resto))
+    if not resto.startswith("·") or not prueba or not resoluciones:
+        return None
+    # Sin `·` en la gravedad, la prueba va antes que la resolución.
+    gravedad = resto[1:prueba.start()]
+    if "·" in gravedad:
+        return None
+    return gravedad, resto[prueba.end():resoluciones[-1].start()], resto[resoluciones[-1].end():]
+
+
 def check_hallazgos(inf: Informe, cuerpo_pr: str) -> None:
-    lineas, sin_cerrar = lineas_de_reconciliacion(cuerpo_pr)
+    lineas, sin_cerrar = lineas_visibles(cuerpo_pr)
     for que in sin_cerrar:
         inf.error("hallazgos", f"la descripción del PR tiene {que} sin cerrar: lo que sigue no se puede comprobar.")
-    del_revisor = gravedades_de_los_revisores(cuerpo_pr)
+    del_revisor = gravedades_de_los_revisores(lineas)
     vistos, preguntas = set(), []
-    for linea in lineas:
-        m = RE_HALLAZGO.match(linea)
+    for linea, plegada in lineas:
+        m = None if plegada else RE_HALLAZGO.match(linea)
         if not m:
             continue
         hid, campos = m.groups()
@@ -902,11 +958,11 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str) -> None:
             inf.error("hallazgos", f"`{hid}` aparece dos veces en la reconciliación; deja una sola línea por hallazgo.")
             continue
         vistos.add(hid)
-        c = RE_CAMPOS_HALLAZGO.match(campos)
+        c = campos_de_hallazgo(campos)
         if not c:
             inf.error("hallazgos", f"`{hid}` no sigue el formato `- {hid} · <gravedad> · prueba: <test, línea o cita> · resolución: <resolución>` (`sdd-review`).")
             continue
-        gravedad, prueba, resolucion = (c.group(g).strip().strip("*_") for g in ("gravedad", "prueba", "resolucion"))
+        gravedad, prueba, resolucion = (x.strip().strip("*_").strip() for x in c)
         gravedad = gravedad.lower()
         if gravedad not in GRAVEDADES:
             inf.error("hallazgos", f"`{hid}`: la gravedad `{gravedad}` no es {', '.join(GRAVEDADES)}.")
@@ -923,7 +979,7 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str) -> None:
         elif resolucion.lower() == PREGUNTA:
             preguntas.append(hid)
         else:
-            inf.error("hallazgos", f"`{hid}` no tiene resolución (`{resolucion or 'vacía'}`): escribe `corregido en <sha>`, `descartado: <prueba>` o `{PREGUNTA}`.")
+            inf.error("hallazgos", f"`{hid}` no tiene resolución (`{resolucion[:80] or 'vacía'}`): escribe `corregido en <sha>`, `descartado: <prueba>` o `{PREGUNTA}`.")
     faltan = sorted(set(del_revisor) - vistos)
     if faltan:
         inf.error("hallazgos", f"los revisores dieron {', '.join(f'`{h}`' for h in faltan)} y la reconciliación no tiene su línea.")
