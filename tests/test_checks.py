@@ -859,12 +859,16 @@ class TestHallazgos(unittest.TestCase):
                 inf = self.comprobar(cita, sin_resolver, "<!-- c -->")
                 self.assertEqual(len(inf.errores), 1, inf.errores)
                 self.assertIn("no tiene resolución", inf.errores[0])
-        inf = self.comprobar("antes <!-- un comentario", sin_resolver, "que sigue --> después")
+        # En medio de una línea y sin cerrar en ella, `<!--` es texto (lo vio la ronda 2 en esta descripción).
+        inf = self.comprobar("antes <!-- sin cerrar", sin_resolver, "<!-- c -->")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        inf = self.comprobar("<!-- un comentario", sin_resolver, "que sigue --> después")
         self.assertEqual(inf.errores, [])
 
     def test_comentarios_en_medio_de_la_linea(self):
-        self.assertEqual(checks.lineas_visibles("a <!-- b --> c <!-- d\ne --> f")[0],
-                         [("a  c ", False), (" f", False)])
+        self.assertEqual(checks.lineas_visibles("a <!-- b --> c <!-- d\n<!-- e\nf --> g\nh")[0],
+                         [("a  c <!-- d", False), ("h", False)])
+        self.assertEqual(checks.lineas_visibles("a `<!-- b -->` c")[0], [("a `<!-- b -->` c", False)])
 
     def test_cerca_dentro_de_un_comentario_no_abre(self):
         inf = self.comprobar("<!--\n```\n-->", "- G4-1-A-01 · importante · prueba: x · resolución: pendiente")
@@ -888,7 +892,8 @@ class TestHallazgos(unittest.TestCase):
         tardaba más de 20 s."""
         import time
         for cuerpo in ("- G4-1-A-01 · menor · prueba:" + " " * 60000 + "x",
-                       "- G4-1-A-01 " + "· " * 30000, "` " * 30000, "<!--" * 16000, "`" * 60000):
+                       "- G4-1-A-01 " + "· " * 30000, "` " * 30000, "<!--" * 16000, "`" * 60000,
+                       "x" + "<!--" * 16000, "x" + "<!-- " * 13000):
             with self.subTest(cuerpo=cuerpo[:20]):
                 inicio = time.monotonic()
                 ejecutar(checks.check_hallazgos, cuerpo)

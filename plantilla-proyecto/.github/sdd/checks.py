@@ -848,6 +848,7 @@ RE_DESCARTADO = re.compile(r"^descartado(?::(?P<prueba>.*))?$", re.I)
 PREGUNTA = "pregunta a la persona"
 RE_PLEGADO = re.compile(r"<details\b|</details\s*>", re.I)
 RE_CERCA = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+RE_COMENTARIO_BLOQUE = re.compile(r"^ {0,3}<!--")
 
 
 def sin_codigo_en_linea(linea: str) -> str:
@@ -882,23 +883,24 @@ def lineas_visibles(cuerpo_pr: str) -> tuple[list[tuple[str, bool]], list[str]]:
             if m and m.group(1)[0] == cerca[0] and len(m.group(1)) >= len(cerca) and not linea[m.end():].strip():
                 cerca = None
             continue
+        # Un comentario que empieza la línea es un bloque hasta la línea con `-->`; en medio de
+        # una línea, solo si se cierra en ella (si no, es texto).
+        if comentario:
+            comentario = "-->" not in linea
+            continue
+        if RE_COMENTARIO_BLOQUE.match(linea) and "-->" not in linea:
+            comentario = True
+            continue
         # Tras una cerca de comillas invertidas, otra comilla invertida en la línea la hace texto.
-        if m and not comentario and not (m.group(1)[0] == "`" and "`" in linea[m.end():]):
+        if m and not (m.group(1)[0] == "`" and "`" in linea[m.end():]):
             cerca = m.group(1)
             continue
         oculta = sin_codigo_en_linea(linea)
         tramos, i = [], 0
-        while True:
-            if comentario:
-                fin = oculta.find("-->", i)
-                if fin < 0:
-                    break
-                i, comentario = fin + 3, False
-            ini = oculta.find("<!--", i)
-            tramos.append((i, len(linea) if ini < 0 else ini))
-            if ini < 0:
-                break
-            i, comentario = ini + 4, True
+        while (ini := oculta.find("<!--", i)) >= 0 and (fin := oculta.find("-->", ini + 4)) >= 0:
+            tramos.append((i, ini))
+            i = fin + 3
+        tramos.append((i, len(linea)))
         antes = plegado
         for t in RE_PLEGADO.finditer("".join(oculta[a:b] for a, b in tramos)):
             plegado = max(0, plegado + (-1 if t.group(0).startswith("</") else 1))
