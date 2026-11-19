@@ -63,8 +63,8 @@ El agente propone el nivel; la CI puede subirlo, nunca bajarlo.
 
 - **Revisor:** subagente `reviewer`, de solo lectura. Recibe la spec de `main`, el diff, la CI y los ADR; nunca el razonamiento del autor ni la descripción del PR.
 - **Ronda:** una pasada de revisión. Hasta 3; después decide la persona.
-- **Clasificación de hallazgos:** *debe corregirse* (bloquea), *importante* (se corrige o se justifica) y *mejora* (opcional).
-- **Reconciliación:** el agente contrasta los hallazgos con el código, corrige y lo explica en el PR.
+- **Clasificación de hallazgos:** *debe corregirse* (bloquea), *importante* (se corrige o se descarta con prueba) y *menor* (opcional). Cada hallazgo lleva un ID (`G4-<ronda>-<revisor>-NN`) y una prueba: un test, una línea o una cita.
+- **Reconciliación:** el agente contrasta los hallazgos con el código, corrige y lo explica en el PR, con una línea por hallazgo y su resolución: corregido en un commit, descartado con prueba o pregunta a la persona. El check `hallazgos` de la CI comprueba que ninguno queda sin resolver.
 - **Cambios tras la última ronda:** lo que entra después sin otro revisor; va listado en el PR para que lo leas.
 
 ## La CI (`checks-sdd` y `tests`)

@@ -147,7 +147,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-95 | Lista única de lo que recibe cada revisor | review:26-32 | Criterio | Probada: N8 | **Instrucción** (`review`) |
 | REG-96 | Pedir al revisor que busque tests debilitados | review:34 | Criterio | Probada: lo cazó en calc#5 | **Instrucción** (mejor en `agents/reviewer.md`; bloque 4) |
 | REG-97 | Dejar en el PR el encargo y la respuesta de cada revisor | review:36,52 | Mecánica | Sí: mismos PR que REG-52 | **CI** (nuevo: aviso; bloque 4) |
-| REG-98 | Confirmar y clasificar cada hallazgo; corregir lo que bloquea | review:44-49 | Criterio | No consta | **Instrucción** (`review`) |
+| REG-98 | Confirmar y clasificar cada hallazgo; corregir lo que bloquea | review:44-49 | Criterio | No consta | **Instrucción** (`review`) y, desde VIC-38, **CI** (`hallazgos`: cada hallazgo de la reconciliación, en formato fijo, tiene prueba y resolución, y descartar uno que debe corregirse o importante pide prueba) |
 | REG-99 | Hasta 3 rondas | review:49 | Mecánica | No consta. `sdd-metricas` ya cuenta las rondas | **Instrucción** (`review`) |
 | REG-100 | Lista exacta de lo que cambia tras la última ronda | review:50 | Mecánica | Sí: calc#16, 10 cambios sin lista (obs. 6, M8) | **CI** (nuevo: aviso; bloque 4) |
 | REG-101 | Publicar la línea `Métricas G4` en cada ronda | review:53-71 | Mecánica | No consta desde que existe (wf#15 y #16 la llevan) | **Instrucción** (`review`; el control ya está en `sdd-metricas`) |
