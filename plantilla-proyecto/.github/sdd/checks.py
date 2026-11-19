@@ -838,7 +838,8 @@ RE_HALLAZGO = re.compile(rf"^\s*(?:>\s*)*(?:[-*+]|\d+[.)]|\|)\s*(?:\[[ xX]\]\s*)
 # El hallazgo en la respuesta del revisor (`reviewer.md`): un título o una línea en negrita,
 # esté donde esté (también plegado), con la gravedad que le dio.
 RE_RESPUESTA = re.compile(rf"^\s*(?:#{{1,6}}\s+|\*\*)[*`]*({HALLAZGO_ID})\b[*`]*\s*·\s*(.*)$")
-RE_CAMPOS_HALLAZGO = re.compile(r"^\s*·\s*(?P<gravedad>[^·]*?)\s*·\s*prueba:\s*(?P<prueba>.*?)"
+# La prueba puede citar otra línea de hallazgo: la resolución es lo que sigue al último campo.
+RE_CAMPOS_HALLAZGO = re.compile(r"^\s*·\s*(?P<gravedad>[^·]*?)\s*·\s*prueba:\s*(?P<prueba>.*)"
                                 r"\s*·\s*resolución:\s*(?P<resolucion>.*?)\s*$", re.I)
 GRAVEDADES = ("debe corregirse", "importante", "menor")
 RE_CORREGIDO = re.compile(r"^corregido en `?[0-9a-f]{7,40}`?(?:(?:,| y) `?[0-9a-f]{7,40}`?)*$", re.I)
@@ -846,6 +847,8 @@ RE_DESCARTADO = re.compile(r"^descartado(?::\s*(?P<prueba>.*))?$", re.I)
 PREGUNTA = "pregunta a la persona"
 RE_PLEGADO = re.compile(r"<details\b|</details\s*>", re.I)
 RE_CERCA = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+# Código en línea como en Markdown: una racha de N comillas invertidas solo cierra con otra de N.
+RE_CODIGO_EN_LINEA = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 
 
 def lineas_de_reconciliacion(cuerpo_pr: str) -> tuple[list[str], list[str]]:
@@ -864,7 +867,7 @@ def lineas_de_reconciliacion(cuerpo_pr: str) -> tuple[list[str], list[str]]:
             cerca = m.group(1)
             continue
         antes = plegado
-        for t in RE_PLEGADO.finditer(re.sub(r"`[^`]*`", "", linea)):
+        for t in RE_PLEGADO.finditer(RE_CODIGO_EN_LINEA.sub("", linea)):
             plegado = max(0, plegado + (-1 if t.group(0).startswith("</") else 1))
         if antes == 0 and plegado == 0:
             lineas.append(linea)

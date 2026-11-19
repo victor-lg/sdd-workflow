@@ -793,6 +793,24 @@ class TestHallazgos(unittest.TestCase):
         self.assertEqual(len(inf.errores), 1)
         self.assertIn("no tiene resolución", inf.errores[0])
 
+    def test_comillas_invertidas_como_en_markdown(self):
+        """Ronda 1, al pasar el check por este PR: un ``` suelto en una línea no empareja con el
+        código que sigue y dejaba fuera un `<details>` que sí era código."""
+        inf = self.comprobar("un ``` suelto deja `cerca=True`; para `<details>` sin cerrar hay error",
+                             "con ``dos `<details>` dentro`` también es código",
+                             "- G4-1-A-01 · menor · prueba: x · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("no tiene resolución", inf.errores[0])
+
+    def test_la_prueba_puede_citar_otra_linea(self):
+        """Ronda 1, al pasar el check por este PR: la resolución es la del último campo."""
+        cita = "prueba: `- G4-1-A-01 · menor · prueba: x · resolución: descartado` pasaba"
+        inf = self.comprobar(f"- G4-1-A-02 · importante · {cita} · resolución: corregido en 1a2b3c4")
+        self.assertEqual(inf.errores, [])
+        inf = self.comprobar(f"- G4-1-A-02 · importante · {cita} · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("no tiene resolución (`pendiente`)", inf.errores[0])
+
     def test_otras_menciones_del_id_no_cuentan(self):
         inf = self.comprobar("- Corregidos G4-1-A-01 y G4-1-A-02 en 1a2b3c4.",
                              "- [x] Revisión G4, ronda 1: G4-1-A-01 corregido.",
