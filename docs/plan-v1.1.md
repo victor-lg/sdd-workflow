@@ -71,7 +71,7 @@
 | **M6** | El ejemplo de workflow de tests con el contenedor de Playwright por digest y el reparto en trozos del #34 |
 | Piloto | AgentShield una vez, en un contenedor, sobre la configuración del workflow |
 
-**Hecho cuando:** la plantilla de proyecto trae los checks de este bloque y la calculadora los pasa (o tiene un baseline explícito de lo heredado).
+**Hecho cuando:** la plantilla de proyecto trae los checks de este bloque y la calculadora los pasa (o tiene un baseline explícito de lo heredado). ✔ Hecho el 2026-11-19 (`historial/retrospectiva-bloque-3.md`): lo heredado está en `docs/baseline-controles.md` de la calculadora. `mutaciones` (VIC-29) y `duplicados` (VIC-32) aún no son checks requeridos; son condición de entrada del bloque 5.
 
 ## Bloque 4 — Revisión y reconciliación
 
@@ -93,6 +93,8 @@
 ## Bloque 5 — Tu papel, la autonomía del agente y dejar este chat
 
 **Por qué ahora:** es lo que más cambia tu día a día. Depende de los controles (bloques 2–3) y de la revisión fiable (bloque 4).
+
+**Condición de entrada:** VIC-29 y VIC-32 cerradas, con `mutaciones` y `duplicados` como checks requeridos en la calculadora. Sin ellos, los controles fijos que permiten fusionar sin ti no están completos (retrospectiva del bloque 3, decisión de Víctor del 2026-11-19).
 
 **ADR-0009 del workflow (modifica P03, G6, N4 y ADR-0006):**
 - **Tu papel:**
@@ -171,3 +173,17 @@ Se deciden con datos del próximo proyecto, no antes:
 3. Los cambios, en PR pequeños, con las evaluaciones (M35) en verde.
 4. Una línea en el CHANGELOG por versión (v1.1.0, v1.1.1…) y una nota en el historial con lo medido.
 5. Al cerrar el bloque, una retrospectiva corta: ¿se cumplió el "hecho cuando"? ¿Hay algo que quitar?
+
+### Tamaño de las entregas (bloques 4 a 7)
+
+Aceptadas por Víctor el 2026-11-19, tras la retrospectiva del bloque 3, donde las entregas crecieron dentro de su issue (VIC-31: 9 PR y tres ADR):
+
+1. **Una issue por decisión de fondo.** Si una entrega necesita un ADR que no estaba en su contrato, el ADR va en una issue nueva, y la entrega espera.
+2. **Primero el corte más pequeño en la calculadora.** Antes de generalizar en la plantilla, una prueba mínima en el proyecto real (un job, un test, una ruta), para que las sorpresas lleguen pronto.
+3. **Unas 400 líneas por PR como tope,** sin contar capturas ni lockfiles. Tres rondas de G4 son señal de partir el PR, no la norma.
+4. **Coste en el contrato:** el "Hecho cuando" incluye el tiempo de espera de la CI por push si la entrega añade un job, y el tiempo del trozo más lento si toca los E2E.
+5. **Varias issues por bloque desde el principio,** cada una con su "Hecho cuando":
+   - **Bloque 4:** formato de hallazgos y su check (reconciliación), diff calculado por la CI (M8), encargos del revisor (M13, M15, M1), revisor de mantenibilidad (M23), revisor en la CI (M34, R2 con su ADR) y la medición del coste.
+   - **Bloque 5:** el ADR-0009 del workflow solo, en su PR (con una línea "No confundir con el ADR-0009 de la calculadora"); después, ruleset y CODEOWNERS, M28 en la plantilla de issue y M4/M20, por separado.
+   - **Bloque 6:** una skill por issue.
+   - **Bloque 7:** el ADR-0010 primero; la tabla de modelos y el piloto de OpenCode, aparte.
