@@ -103,7 +103,7 @@ Víctor, 2026-11-19, en el PR de esta retrospectiva:
 ## Pendientes que salen de aquí
 
 - **En Linear:** mover VIC-34 a *Backlog*, partir VIC-28, asignar VIC-23 al bloque 5 y crear la issue de la poda de `AGENTS.md`.
-- **En el plan:** llevar a `docs/plan-v1.1.md` la condición de entrada del bloque 5 y las reglas de entrega de los bloques 4 a 7.
+- **En el plan:** la condición de entrada del bloque 5 y las reglas de entrega de los bloques 4 a 7 pasan a `docs/plan-v1.1.md` en este mismo PR.
 - **Inbox restante:** VIC-30 (three 0.187, el #43 de Dependabot sigue abierto) y VIC-35 (ya en *Ready*).
 - **Poner al día** el baseline de la calculadora (`picomatch`). La nota de `docs/herramientas.md` sobre el repo privado se corrige en este mismo PR.
 - **Etiqueta v1.1.0:** cuando Víctor lo decida; esta retrospectiva no la crea.
