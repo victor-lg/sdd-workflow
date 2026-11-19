@@ -26,9 +26,9 @@ Comprueba:
                 entre comillas (un `#` sin comillas se lee como comentario).
   lefthook      ADR-0008: la única configuración de lefthook es `lefthook.json`, solo con
                 las claves que no amplían lo que se ejecuta, y no se quita si `main` la tiene.
-  hallazgos     VIC-38: cada hallazgo de G4 de la reconciliación del PR tiene gravedad,
-                prueba y resolución, y descartar uno que debe corregirse o importante
-                pide una prueba (skill `sdd-review`).
+  hallazgos     VIC-38: cada hallazgo de G4 de las respuestas de los revisores tiene su
+                línea en la reconciliación del PR, con gravedad, prueba y resolución, y
+                descartar uno que debe corregirse o importante pide una prueba (`sdd-review`).
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -831,41 +831,64 @@ def ficheros_versionados() -> dict[str, str] | None:
 
 # Una línea por hallazgo en la reconciliación del PR (skill `sdd-review`):
 #   - G4-1-A-01 · debe corregirse · prueba: `app.js:12` · resolución: corregido en 1a2b3c4
-# Las respuestas de los revisores van plegadas en <details> y con el ID en un título: no cuentan.
-RE_HALLAZGO = re.compile(r"^\s*[-*]\s+[*`]*(G4-[1-9]\d*-[A-Z]-\d{2,3})\b[*`]*(.*)$")
+# Cuenta cualquier lista, casilla, cita o tabla que empiece por el ID, para que otra forma
+# falle por formato y no pase sin comprobar. Fuera de <details> y de bloques de código.
+HALLAZGO_ID = r"G4-[1-9]\d*-[A-Z]-\d{2,3}"
+RE_HALLAZGO = re.compile(rf"^\s*(?:>\s*)*(?:[-*+]|\d+[.)]|\|)\s*(?:\[[ xX]\]\s*)?[*`]*({HALLAZGO_ID})\b[*`]*(.*)$")
+# El hallazgo en la respuesta del revisor (`reviewer.md`): un título o una línea en negrita,
+# esté donde esté (también plegado), con la gravedad que le dio.
+RE_RESPUESTA = re.compile(rf"^\s*(?:#{{1,6}}\s+|\*\*)[*`]*({HALLAZGO_ID})\b[*`]*\s*·\s*(.*)$")
 RE_CAMPOS_HALLAZGO = re.compile(r"^\s*·\s*(?P<gravedad>[^·]*?)\s*·\s*prueba:\s*(?P<prueba>.*?)"
                                 r"\s*·\s*resolución:\s*(?P<resolucion>.*?)\s*$", re.I)
 GRAVEDADES = ("debe corregirse", "importante", "menor")
-RE_CORREGIDO = re.compile(r"^corregido en `?[0-9a-f]{7,40}`?(?:(?:,| y) `?[0-9a-f]{7,40}`?)*$")
-RE_DESCARTADO = re.compile(r"^descartado(?::\s*(?P<prueba>.*))?$")
+RE_CORREGIDO = re.compile(r"^corregido en `?[0-9a-f]{7,40}`?(?:(?:,| y) `?[0-9a-f]{7,40}`?)*$", re.I)
+RE_DESCARTADO = re.compile(r"^descartado(?::\s*(?P<prueba>.*))?$", re.I)
 PREGUNTA = "pregunta a la persona"
 RE_PLEGADO = re.compile(r"<details\b|</details\s*>", re.I)
-RE_CERCA = re.compile(r"^\s*(```|~~~)")
+RE_CERCA = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
-def lineas_de_reconciliacion(cuerpo_pr: str) -> tuple[list[str], bool]:
+def lineas_de_reconciliacion(cuerpo_pr: str) -> tuple[list[str], list[str]]:
     """Las líneas del PR fuera de comentarios HTML, bloques de código y <details>, anidados o no,
-    y si queda algún <details> sin cerrar. Un `<details>` entre comillas invertidas es texto."""
+    y lo que queda sin cerrar. Un `<details>` en código, en línea o en bloque, es texto."""
     texto = re.sub(r"<!--.*?-->", "", cuerpo_pr, flags=re.S)
-    lineas, plegado, cerca = [], 0, False
+    lineas, plegado, cerca = [], 0, None
     for linea in texto.splitlines():
-        if not plegado and RE_CERCA.match(linea):
-            cerca = not cerca
-            continue
+        m = RE_CERCA.match(linea)
         if cerca:
+            # Cierra una cerca del mismo carácter y al menos igual de larga, sin nada detrás.
+            if m and m.group(1)[0] == cerca[0] and len(m.group(1)) >= len(cerca) and not linea[m.end():].strip():
+                cerca = None
+            continue
+        if m:
+            cerca = m.group(1)
             continue
         antes = plegado
-        for m in RE_PLEGADO.finditer(re.sub(r"`[^`]*`", "", linea)):
-            plegado = max(0, plegado + (-1 if m.group(0).startswith("</") else 1))
+        for t in RE_PLEGADO.finditer(re.sub(r"`[^`]*`", "", linea)):
+            plegado = max(0, plegado + (-1 if t.group(0).startswith("</") else 1))
         if antes == 0 and plegado == 0:
             lineas.append(linea)
-    return lineas, plegado > 0
+    sin_cerrar = (["un `<details>` (ciérralo con `</details>`)"] if plegado else []) + \
+                 ([f"un bloque de código (ciérralo con `{cerca}`)"] if cerca else [])
+    return lineas, sin_cerrar
+
+
+def gravedades_de_los_revisores(cuerpo_pr: str) -> dict[str, str]:
+    texto = re.sub(r"<!--.*?-->", "", cuerpo_pr, flags=re.S)
+    gravedades = {}
+    for linea in texto.splitlines():
+        m = RE_RESPUESTA.match(linea)
+        if m:
+            resto = m.group(2).lower()
+            gravedades[m.group(1)] = next((g for g in GRAVEDADES if g in resto), "")
+    return gravedades
 
 
 def check_hallazgos(inf: Informe, cuerpo_pr: str) -> None:
     lineas, sin_cerrar = lineas_de_reconciliacion(cuerpo_pr)
-    if sin_cerrar:
-        inf.error("hallazgos", "la descripción del PR tiene un `<details>` sin cerrar: lo que sigue no se puede comprobar. Ciérralo con `</details>`.")
+    for que in sin_cerrar:
+        inf.error("hallazgos", f"la descripción del PR tiene {que} sin cerrar: lo que sigue no se puede comprobar.")
+    del_revisor = gravedades_de_los_revisores(cuerpo_pr)
     vistos, preguntas = set(), []
     for linea in lineas:
         m = RE_HALLAZGO.match(linea)
@@ -886,16 +909,21 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str) -> None:
             inf.error("hallazgos", f"`{hid}`: la gravedad `{gravedad}` no es {', '.join(GRAVEDADES)}.")
         if not prueba:
             inf.error("hallazgos", f"`{hid}` no tiene prueba: cada hallazgo cita un test, una línea o un texto.")
+        # Bajar la gravedad no ahorra la prueba: cuenta la mayor, la del revisor o la confirmada.
+        graves = {gravedad, del_revisor.get(hid, "")} - {"menor", ""}
         descartado = RE_DESCARTADO.match(resolucion)
         if RE_CORREGIDO.match(resolucion):
             pass
         elif descartado:
-            if gravedad != "menor" and not (descartado.group("prueba") or "").strip():
-                inf.error("hallazgos", f"`{hid}` ({gravedad}) se descarta sin prueba. Escribe `descartado: <test, línea o cita>`; si no la hay, `{PREGUNTA}`.")
+            if graves and not (descartado.group("prueba") or "").strip():
+                inf.error("hallazgos", f"`{hid}` ({' / '.join(sorted(graves))}) se descarta sin prueba. Escribe `descartado: <test, línea o cita>`; si no la hay, `{PREGUNTA}`.")
         elif resolucion.lower() == PREGUNTA:
             preguntas.append(hid)
         else:
             inf.error("hallazgos", f"`{hid}` no tiene resolución (`{resolucion or 'vacía'}`): escribe `corregido en <sha>`, `descartado: <prueba>` o `{PREGUNTA}`.")
+    faltan = sorted(set(del_revisor) - vistos)
+    if faltan:
+        inf.error("hallazgos", f"los revisores dieron {', '.join(f'`{h}`' for h in faltan)} y la reconciliación no tiene su línea.")
     if preguntas:
         inf.aviso("hallazgos", f"hallazgos pendientes de la persona: {', '.join(f'`{h}`' for h in preguntas)}. Respóndelos antes de aprobar.")
 

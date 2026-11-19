@@ -794,10 +794,76 @@ class TestHallazgos(unittest.TestCase):
         self.assertIn("no tiene resolución", inf.errores[0])
 
     def test_otras_menciones_del_id_no_cuentan(self):
-        inf = self.comprobar("### G4-1-A-01 · debe corregirse",
-                             "- Corregidos G4-1-A-01 y G4-1-A-02 en 1a2b3c4.",
-                             "- [x] Revisión G4, ronda 1: G4-1-A-01 corregido.")
+        inf = self.comprobar("- Corregidos G4-1-A-01 y G4-1-A-02 en 1a2b3c4.",
+                             "- [x] Revisión G4, ronda 1: G4-1-A-01 corregido.",
+                             "Ver `### G4-1-A-01 · debe corregirse` en la respuesta.")
         self.assertEqual(inf.errores, [])
+
+    def test_hallazgo_del_revisor_sin_linea_falla(self):
+        """G4-1-A-02 y G4-1-B-01: un hallazgo de la respuesta plegada sin su línea no pasa."""
+        resuelto = "- G4-1-A-01 · menor · prueba: x · resolución: corregido en 1a2b3c4"
+        for respuesta in ("### G4-1-A-02 · importante", "**G4-1-A-02 · importante**",
+                          "#### `G4-1-A-02` · Debe corregirse"):
+            with self.subTest(respuesta=respuesta):
+                inf = self.comprobar(f"<details>\n\n### G4-1-A-01 · menor\n\n{respuesta}\n\n</details>", resuelto)
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("`G4-1-A-02` y la reconciliación no tiene su línea", inf.errores[0])
+        inf = self.comprobar("<details>\n\n**G4-1-A-01 · menor**\n\n</details>", resuelto)
+        self.assertEqual(inf.errores, [])
+
+    def test_bajar_la_gravedad_no_ahorra_la_prueba(self):
+        """G4-1-A-03 y G4-1-B-02: el revisor dijo debe corregirse; la reconciliación, menor."""
+        respuesta = "<details>\n\n### G4-1-A-01 · debe corregirse\n\n</details>"
+        inf = self.comprobar(respuesta, "- G4-1-A-01 · menor · prueba: x · resolución: descartado")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("se descarta sin prueba", inf.errores[0])
+        for resolucion in ("descartado: `spec.md:40` lo permite", "corregido en 1a2b3c4"):
+            with self.subTest(resolucion=resolucion):
+                inf = self.comprobar(respuesta, f"- G4-1-A-01 · menor · prueba: x · resolución: {resolucion}")
+                self.assertEqual(inf.errores, [])
+
+    def test_otras_listas_casillas_citas_y_tablas_cuentan(self):
+        """G4-1-A-05 y G4-1-B-03: con otra forma, el hallazgo falla en vez de no comprobarse."""
+        for inicio in ("1. G4-1-A-01", "2) G4-1-A-01", "+ G4-1-A-01", "- [ ] G4-1-A-01",
+                       "- [x] **G4-1-A-01**", "> - G4-1-A-01"):
+            with self.subTest(inicio=inicio):
+                inf = self.comprobar(f"{inicio} · menor · prueba: x · resolución: pendiente")
+                self.assertEqual(len(inf.errores), 1)
+                self.assertIn("no tiene resolución", inf.errores[0])
+        inf = self.comprobar("| G4-1-A-01 | menor | x | corregido en 1a2b3c4 |")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("no sigue el formato", inf.errores[0])
+
+    def test_resolucion_sin_distinguir_mayusculas(self):
+        """G4-1-A-04."""
+        for resolucion in ("Corregido en 1a2b3c4", "Descartado: x", "Pregunta a la persona"):
+            with self.subTest(resolucion=resolucion):
+                inf = self.comprobar(f"- G4-1-A-01 · importante · prueba: x · resolución: {resolucion}")
+                self.assertEqual(inf.errores, [])
+
+    def test_bloque_de_codigo_sin_cerrar_falla(self):
+        """G4-1-A-01: lo que sigue a una cerca suelta no se comprobaría."""
+        inf = self.comprobar("```", "- G4-1-A-01 · debe corregirse · prueba: x · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("un bloque de código", inf.errores[0])
+
+    def test_cercas_como_en_markdown(self):
+        """G4-1-B-04: solo cierra una cerca del mismo carácter, igual de larga o más, y sola."""
+        sin_resolver = "- G4-1-A-01 · menor · prueba: x · resolución: pendiente"
+        for bloque in ("````\n```\n````", "~~~\n```\n~~~", "```\n```python\nx\n```"):
+            with self.subTest(bloque=bloque):
+                inf = self.comprobar(bloque, sin_resolver)
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("no tiene resolución", inf.errores[0])
+        inf = self.comprobar("````\n```\n" + sin_resolver + "\n```\n````")
+        self.assertEqual(inf.errores, [])
+
+    def test_details_dentro_de_codigo_plegado_es_texto(self):
+        """G4-1-B-05: citar un `<details>` en un bloque de código de la respuesta no da falso error."""
+        for respuesta in ("<details>\n\n```python\ninf = self.comprobar(\"<details><summary>A</summary>\",\n```\n\n</details>",
+                          "<details>\n\n```\n</details>\n```\n\n- G4-1-A-01 · menor · prueba: x · resolución: pendiente\n\n</details>"):
+            with self.subTest(respuesta=respuesta):
+                self.assertEqual(self.comprobar(respuesta).errores, [])
 
 
 # --- De punta a punta: main() en un repo de verdad -------------------------

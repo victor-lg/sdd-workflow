@@ -69,7 +69,9 @@ Con las respuestas de todos los revisores:
      - `descartado: <prueba>`: el test, la línea o la cita que lo refuta. En un *menor* basta `descartado`;
      - `pregunta a la persona`, si no hay prueba para descartarlo; cuando conteste, cámbiala por una de las otras dos.
 
-     Mientras no tenga ninguna, escribe `resolución: pendiente`. El check `hallazgos` de la CI falla si algún hallazgo no tiene resolución o se descarta sin prueba, y avisa de los que esperan a la persona.
+     Mientras no tenga ninguna, escribe `resolución: pendiente`.
+
+   El check `hallazgos` de la CI lee estas líneas y las respuestas plegadas de los revisores, con sus títulos `### G4-… · <gravedad>` tal cual. Falla si un hallazgo de una respuesta no tiene línea, si alguna no tiene resolución o si se descarta sin prueba uno que el revisor o tú clasificasteis como *debe corregirse* o *importante*. Avisa de los que esperan a la persona.
 6. **Métricas:** el comentario de reconciliación de cada ronda termina con esta línea, sola, sin viñeta ni formato y con números:
 
    `Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z`
