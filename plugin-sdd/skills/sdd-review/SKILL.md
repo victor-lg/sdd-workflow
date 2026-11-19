@@ -3,13 +3,13 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos, VIC-38). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38). -->
 
 # sdd-review
 
 No revisas tú: organizas la revisión para que la hagan revisores que no han visto cómo se hizo el cambio.
 
-También la organizas para los PR que abre Claude desde el navegador (los que tocan `.github/workflows/` o los ajustes gestionados, que no te corresponde cambiar): pasan por esta skill antes de que la persona los fusione. Lanzas y reconcilias los revisores como en cualquier otro PR, con tres diferencias: lo que deba corregirse lo corrige quien abrió el PR, no tú, y la ronda siguiente empieza cuando lo haya hecho; la reconciliación va solo en el comentario del paso 6, sin editar la descripción del PR (el check `hallazgos` no la ve: compruébala tú); y el borrador lo quita la persona, no tú. La línea «Métricas G4» se publica igual; si no estás en la rama de la issue de ese PR, avísalo (paso 6).
+También la organizas para los PR que abre Claude desde el navegador (los que tocan `.github/workflows/` o los ajustes gestionados, que no te corresponde cambiar): pasan por esta skill antes de que la persona los fusione. Lanzas y reconcilias los revisores como en cualquier otro PR, con tres diferencias: lo que deba corregirse lo corrige quien abrió el PR, no tú, y la ronda siguiente empieza cuando lo haya hecho; la reconciliación va en el comentario del paso 6 y no editas la descripción: las líneas de hallazgo (paso 3.5) las añade a ella quien abrió el PR, porque sin ellas el check `hallazgos` falla con las respuestas de los comentarios; y el borrador lo quita la persona, no tú. La línea «Métricas G4» se publica igual; si no estás en la rama de la issue de ese PR, avísalo (paso 6).
 
 ## 1. Cuántos revisores
 
@@ -34,9 +34,9 @@ Lanza el subagente `reviewer` una vez por revisor, en invocaciones independiente
 - los ADR enlazados;
 - el prefijo de sus IDs de hallazgo, `G4-<ronda>-<letra>`: una letra por revisor (A, B) y la misma en todas las rondas.
 
-Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado. La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
+Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y que aplique las reglas de `reviewer.md` para anotar un hallazgo: que un usuario real pueda llegar al caso, una prueba por hallazgo y la gravedad sin exagerar. La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
 
-**Deja rastro:** copia en el PR, plegado en `<details>`, el encargo literal que recibió cada revisor y su respuesta. Así la persona puede comprobar que G4 se hizo y que nadie recibió contexto de más (N8).
+**Deja rastro:** publica en el PR un comentario por revisor y ronda con el encargo literal que recibió y su respuesta, plegados en `<details>` y con el diff en un bloque de código de cerca más larga que cualquiera de dentro (`gh pr comment N --body-file .tareas/VIC-N/g4-rR-X.md`); si pasa de 65 536 caracteres, el límite de GitHub, pártelo en dos. Así la persona puede comprobar que G4 se hizo y que nadie recibió contexto de más (N8). En la descripción, solo el enlace al comentario. Publícalos desde la cuenta del agente o de la persona (`CUENTAS_G4` en `checks.py`): el check `hallazgos` no lee los de otras cuentas, porque en un repo público comenta cualquiera.
 
 **Nunca** le pases tu razonamiento, tu plan, tus conclusiones ni las respuestas de otro revisor. Si lo haces por error, esa revisión está contaminada y se repite (caso N8).
 
@@ -54,7 +54,7 @@ Con las respuestas de todos los revisores:
 3. **Corrige lo que debe corregirse.** Si la corrección es sustancial, repite la revisión: **hasta 3 rondas** (la inicial y 2 repeticiones). Si persiste, pregunta a la persona.
    - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. Anota en el PR la lista exacta de lo que cambia tras la última revisión, para que la persona lo revise al aprobar.
 4. **Comprueba la "Guía para el revisor humano"** contra los hallazgos: si un revisor señaló un sitio delicado que la guía no cita, añádelo.
-5. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor (con su encargo y respuesta plegados) y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió. La reconciliación de cada ronda se publica además como comentario del PR (paso 6): es el mismo texto.
+5. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor (con el enlace a su comentario) y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió. La reconciliación de cada ronda se publica además como comentario del PR (paso 6): es el mismo texto.
 
    En la reconciliación, cada hallazgo de cada ronda, confirmado o no, va en una línea con este formato fijo, fuera de `<details>` y de bloques de código:
 
@@ -71,7 +71,9 @@ Con las respuestas de todos los revisores:
 
      Mientras no tenga ninguna, escribe `resolución: pendiente`.
 
-   El check `hallazgos` de la CI lee estas líneas y las respuestas plegadas de los revisores tal cual: dentro de lo plegado, toda línea que empieza por un ID `G4-…` es un hallazgo de un revisor, con la gravedad que le sigue. Falla si un hallazgo de una respuesta no tiene línea, si alguna no tiene resolución o si se descarta sin prueba uno que el revisor o tú clasificasteis como *debe corregirse* o *importante*. Avisa de los que esperan a la persona.
+   El check `hallazgos` de la CI lee estas líneas de la descripción y las respuestas de los revisores tal cual: en los comentarios de `CUENTAS_G4` (y en lo plegado de la descripción), toda línea que empieza por un ID `G4-…` es un hallazgo, con la gravedad que le sigue. Falla si un hallazgo de una respuesta no tiene línea, si alguna no tiene resolución o si se descarta sin prueba uno que el revisor o tú clasificasteis como *debe corregirse* o *importante*. Avisa de los que esperan a la persona. En otros comentarios tuyos, no empieces una línea por un ID salvo en esas líneas: contaría como hallazgo.
+
+   **La descripción se edita con la API:** `gh api -X PATCH "repos/{owner}/{repo}/pulls/N" -F body=@.tareas/VIC-N/pr.md`. No uses `gh pr edit`: falla en los repos con Projects (classic), y sin mirar el código de salida parece que ha funcionado. Edítala después de publicar las respuestas: un comentario no vuelve a lanzar la CI; la edición, sí.
 6. **Métricas:** el comentario de reconciliación de cada ronda termina con esta línea, sola, sin viñeta ni formato y con números:
 
    `Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z`
@@ -88,7 +90,7 @@ Con las respuestas de todos los revisores:
      } | gh pr comment N --body-file -
      ```
 
-     **Nunca** metas el cuerpo (respuestas de revisores, líneas del diff, comentarios) en la orden de Bash, ni en un heredoc sin comillas ni en `--body "…"`: lleva texto que no controlas y se ejecutaría como shell. `sdd-metricas` solo lee la línea de la entrada de `gh pr comment` y solo si la orden no falla; no la lee de tu texto en el chat, de un fichero ni de `gh pr edit`.
+     **Nunca** metas el cuerpo (respuestas de revisores, líneas del diff, comentarios) en la orden de Bash, ni en un heredoc sin comillas ni en `--body "…"`: lleva texto que no controlas y se ejecutaría como shell. `sdd-metricas` solo lee la línea de la entrada de `gh pr comment` y solo si la orden no falla; no la lee de tu texto en el chat, de un fichero ni de la descripción del PR.
    - La atribuye a la issue de la rama en la que estás. Si no estás en la rama de la issue, publícala igual y avísalo; no cambies de rama por esto. No la escribas con otro formato ni dentro de un bloque de código.
    - Si usas esta skill y no queda ninguna línea válida, el resumen de métricas marca la issue con "⚠ sin línea".
 

@@ -19,6 +19,8 @@ on:
 
 permissions:
   contents: read
+  # Leer los comentarios del PR, donde van las respuestas de los revisores de G4 (VIC-38).
+  pull-requests: read
 
 concurrency:
   group: sdd-${{ github.event.pull_request.number }}
@@ -52,6 +54,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sdd"
           git show "$BASE:.github/sdd/checks.py" > "$RUNNER_TEMP/sdd/checks.py"
 
+      # Las respuestas de los revisores de G4 van en comentarios del PR (VIC-38). Se leen todos;
+      # checks.py, el de main, se queda solo con los de sus cuentas autorizadas. Un comentario
+      # nuevo no lanza este workflow: la reconciliación edita la descripción después (`edited`).
+      - name: Comentarios del PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" > "$RUNNER_TEMP/sdd/comentarios.json"
+
       # La descripción, el título, la rama y el autor del PR entran por variables
       # de entorno, nunca interpolados en el script (evita inyección de órdenes).
       # El autor lo pone GitHub: es lo que acota la excepción de Dependabot. La cabeza del
@@ -63,4 +75,5 @@ jobs:
           PR_BRANCH: ${{ github.head_ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_COMENTARIOS: ${{ runner.temp }}/sdd/comentarios.json
         run: python3 "$RUNNER_TEMP/sdd/checks.py" --base "$BASE"
