@@ -71,7 +71,7 @@ Con las respuestas de todos los revisores:
 
      Mientras no tenga ninguna, escribe `resolución: pendiente`.
 
-   El check `hallazgos` de la CI lee estas líneas y las respuestas plegadas de los revisores, con sus títulos `### G4-… · <gravedad>` tal cual. Falla si un hallazgo de una respuesta no tiene línea, si alguna no tiene resolución o si se descarta sin prueba uno que el revisor o tú clasificasteis como *debe corregirse* o *importante*. Avisa de los que esperan a la persona.
+   El check `hallazgos` de la CI lee estas líneas y las respuestas plegadas de los revisores tal cual: dentro de lo plegado, toda línea que empieza por un ID `G4-…` es un hallazgo de un revisor, con la gravedad que le sigue. Falla si un hallazgo de una respuesta no tiene línea, si alguna no tiene resolución o si se descarta sin prueba uno que el revisor o tú clasificasteis como *debe corregirse* o *importante*. Avisa de los que esperan a la persona.
 6. **Métricas:** el comentario de reconciliación de cada ronda termina con esta línea, sola, sin viñeta ni formato y con números:
 
    `Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z`

@@ -836,9 +836,12 @@ def ficheros_versionados() -> dict[str, str] | None:
 # La descripción la escribe cualquiera: nada de expresiones con retroceso sobre una línea entera.
 HALLAZGO_ID = r"G4-[1-9]\d*-[A-Z]-\d{2,3}"
 RE_HALLAZGO = re.compile(rf"^\s*(?:>\s*)*(?:[-*+]|\d+[.)]|\|)\s*(?:\[[ xX]\]\s*)?[*`]*({HALLAZGO_ID})\b[*`]*(.*)$")
-# El hallazgo en la respuesta del revisor (`reviewer.md`): un título o una línea en negrita que
-# empieza por el ID, esté donde esté (también plegado), con la gravedad que le dio.
+# El hallazgo en la respuesta del revisor (`reviewer.md`), con la gravedad que le dio: fuera de
+# lo plegado, un título o una línea en negrita que empieza por el ID; dentro, cualquier línea
+# que empiece por él, también en una lista, una casilla, una cita o una tabla.
 RE_RESPUESTA = re.compile(rf"^\s*(?:#{{1,6}}\s+|\*\*)[*`]*({HALLAZGO_ID})\b(.*)$")
+RE_RESPUESTA_PLEGADA = re.compile(rf"^\s*(?:>\s*)*(?:#{{1,6}}\s+|[-*+]\s+|\d+[.)]\s+|\|\s*)?(?:\[[ xX]\]\s*)?[*_`]*({HALLAZGO_ID})\b(.*)$")
+RE_ALGUN_HALLAZGO = re.compile(HALLAZGO_ID)
 RE_CAMPO_PRUEBA = re.compile(r"·[ \t]*prueba:", re.I)
 RE_CAMPO_RESOLUCION = re.compile(r"·[ \t]*resolución:", re.I)
 GRAVEDADES = ("debe corregirse", "importante", "menor")
@@ -876,7 +879,8 @@ def lineas_visibles(cuerpo_pr: str) -> tuple[list[tuple[str, bool]], list[str]]:
     una con si va plegada en <details> (anidados o no), y lo que queda sin cerrar. Un `<!--`, un
     `<details>` o una cerca dentro de código es texto."""
     lineas, plegado, cerca, comentario = [], 0, None, False
-    for linea in cuerpo_pr.splitlines():
+    # Solo los saltos de Markdown: `splitlines()` también corta en U+2028 y otros que GitHub no.
+    for linea in re.split(r"\r\n|\r|\n", cuerpo_pr):
         m = RE_CERCA.match(linea)
         if cerca:
             # Cierra una cerca del mismo carácter y al menos igual de larga, sin nada detrás.
@@ -912,7 +916,7 @@ def lineas_visibles(cuerpo_pr: str) -> tuple[list[tuple[str, bool]], list[str]]:
 
 
 def gravedad_al_principio(texto: str) -> str:
-    texto = texto.lstrip(" \t*_`·:—–-").lower()
+    texto = texto.lstrip(" \t*_`·:—–-|").lower()
     return next((g for g in GRAVEDADES if texto.startswith(g)), SIN_GRAVEDAD)
 
 
@@ -920,8 +924,8 @@ def gravedades_de_los_revisores(lineas: list[tuple[str, bool]]) -> dict[str, str
     """La gravedad de cada hallazgo de las respuestas; si un ID sale varias veces, la mayor. Sin
     gravedad reconocible, cuenta como grave: para descartarlo hace falta prueba."""
     gravedades: dict[str, str] = {}
-    for linea, _ in lineas:
-        m = RE_RESPUESTA.match(linea)
+    for linea, plegada in lineas:
+        m = (RE_RESPUESTA_PLEGADA if plegada else RE_RESPUESTA).match(linea)
         if m:
             gravedad, previa = gravedad_al_principio(m.group(2)), gravedades.get(m.group(1))
             if previa is None or (previa != SIN_GRAVEDAD and
@@ -947,7 +951,8 @@ def campos_de_hallazgo(campos: str) -> tuple[str, str, str] | None:
 
 def check_hallazgos(inf: Informe, cuerpo_pr: str) -> None:
     lineas, sin_cerrar = lineas_visibles(cuerpo_pr)
-    for que in sin_cerrar:
+    # Sin ningún ID de hallazgo, no hay nada que esconder: un PR sin G4 (R0, Dependabot) no falla aquí.
+    for que in sin_cerrar if RE_ALGUN_HALLAZGO.search(cuerpo_pr) else []:
         inf.error("hallazgos", f"la descripción del PR tiene {que} sin cerrar: lo que sigue no se puede comprobar.")
     del_revisor = gravedades_de_los_revisores(lineas)
     vistos, preguntas = set(), []

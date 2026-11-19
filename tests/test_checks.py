@@ -770,13 +770,17 @@ class TestHallazgos(unittest.TestCase):
 
     def test_respuestas_plegadas_codigo_y_comentarios_no_cuentan(self):
         sin_resolver = "- G4-1-A-01 · debe corregirse · prueba: x · resolución: pendiente"
-        for envoltorio in (f"<details><summary>Revisor A</summary>\n\n{sin_resolver}\n\n</details>",
-                           f"<details>\n<details>\nx\n</details>\n{sin_resolver}\n</details>",
-                           f"<details>\n{sin_resolver}</details>",
-                           f"```\n{sin_resolver}\n```",
-                           f"<!--\n{sin_resolver}\n-->"):
+        for envoltorio in (f"```\n{sin_resolver}\n```", f"<!--\n{sin_resolver}\n-->"):
             with self.subTest(envoltorio=envoltorio):
                 self.assertEqual(self.comprobar(envoltorio).errores, [])
+        # Plegada no es una línea de la reconciliación, pero sí un hallazgo de un revisor (G4-3-B-01).
+        for envoltorio in (f"<details><summary>Revisor A</summary>\n\n{sin_resolver}\n\n</details>",
+                           f"<details>\n<details>\nx\n</details>\n{sin_resolver}\n</details>",
+                           f"<details>\n{sin_resolver}</details>"):
+            with self.subTest(envoltorio=envoltorio):
+                inf = self.comprobar(envoltorio)
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("no tiene su línea", inf.errores[0])
 
     def test_fuera_de_lo_plegado_si_cuenta(self):
         inf = self.comprobar("<details>\nrespuesta\n</details>",
@@ -787,8 +791,8 @@ class TestHallazgos(unittest.TestCase):
         """Lo que va detrás de un <details> sin cerrar no se vería: no se puede dar por bueno."""
         inf = self.comprobar("<details><summary>Revisor A</summary>",
                              "- G4-1-A-01 · debe corregirse · prueba: x · resolución: pendiente")
-        self.assertEqual(len(inf.errores), 1)
         self.assertIn("sin cerrar", inf.errores[0])
+        self.assertNotIn("no tiene resolución", " ".join(inf.errores))
 
     def test_details_entre_comillas_invertidas_es_texto(self):
         inf = self.comprobar("Encargo y respuesta, plegados en `<details>`.",
@@ -899,6 +903,40 @@ class TestHallazgos(unittest.TestCase):
                 ejecutar(checks.check_hallazgos, cuerpo)
                 self.assertLess(time.monotonic() - inicio, 2)
 
+    def test_respuesta_plegada_en_lista_tabla_o_parrafo_cuenta(self):
+        """G4-3-B-01: si el revisor no usa un título, su hallazgo plegado tampoco se escapa."""
+        for linea, gravedad in (("- **G4-1-A-02** · importante", "importante"),
+                                ("G4-1-A-02 · Debe corregirse: x", "debe corregirse"),
+                                ("| G4-1-A-02 | menor | x |", "menor"), ("1. `G4-1-A-02` — menor", "menor"),
+                                ("> - [ ] G4-1-A-02", checks.SIN_GRAVEDAD)):
+            with self.subTest(linea=linea):
+                cuerpo = f"<details>\n\n{linea}\n\n</details>"
+                self.assertEqual(checks.gravedades_de_los_revisores(checks.lineas_visibles(cuerpo)[0]),
+                                 {"G4-1-A-02": gravedad})
+                inf = self.comprobar(cuerpo)
+                self.assertEqual(len(inf.errores), 1)
+                self.assertIn("no tiene su línea", inf.errores[0])
+        # Fuera de lo plegado, una viñeta es una línea de la reconciliación, no una respuesta.
+        self.assertEqual(checks.gravedades_de_los_revisores(checks.lineas_visibles("- G4-1-A-02 · menor")[0]), {})
+
+    def test_solo_cortan_los_saltos_de_markdown(self):
+        """G4-3-A-01 y G4-3-B-02: U+2028 y compañía no son saltos de línea en GitHub."""
+        for salto in ("\u2028", "\u2029", "\x85", "\x0b", "\x0c", "\x1c"):
+            with self.subTest(salto=repr(salto)):
+                inf = self.comprobar(f"x{salto}```", "- G4-1-A-01 · menor · prueba: x · resolución: pendiente",
+                                     f"y{salto}```")
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("no tiene resolución", inf.errores[0])
+        self.assertEqual([l for l, _ in checks.lineas_visibles("a\r\nb\rc\nd")[0]], ["a", "b", "c", "d"])
+
+    def test_sin_ids_lo_que_queda_abierto_no_falla(self):
+        """Sospecha de G4-3-B: un PR sin hallazgos (R0, Dependabot con notas de versión) no falla
+        por un `<details>`, un bloque de código o un comentario sin cerrar."""
+        for cuerpo in ("<details><summary>Release notes</summary>\n\nx", "```\nx", "<!--\nx"):
+            with self.subTest(cuerpo=cuerpo):
+                self.assertEqual(ejecutar(checks.check_hallazgos, cuerpo).errores, [])
+                self.assertTrue(ejecutar(checks.check_hallazgos, cuerpo + "\nG4-1-A-01").errores)
+
     def test_otras_menciones_del_id_no_cuentan(self):
         inf = self.comprobar("- Corregidos G4-1-A-01 y G4-1-A-02 en 1a2b3c4.",
                              "- [x] Revisión G4, ronda 1: G4-1-A-01 corregido.",
@@ -967,9 +1005,9 @@ class TestHallazgos(unittest.TestCase):
     def test_details_dentro_de_codigo_plegado_es_texto(self):
         """G4-1-B-05: citar un `<details>` en un bloque de código de la respuesta no da falso error."""
         for respuesta in ("<details>\n\n```python\ninf = self.comprobar(\"<details><summary>A</summary>\",\n```\n\n</details>",
-                          "<details>\n\n```\n</details>\n```\n\n- G4-1-A-01 · menor · prueba: x · resolución: pendiente\n\n</details>"):
+                          "<details>\n\n```\n</details>\n```\n\n### G4-1-A-01 · menor\n\n</details>"):
             with self.subTest(respuesta=respuesta):
-                self.assertEqual(self.comprobar(respuesta).errores, [])
+                self.assertEqual(self.comprobar(respuesta, "- G4-1-A-01 · menor · prueba: x · resolución: descartado").errores, [])
 
 
 # --- De punta a punta: main() en un repo de verdad -------------------------
