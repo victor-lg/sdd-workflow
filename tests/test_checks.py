@@ -3,7 +3,8 @@ enlace a la issue), REG-34 (sin menciones a Claude), M39 (historial en la cabece
 de una spec), M7 (comillas en la cabecera de los ADR), M17 (`.gitignore` de la
 plantilla y de este repo con los ficheros del sandbox), la configuración de lefthook
 (ADR-0008) y, desde el PR 3 de VIC-18, los ficheros sensibles, el formato de los commits
-(REG-31, REG-32) y la excepción de Dependabot (M38). Casos que pasan y que fallan."""
+(REG-31, REG-32) y la excepción de Dependabot (M38) y, desde VIC-38, la resolución de
+los hallazgos de G4. Casos que pasan y que fallan."""
 import importlib.util
 import json
 import os
@@ -685,6 +686,120 @@ class TestDependabot(unittest.TestCase):
         self.assertIn("Dependabot", inf.avisos[0])
 
 
+# --- Hallazgos de G4 (VIC-38) -----------------------------------------------
+
+def reconciliacion(*lineas: str) -> str:
+    """Un cuerpo de PR con la plantilla real y estas líneas en «Revisión IA (G4)»."""
+    return cuerpo_plantilla("Part of VIC-38").replace(
+        "## Guía para el revisor humano", "\n".join(lineas) + "\n\n## Guía para el revisor humano", 1)
+
+
+class TestHallazgos(unittest.TestCase):
+    def comprobar(self, *lineas):
+        return ejecutar(checks.check_hallazgos, reconciliacion(*lineas))
+
+    def test_todos_resueltos_pasan(self):
+        inf = self.comprobar(
+            "- G4-1-A-01 · debe corregirse · prueba: `app.js:12` · resolución: corregido en 1a2b3c4",
+            "- **G4-1-B-01** · importante · prueba: test_suma falla con 0 · resolución: descartado: AC-03 pide 0 (`spec.md:40`)",
+            "* `G4-2-A-02` · menor · prueba: «sin punto final» · resolución: descartado",
+            "- G4-3-A-10 · Importante · prueba: x · resolución: corregido en `1a2b3c4d5e` y 9f8e7d6")
+        self.assertEqual((inf.errores, inf.avisos), ([], []))
+
+    def test_la_plantilla_y_un_pr_sin_hallazgos_pasan(self):
+        self.assertEqual(ejecutar(checks.check_hallazgos, cuerpo_plantilla("Fixes VIC-38")).errores, [])
+        self.assertEqual(ejecutar(checks.check_hallazgos, "").errores, [])
+
+    def test_sin_resolucion_falla(self):
+        for resolucion in ("", "pendiente", "corregido", "corregido en el próximo push", "lo miro"):
+            with self.subTest(resolucion=resolucion):
+                inf = self.comprobar(f"- G4-1-A-01 · menor · prueba: x · resolución: {resolucion}")
+                self.assertEqual(len(inf.errores), 1)
+                self.assertIn("`G4-1-A-01` no tiene resolución", inf.errores[0])
+
+    def test_id_en_negrita_o_codigo_y_otras_vinetas_cuentan(self):
+        for inicio in ("- **G4-1-A-01**", "* `G4-1-A-01`", "  - G4-1-A-01"):
+            with self.subTest(inicio=inicio):
+                inf = self.comprobar(f"{inicio} · menor · prueba: x · resolución: pendiente")
+                self.assertEqual(len(inf.errores), 1)
+
+    def test_falla_uno_entre_varios_resueltos(self):
+        inf = self.comprobar(
+            "- G4-1-A-01 · debe corregirse · prueba: x · resolución: corregido en 1a2b3c4",
+            "- G4-1-A-02 · importante · prueba: y · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("G4-1-A-02", inf.errores[0])
+
+    def test_descartar_debe_corregirse_o_importante_pide_prueba(self):
+        for gravedad in ("debe corregirse", "importante"):
+            for resolucion in ("descartado", "descartado:", "descartado:   "):
+                with self.subTest(gravedad=gravedad, resolucion=resolucion):
+                    inf = self.comprobar(f"- G4-1-A-01 · {gravedad} · prueba: x · resolución: {resolucion}")
+                    self.assertEqual(len(inf.errores), 1)
+                    self.assertIn("se descarta sin prueba", inf.errores[0])
+
+    def test_pregunta_a_la_persona_pasa_y_avisa(self):
+        inf = self.comprobar("- G4-1-A-01 · debe corregirse · prueba: x · resolución: pregunta a la persona")
+        self.assertEqual(inf.errores, [])
+        self.assertEqual(len(inf.avisos), 1)
+        self.assertIn("`G4-1-A-01`", inf.avisos[0])
+
+    def test_formato_roto_falla(self):
+        for linea in ("- G4-1-A-01 debe corregirse, corregido en 1a2b3c4",
+                      "- G4-1-A-01 · debe corregirse · resolución: corregido en 1a2b3c4",
+                      "- G4-1-A-01 · debe corregirse · prueba: x"):
+            with self.subTest(linea=linea):
+                inf = self.comprobar(linea)
+                self.assertEqual(len(inf.errores), 1)
+                self.assertIn("no sigue el formato", inf.errores[0])
+
+    def test_gravedad_o_prueba_que_faltan_fallan(self):
+        inf = self.comprobar("- G4-1-A-01 · mejora · prueba: x · resolución: corregido en 1a2b3c4")
+        self.assertIn("la gravedad `mejora`", " ".join(inf.errores))
+        inf = self.comprobar("- G4-1-A-01 · menor · prueba: · resolución: corregido en 1a2b3c4")
+        self.assertIn("no tiene prueba", " ".join(inf.errores))
+
+    def test_id_repetido_falla(self):
+        linea = "- G4-1-A-01 · menor · prueba: x · resolución: corregido en 1a2b3c4"
+        inf = self.comprobar(linea, linea)
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("aparece dos veces", inf.errores[0])
+
+    def test_respuestas_plegadas_codigo_y_comentarios_no_cuentan(self):
+        sin_resolver = "- G4-1-A-01 · debe corregirse · prueba: x · resolución: pendiente"
+        for envoltorio in (f"<details><summary>Revisor A</summary>\n\n{sin_resolver}\n\n</details>",
+                           f"<details>\n<details>\nx\n</details>\n{sin_resolver}\n</details>",
+                           f"<details>\n{sin_resolver}</details>",
+                           f"```\n{sin_resolver}\n```",
+                           f"<!--\n{sin_resolver}\n-->"):
+            with self.subTest(envoltorio=envoltorio):
+                self.assertEqual(self.comprobar(envoltorio).errores, [])
+
+    def test_fuera_de_lo_plegado_si_cuenta(self):
+        inf = self.comprobar("<details>\nrespuesta\n</details>",
+                             "- G4-1-A-01 · debe corregirse · prueba: x · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1)
+
+    def test_details_sin_cerrar_falla(self):
+        """Lo que va detrás de un <details> sin cerrar no se vería: no se puede dar por bueno."""
+        inf = self.comprobar("<details><summary>Revisor A</summary>",
+                             "- G4-1-A-01 · debe corregirse · prueba: x · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("sin cerrar", inf.errores[0])
+
+    def test_details_entre_comillas_invertidas_es_texto(self):
+        inf = self.comprobar("Encargo y respuesta, plegados en `<details>`.",
+                             "- G4-1-A-01 · debe corregirse · prueba: x · resolución: pendiente")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("no tiene resolución", inf.errores[0])
+
+    def test_otras_menciones_del_id_no_cuentan(self):
+        inf = self.comprobar("### G4-1-A-01 · debe corregirse",
+                             "- Corregidos G4-1-A-01 y G4-1-A-02 en 1a2b3c4.",
+                             "- [x] Revisión G4, ronda 1: G4-1-A-01 corregido.")
+        self.assertEqual(inf.errores, [])
+
+
 # --- De punta a punta: main() en un repo de verdad -------------------------
 
 class TestPuntaAPunta(unittest.TestCase):
@@ -773,6 +888,17 @@ class TestPuntaAPunta(unittest.TestCase):
         r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("el PR quita `lefthook.json`", r.stdout)
+
+    def test_comprueba_los_hallazgos(self):
+        cuerpo = "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n\n## Revisión IA (G4)\n\n"
+        hallazgo = "- G4-1-A-01 · importante · prueba: `0002-x.md:3` · resolución: "
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]',
+                        PR_BODY=cuerpo + hallazgo + "pendiente\n")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("**hallazgos:** `G4-1-A-01` no tiene resolución", r.stdout)
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #13"]',
+                        PR_BODY=cuerpo + hallazgo + "corregido en 1a2b3c4\n")
+        self.assertEqual(r.returncode, 0, r.stdout)
 
     def test_sin_rama_ni_titulo_no_comprueba_convenciones(self):
         r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', PR_BRANCH="", PR_TITLE="",

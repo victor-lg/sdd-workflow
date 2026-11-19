@@ -3,13 +3,13 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos, VIC-38). -->
 
 # sdd-review
 
 No revisas tú: organizas la revisión para que la hagan revisores que no han visto cómo se hizo el cambio.
 
-También la organizas para los PR que abre Claude desde el navegador (los que tocan `.github/workflows/` o los ajustes gestionados, que no te corresponde cambiar): pasan por esta skill antes de que la persona los fusione. Lanzas y reconcilias los revisores como en cualquier otro PR, con tres diferencias: lo que deba corregirse lo corrige quien abrió el PR, no tú, y la ronda siguiente empieza cuando lo haya hecho; la reconciliación va solo en el comentario del paso 6, sin editar la descripción del PR; y el borrador lo quita la persona, no tú. La línea «Métricas G4» se publica igual; si no estás en la rama de la issue de ese PR, avísalo (paso 6).
+También la organizas para los PR que abre Claude desde el navegador (los que tocan `.github/workflows/` o los ajustes gestionados, que no te corresponde cambiar): pasan por esta skill antes de que la persona los fusione. Lanzas y reconcilias los revisores como en cualquier otro PR, con tres diferencias: lo que deba corregirse lo corrige quien abrió el PR, no tú, y la ronda siguiente empieza cuando lo haya hecho; la reconciliación va solo en el comentario del paso 6, sin editar la descripción del PR (el check `hallazgos` no la ve: compruébala tú); y el borrador lo quita la persona, no tú. La línea «Métricas G4» se publica igual; si no estás en la rama de la issue de ese PR, avísalo (paso 6).
 
 ## 1. Cuántos revisores
 
@@ -31,7 +31,8 @@ Lanza el subagente `reviewer` una vez por revisor, en invocaciones independiente
 - la spec vigente en `main` y, si es un PR de spec, la versión propuesta;
 - el diff;
 - los resultados de la CI;
-- los ADR enlazados.
+- los ADR enlazados;
+- el prefijo de sus IDs de hallazgo, `G4-<ronda>-<letra>`: una letra por revisor (A, B) y la misma en todas las rondas.
 
 Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado. La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
 
@@ -46,12 +47,29 @@ Con las respuestas de todos los revisores:
 1. **Confirma cada hallazgo contra el código o la spec.** Descarta lo que no se sostenga y explica por qué.
 2. **Clasifica:**
    - *debe corregirse:* bloquea el merge;
-   - *importante:* se corrige o se justifica;
-   - *mejora:* opcional.
+   - *importante:* se corrige o se descarta con prueba;
+   - *menor:* opcional.
+
+   Para descartar un *debe corregirse* o un *importante*, o bajarle la gravedad, hace falta una prueba concreta: un test, una línea o una cita. Si no la tienes, pregunta a la persona.
 3. **Corrige lo que debe corregirse.** Si la corrección es sustancial, repite la revisión: **hasta 3 rondas** (la inicial y 2 repeticiones). Si persiste, pregunta a la persona.
    - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. Anota en el PR la lista exacta de lo que cambia tras la última revisión, para que la persona lo revise al aprobar.
 4. **Comprueba la "Guía para el revisor humano"** contra los hallazgos: si un revisor señaló un sitio delicado que la guía no cita, añádelo.
 5. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor (con su encargo y respuesta plegados) y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió. La reconciliación de cada ronda se publica además como comentario del PR (paso 6): es el mismo texto.
+
+   En la reconciliación, cada hallazgo de cada ronda, confirmado o no, va en una línea con este formato fijo, fuera de `<details>` y de bloques de código:
+
+   ```
+   - G4-1-A-01 · debe corregirse · prueba: `src/peso.js:42` · resolución: corregido en 1a2b3c4
+   ```
+
+   - **Gravedad:** la que confirmas (*debe corregirse*, *importante* o *menor*).
+   - **Prueba:** la del revisor o la tuya.
+   - **Resolución,** una de estas:
+     - `corregido en <sha>` (varios, separados por comas);
+     - `descartado: <prueba>`: el test, la línea o la cita que lo refuta. En un *menor* basta `descartado`;
+     - `pregunta a la persona`, si no hay prueba para descartarlo; cuando conteste, cámbiala por una de las otras dos.
+
+     Mientras no tenga ninguna, escribe `resolución: pendiente`. El check `hallazgos` de la CI falla si algún hallazgo no tiene resolución o se descarta sin prueba, y avisa de los que esperan a la persona.
 6. **Métricas:** el comentario de reconciliación de cada ronda termina con esta línea, sola, sin viñeta ni formato y con números:
 
    `Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z`

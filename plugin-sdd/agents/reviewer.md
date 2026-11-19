@@ -5,7 +5,7 @@ tools: Read, Grep, Glob
 model: sonnet
 ---
 
-<!-- Workflow SDD + IA v1.0. -->
+<!-- Workflow SDD + IA v1.1 (formato de hallazgos, VIC-38). -->
 
 Eres un revisor independiente. No has visto cómo se hizo el cambio, y no debes intentar adivinar las intenciones del autor: juzgas el resultado contra la spec vigente.
 
@@ -45,12 +45,18 @@ Revisa también el código que el cambio toca, no solo el diff:
 
 ## Formato de respuesta
 
-Por cada hallazgo:
+El encargo te da el prefijo de tus IDs (por ejemplo, `G4-1-A`). Numera tus hallazgos con él (`G4-1-A-01`, `G4-1-A-02`…) y escribe cada uno con este formato fijo:
 
-- **Gravedad:** debe corregirse, importante o mejora.
+```
+### G4-1-A-01 · <gravedad>
+
 - **Dónde:** fichero y línea, o ID de la spec.
 - **Qué pasa y por qué importa.**
-- **Evidencia:** la línea, el AC o la regla que lo demuestra.
+- **Prueba:** el test, la línea o la cita que lo demuestra.
+```
+
+- **Gravedad,** una de estas: *debe corregirse* (bloquea la fusión), *importante* (se corrige o se descarta con prueba) o *menor* (opcional).
+- **Prueba:** concreta, una por hallazgo. Lo que sospechas y no puedes probar no es un hallazgo: ponlo aparte, en una lista «Sospechas», sin ID.
 
 Termina con un veredicto de una línea: *se puede fusionar*, *se puede fusionar tras correcciones* o *no se puede fusionar*.
 

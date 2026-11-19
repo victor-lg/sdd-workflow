@@ -26,6 +26,9 @@ Comprueba:
                 entre comillas (un `#` sin comillas se lee como comentario).
   lefthook      ADR-0008: la única configuración de lefthook es `lefthook.json`, solo con
                 las claves que no amplían lo que se ejecuta, y no se quita si `main` la tiene.
+  hallazgos     VIC-38: cada hallazgo de G4 de la reconciliación del PR tiene gravedad,
+                prueba y resolución, y descartar uno que debe corregirse o importante
+                pide una prueba (skill `sdd-review`).
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -824,6 +827,79 @@ def ficheros_versionados() -> dict[str, str] | None:
     return versionados
 
 
+# --- Hallazgos de G4 (VIC-38) ---------------------------------------------
+
+# Una línea por hallazgo en la reconciliación del PR (skill `sdd-review`):
+#   - G4-1-A-01 · debe corregirse · prueba: `app.js:12` · resolución: corregido en 1a2b3c4
+# Las respuestas de los revisores van plegadas en <details> y con el ID en un título: no cuentan.
+RE_HALLAZGO = re.compile(r"^\s*[-*]\s+[*`]*(G4-[1-9]\d*-[A-Z]-\d{2,3})\b[*`]*(.*)$")
+RE_CAMPOS_HALLAZGO = re.compile(r"^\s*·\s*(?P<gravedad>[^·]*?)\s*·\s*prueba:\s*(?P<prueba>.*?)"
+                                r"\s*·\s*resolución:\s*(?P<resolucion>.*?)\s*$", re.I)
+GRAVEDADES = ("debe corregirse", "importante", "menor")
+RE_CORREGIDO = re.compile(r"^corregido en `?[0-9a-f]{7,40}`?(?:(?:,| y) `?[0-9a-f]{7,40}`?)*$")
+RE_DESCARTADO = re.compile(r"^descartado(?::\s*(?P<prueba>.*))?$")
+PREGUNTA = "pregunta a la persona"
+RE_PLEGADO = re.compile(r"<details\b|</details\s*>", re.I)
+RE_CERCA = re.compile(r"^\s*(```|~~~)")
+
+
+def lineas_de_reconciliacion(cuerpo_pr: str) -> tuple[list[str], bool]:
+    """Las líneas del PR fuera de comentarios HTML, bloques de código y <details>, anidados o no,
+    y si queda algún <details> sin cerrar. Un `<details>` entre comillas invertidas es texto."""
+    texto = re.sub(r"<!--.*?-->", "", cuerpo_pr, flags=re.S)
+    lineas, plegado, cerca = [], 0, False
+    for linea in texto.splitlines():
+        if not plegado and RE_CERCA.match(linea):
+            cerca = not cerca
+            continue
+        if cerca:
+            continue
+        antes = plegado
+        for m in RE_PLEGADO.finditer(re.sub(r"`[^`]*`", "", linea)):
+            plegado = max(0, plegado + (-1 if m.group(0).startswith("</") else 1))
+        if antes == 0 and plegado == 0:
+            lineas.append(linea)
+    return lineas, plegado > 0
+
+
+def check_hallazgos(inf: Informe, cuerpo_pr: str) -> None:
+    lineas, sin_cerrar = lineas_de_reconciliacion(cuerpo_pr)
+    if sin_cerrar:
+        inf.error("hallazgos", "la descripción del PR tiene un `<details>` sin cerrar: lo que sigue no se puede comprobar. Ciérralo con `</details>`.")
+    vistos, preguntas = set(), []
+    for linea in lineas:
+        m = RE_HALLAZGO.match(linea)
+        if not m:
+            continue
+        hid, campos = m.groups()
+        if hid in vistos:
+            inf.error("hallazgos", f"`{hid}` aparece dos veces en la reconciliación; deja una sola línea por hallazgo.")
+            continue
+        vistos.add(hid)
+        c = RE_CAMPOS_HALLAZGO.match(campos)
+        if not c:
+            inf.error("hallazgos", f"`{hid}` no sigue el formato `- {hid} · <gravedad> · prueba: <test, línea o cita> · resolución: <resolución>` (`sdd-review`).")
+            continue
+        gravedad, prueba, resolucion = (c.group(g).strip().strip("*_") for g in ("gravedad", "prueba", "resolucion"))
+        gravedad = gravedad.lower()
+        if gravedad not in GRAVEDADES:
+            inf.error("hallazgos", f"`{hid}`: la gravedad `{gravedad}` no es {', '.join(GRAVEDADES)}.")
+        if not prueba:
+            inf.error("hallazgos", f"`{hid}` no tiene prueba: cada hallazgo cita un test, una línea o un texto.")
+        descartado = RE_DESCARTADO.match(resolucion)
+        if RE_CORREGIDO.match(resolucion):
+            pass
+        elif descartado:
+            if gravedad != "menor" and not (descartado.group("prueba") or "").strip():
+                inf.error("hallazgos", f"`{hid}` ({gravedad}) se descarta sin prueba. Escribe `descartado: <test, línea o cita>`; si no la hay, `{PREGUNTA}`.")
+        elif resolucion.lower() == PREGUNTA:
+            preguntas.append(hid)
+        else:
+            inf.error("hallazgos", f"`{hid}` no tiene resolución (`{resolucion or 'vacía'}`): escribe `corregido en <sha>`, `descartado: <prueba>` o `{PREGUNTA}`.")
+    if preguntas:
+        inf.aviso("hallazgos", f"hallazgos pendientes de la persona: {', '.join(f'`{h}`' for h in preguntas)}. Respóndelos antes de aprobar.")
+
+
 # --- Programa -------------------------------------------------------------
 
 def main() -> int:
@@ -888,6 +964,7 @@ def main() -> int:
     texto_lefthook = git("show", f":{LEFTHOOK_CONFIG}") if normal else None
     en_base = git("ls-tree", "--name-only", args.base, "--", LEFTHOOK_CONFIG)
     check_lefthook(inf, versionados, texto_lefthook, None if en_base is None else bool(en_base.strip()))
+    check_hallazgos(inf, cuerpo_pr)
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]
