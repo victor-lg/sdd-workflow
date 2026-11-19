@@ -962,9 +962,11 @@ def comentarios_de_g4(ruta: str) -> list[tuple[str, str]] | None:
         return None
     comentarios = []
     for c in (c for p in paginas for c in p):
-        if not isinstance(c, dict) or not isinstance(c.get("user"), dict):
+        if not isinstance(c, dict):
             return None
-        if c["user"].get("login") in CUENTAS_G4 and isinstance(c.get("body"), str):
+        # Sin usuario (una cuenta borrada) no es de CUENTAS_G4: se ignora, no se falla por él.
+        usuario = c.get("user") if isinstance(c.get("user"), dict) else {}
+        if usuario.get("login") in CUENTAS_G4 and isinstance(c.get("body"), str):
             comentarios.append((str(c.get("html_url", "")), c["body"]))
     return comentarios
 

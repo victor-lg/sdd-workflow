@@ -56,7 +56,8 @@ Revisores exigidos: 2 en spec y ADR (R1 y R2) y en el código R2; 1 en el códig
 - **Reconciliación:** hallazgos confirmados, descartados (y por qué) y corregidos, con una línea por hallazgo:
   <!-- Fuera de <details> y de bloques de código; la comprueba el check `hallazgos` (`sdd-review`):
   - G4-1-A-01 · debe corregirse · prueba: <test, línea o cita> · resolución: corregido en <sha>
-  Resolución: `corregido en <sha>`, `descartado: <prueba>` (en un menor basta `descartado`) o `pregunta a la persona`. -->
+  Resolución: `corregido en <sha>`, `descartado: <prueba>` (en un menor basta `descartado`) o `pregunta a la persona`.
+  En los comentarios del PR, una línea que empieza por un ID cuenta como hallazgo: al contestar, cita el ID a mitad de línea. -->
 - **Cambios tras la última ronda** (si los hay): lista exacta.
 
 ## Guía para el revisor humano

@@ -1075,7 +1075,9 @@ class TestHallazgosEnComentarios(unittest.TestCase):
     def test_solo_las_cuentas_autorizadas(self):
         paginas = [[comentario("### G4-1-A-01 · menor", login) for login in
                     ("victor-lg-bot", "intruso", "victor-lg-bot2", "Victor-LG-bot")],
-                   [comentario("### G4-1-A-02 · menor", "victor-lg", n=2), {"user": {"login": "victor-lg"}}]]
+                   [comentario("### G4-1-A-02 · menor", "victor-lg", n=2), {"user": {"login": "victor-lg"}},
+                    {"user": None, "body": "### G4-1-A-03 · menor"}, {"body": "### G4-1-A-03 · menor"},
+                    {"user": "victor-lg", "body": "### G4-1-A-03 · menor"}]]
         self.assertEqual(self.leer(paginas), [(paginas[0][0]["html_url"], "### G4-1-A-01 · menor"),
                                               (paginas[1][0]["html_url"], "### G4-1-A-02 · menor")])
         self.assertEqual(self.leer([[]]), [])
@@ -1083,7 +1085,7 @@ class TestHallazgosEnComentarios(unittest.TestCase):
         self.assertEqual(checks.CUENTAS_G4, ("victor-lg-bot", "victor-lg"))
 
     def test_sin_poder_leer_los_comentarios_es_none(self):
-        for contenido in ("", " \n", "{", "{}", "[]{}", "[] x", "[{}]", "[1]", '[{"user": null}]', '[{"user": "victor-lg"}]'):
+        for contenido in ("", " \n", "{", "{}", "[]{}", "[] x", "[1]", '[["x"]]'):
             with self.subTest(contenido=contenido):
                 self.assertIsNone(self.leer(contenido))
         self.assertIsNone(checks.comentarios_de_g4(str(pathlib.Path(self.tmp.name) / "no-existe.json")))

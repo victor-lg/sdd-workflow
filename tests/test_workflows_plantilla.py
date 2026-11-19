@@ -46,7 +46,7 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
     def test_sdd_pasa_los_comentarios_a_checks_py(self):
         """Todas las páginas, en el fichero que lee checks.py (VIC-38)."""
         texto = leer("sdd.yml")
-        self.assertIn('gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" > '
+        self.assertIn('gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" > '
                       '"$RUNNER_TEMP/sdd/comentarios.json"', texto)
         self.assertIn("PR_COMENTARIOS: ${{ runner.temp }}/sdd/comentarios.json", texto)
 
