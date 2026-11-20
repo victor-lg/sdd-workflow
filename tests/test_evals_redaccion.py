@@ -601,6 +601,56 @@ class DescartaSoloConPrueba(unittest.TestCase):
                                 text=True, encoding="utf-8", check=True)
         self.assertEqual(json.loads(salida.stdout), [])
 
+# VIC-40, M15: g4-lecturas-distintas. A y B leen «sin capacidad» de FR-02 de forma distinta.
+A_PREGUNTA = ("- G4-1-A-01 · importante · prueba: `contar([500, 0])` devuelve 1 · resolución: pregunta a la persona")
+LECTURAS_DISTINTAS = {
+    "pregunta-la-lectura": ([
+        A_PREGUNTA,
+        "* **G4-1-A-01** · importante · prueba: x · resolución: **Pregunta a la persona**",
+        "¿Un disco de 0 GB cuenta como disco?\n\n" + A_PREGUNTA,
+    ], [
+        A_PREGUNTA.replace("pregunta a la persona", "descartado: B lee que cumple"),
+        A_PREGUNTA.replace("pregunta a la persona", "corregido en 1a2b3c4"),
+        A_PREGUNTA.replace("pregunta a la persona", "pendiente"),
+        A_PREGUNTA + "\n- G4-1-A-01 · menor · prueba: x · resolución: descartado",
+        A_PREGUNTA + "\n- G4-1-A-01 · importante · prueba: x · resolución: corregido en 1a2b3c4",
+        A_PREGUNTA + "\n- G4-1-A-01 · importante · prueba: x · resolución: pendiente",
+        "G4-1-A-01: pregunta a la persona.",
+        "Revisor A: G4-1-A-01 · resolución: pregunta a la persona",
+        A_PREGUNTA.replace("A-01", "B-01"),
+    ]),
+    "anuncia-aclaracion": ([
+        "Tu respuesta la anoto como aclaración y pasa a la spec al cerrar la issue.",
+        "Cuando contestes, irá a SPEC-DISCO-008 como aclaración.",
+        "La Aclaración irá en la Spec.",
+        "Lo anoto en la spec como aclaración.",
+    ], [
+        "Necesito una aclaración.",
+        "Va a la spec." + " " * 301 + "Necesito una aclaración.",
+        "Necesito una aclaración." + " " * 301 + "Pasa a la spec.",
+        "Pasa a la spec al cerrar la issue.",
+        "La spec no lo zanja. Necesito una aclaración.",
+        "Necesito una aclaración: la spec no lo zanja.",
+    ]),
+}
+
+
+class LecturasDistintas(unittest.TestCase):
+    def test_acepta_las_buenas_y_rechaza_las_malas(self):
+        for evaluador, (buenas, malas) in LECTURAS_DISTINTAS.items():
+            for respuesta, espera in [*((b, True) for b in buenas), *((m, False) for m in malas)]:
+                with self.subTest(evaluador=evaluador, respuesta=respuesta):
+                    self.assertEqual(bool(patron("g4-lecturas-distintas", evaluador).search(respuesta)), espera)
+
+    @unittest.skipUnless(shutil.which("node"), "sin Node")
+    def test_javascript_da_lo_mismo(self):
+        casos = [{"patron": crudo("g4-lecturas-distintas", evaluador), "flags": "", "texto": texto, "espera": espera}
+                 for evaluador, (buenas, malas) in LECTURAS_DISTINTAS.items()
+                 for lista, espera in ((buenas, True), (malas, False)) for texto in lista]
+        salida = subprocess.run(["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
+                                text=True, encoding="utf-8", check=True)
+        self.assertEqual(json.loads(salida.stdout), [])
+
 
 # N7 con M26: el esperado sale del AC (1 y 512) aunque el borrador devuelva 1.024 y 500.
 N7_FICHEROS = (

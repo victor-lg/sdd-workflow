@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, VIC-40). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, VIC-40). -->
 
 # sdd-review
 
@@ -45,6 +45,12 @@ Pide expresamente a cada revisor que compruebe si algún test existente se ha de
 Con las respuestas de todos los revisores:
 
 1. **Confirma cada hallazgo contra el código o la spec.** Descarta lo que no se sostenga y explica por qué.
+
+   **Lecturas distintas de la spec.** Si dos revisores leen un mismo FR o AC de forma distinta (uno da por cumplido lo que el otro señala, o piden arreglos opuestos) y ni la spec, ni sus AC, ni un ADR lo zanjan, no eliges tú la lectura: decide la persona. Pregúntale con el texto literal del requisito, las dos lecturas y lo que cambia según cuál valga; los hallazgos que dependen de ello llevan `resolución: pregunta a la persona`. Cuando conteste, resuélvelos con su respuesta (corregido, o descartado con el enlace a la respuesta como prueba) y anótala como **aclaración** en «Revisión IA», una línea por requisito, para pasarla a la spec al cerrar (sección 4):
+
+   ```
+   - Aclaración SPEC-CALC-003/FR-05: «redondear» es al decimal más cercano, no hacia abajo. Respuesta: <enlace>
+   ```
 2. **Clasifica:**
    - *debe corregirse:* bloquea el merge;
    - *importante:* se corrige o se descarta con prueba;
@@ -95,5 +101,7 @@ Con las respuestas de todos los revisores:
    - Si usas esta skill y no queda ninguna línea válida, el resumen de métricas marca la issue con "⚠ sin línea".
 
 ## 4. Cerrar
+
+Si el PR tiene aclaraciones (paso 3.1), pásalas antes a la spec: con `sdd-spec`, en un PR de spec aparte (un PR de código no cambia la spec), que cita cada respuesta. Enlázalo desde «Revisión IA»: la persona fusiona los dos, y así la aclaración está en la spec cuando se cierra la issue.
 
 Cuando no quede nada que deba corregirse y la CI esté en verde, comprueba que el título sigue `docs/convenciones.md` del workflow (Conventional Commits, alcance como zona y no como ID) y que la "Guía para el revisor humano" está completa, y quita el estado de borrador con `gh pr ready N`. El hook comprueba antes que todos los checks del último commit estén en verde, sin ninguno cancelado (M5), y si no lo están lo bloquea: no lo quites por otra vía. La aprobación y el merge son de la persona (G6).

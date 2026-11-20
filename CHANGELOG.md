@@ -4,6 +4,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Lecturas distintas de la spec y aclaraciones (VIC-40, PR 2; M15). Plugin `sdd` 1.13.0.**
+  - `sdd-review`: si dos revisores leen un mismo FR o AC de forma distinta y ni la spec, ni sus AC, ni un ADR lo zanjan, no elige la lectura: pregunta a la persona con el texto del requisito, las dos lecturas y lo que cambia, y los hallazgos que dependen de ello quedan con `resolución: pregunta a la persona`. Con la respuesta, los resuelve y la anota como aclaración en «Revisión IA» (`- Aclaración SPEC-XXX-NNN/FR-NN: … Respuesta: <enlace>`). Antes de quitar el borrador, pasa las aclaraciones a la spec con `sdd-spec`, en un PR de spec aparte enlazado desde el de código.
+  - `reviewer`: en un PR de código, si un hallazgo (o algo que da por cumplido) depende de cómo se lee un FR o AC, cita la frase y dice qué lectura usa.
+  - Glosario: «Aclaración».
+  - Caso nuevo `g4-lecturas-distintas` (M35): un revisor lee «sin capacidad» como sin capacidad indicada y el otro incluye los discos de 0 GB; la spec no lo zanja. El hallazgo se queda en `pregunta a la persona`, sin descartarlo ni corregirlo, y la respuesta se anuncia como aclaración de la spec. Tests de sus evaluadores en `tests/test_evals_redaccion.py`.
+
 - **Cada FR con sus AC en la revisión de una spec (VIC-40, PR 1; M13). Plugin `sdd` 1.12.0.**
   - `reviewer`: en un PR de spec, antes de anotar hallazgos, cruza cada FR con los AC que lo citan y pone el cruce en su respuesta, una línea por FR. Cuenta el ID que cita el AC, no el tema: un AC que prueba lo de FR-04 pero cita FR-02 no cubre FR-04. Cada FR sin AC es un hallazgo *importante*, salvo que la spec diga por qué no se puede comprobar.
   - `sdd-review`: el encargo de un PR de spec pide el cruce.
