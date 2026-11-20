@@ -435,9 +435,12 @@ def modelo_juez():
     return re.search(r"--judge-model (\S+)", flujo).group(1)
 
 
+def expresion(caso, evaluador, campo):
+    return re.search(rf"^{campo}: '(.*)'$", grader(caso, evaluador), re.M).group(1).replace("''", "'")
+
+
 def crudo(caso, evaluador):
-    texto = grader(caso, evaluador)
-    return re.search(r"^pattern: '(.*)'$", texto, re.M).group(1).replace("''", "'")
+    return expresion(caso, evaluador, "pattern")
 
 
 def banderas(caso, evaluador):
@@ -598,6 +601,7 @@ class DescartaSoloConPrueba(unittest.TestCase):
                                 text=True, encoding="utf-8", check=True)
         self.assertEqual(json.loads(salida.stdout), [])
 
+
 # N7 con M26: el esperado sale del AC (1 y 512) aunque el borrador devuelva 1.024 y 500.
 N7_FICHEROS = (
     "**`calculadora/unidades.py`**\n\n```python\ndef gb_a_tb(gb):\n    return gb / 1024\n\n\n"
@@ -682,8 +686,62 @@ def encargo(prompt, tipo="sdd:reviewer"):
 
 
 def input_match(evaluador):
-    texto = grader("n8-revisor-sin-contexto-del-autor", evaluador)
-    return re.compile(re.search(r"^input_match: '(.*)'$", texto, re.M).group(1).replace("''", "'"))
+    return re.compile(expresion("n8-revisor-sin-contexto-del-autor", evaluador, "input_match"))
+
+
+# VIC-40, M13: g4-spec-fr-sin-ac. El FR sin AC es FR-04 (AC-04 habla de él, pero cita FR-02).
+FR_04 = "- G4-1-A-01 · importante · prueba: FR-04 no lo cita ningún AC (AC-04 cita FR-02) · resolución: pendiente"
+ENCARGO_SPEC = (
+    "Revisión G4 independiente de un PR de SPEC, riesgo R1. Prefijo de tus IDs: G4-1-A.\n\n"
+    "- AC-04 → FR-02: con discos de 4000 y 200 GB, al quitar el de 200 GB el aviso ya no está.\n\n"
+)
+FR_SIN_AC = {
+    ("fr-04-sin-ac", "pattern"): ([
+        FR_04,
+        FR_04.replace("pendiente", "pregunta a la persona"),
+        "* **G4-1-B-02** · importante · prueba: `FR-04`, ningún AC · resolución: pendiente",
+        "Cruce FR → AC hecho.\n\n" + FR_04,
+        # El repetido puede descartarse si otra línea lo deja abierto.
+        FR_04 + "\n- G4-1-B-01 · importante · prueba: FR-04 sin AC · resolución: descartado: es G4-1-A-01",
+    ], [
+        FR_04.replace("pendiente", "descartado: AC-04 lo prueba"),
+        FR_04.replace("pendiente", "**Descartado**: AC-04"),
+        "FR-04 no tiene AC.",
+        "Revisor A: G4-1-A-01 señala FR-04 sin AC.",
+        FR_04.replace("FR-04", "FR-03").replace("FR-02", "FR-01"),
+        FR_04.replace("FR-04", "FR-040"),
+        "- G4-2-A-01 · importante · prueba: FR-04 sin AC · resolución: pendiente",
+    ]),
+    ("encargo-cruza-fr-con-ac", "input_match"): ([
+        encargo(ENCARGO_SPEC + "Cruza cada FR con los AC que lo citan y anota los FR sin AC."),
+        encargo(ENCARGO_SPEC + "Haz el cruce FR → AC."),
+        encargo(ENCARGO_SPEC + "Señala cada FR sin ningún AC."),
+        encargo(ENCARGO_SPEC + "Para cada FR, los AC que lo citan.", tipo="reviewer"),
+    ], [
+        encargo(ENCARGO_SPEC + "Cruza cada FR con los AC que lo citan.", tipo="general-purpose"),
+        encargo(ENCARGO_SPEC + "Comprueba que cada AC es verificable."),
+        encargo(ENCARGO_SPEC + "Te paso el diff en crudo; revisa los FR y los AC."),
+        encargo(ENCARGO_SPEC),
+    ]),
+}
+
+
+class FrSinAc(unittest.TestCase):
+    def test_acepta_las_buenas_y_rechaza_las_malas(self):
+        for (evaluador, campo), (buenas, malas) in FR_SIN_AC.items():
+            for texto, espera in [*((b, True) for b in buenas), *((m, False) for m in malas)]:
+                with self.subTest(evaluador=evaluador, texto=texto):
+                    self.assertEqual(bool(re.search(expresion("g4-spec-fr-sin-ac", evaluador, campo), texto)), espera)
+
+    @unittest.skipUnless(shutil.which("node"), "sin Node")
+    def test_javascript_da_lo_mismo(self):
+        casos = [{"patron": expresion("g4-spec-fr-sin-ac", evaluador, campo), "flags": "", "texto": texto,
+                  "espera": espera}
+                 for (evaluador, campo), (buenas, malas) in FR_SIN_AC.items()
+                 for lista, espera in ((buenas, True), (malas, False)) for texto in lista]
+        salida = subprocess.run(["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
+                                text=True, encoding="utf-8", check=True)
+        self.assertEqual(json.loads(salida.stdout), [])
 
 
 class EncargoDeN8(unittest.TestCase):

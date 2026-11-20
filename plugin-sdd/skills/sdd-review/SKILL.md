@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, VIC-40). -->
 
 # sdd-review
 
@@ -34,7 +34,7 @@ Lanza el subagente `reviewer` una vez por revisor, en invocaciones independiente
 - los ADR enlazados;
 - el prefijo de sus IDs de hallazgo, `G4-<ronda>-<letra>`: una letra por revisor (A, B) y la misma en todas las rondas.
 
-Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y que aplique las reglas de `reviewer.md` para anotar un hallazgo: que un usuario real pueda llegar al caso, una prueba por hallazgo y la gravedad sin exagerar. La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
+Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y que aplique las reglas de `reviewer.md` para anotar un hallazgo: que un usuario real pueda llegar al caso, una prueba por hallazgo y la gravedad sin exagerar. En un PR de spec, pídele también que cruce cada FR con los AC que lo citan y anote los FR sin AC (`reviewer.md`). La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
 
 **Deja rastro:** publica en el PR un comentario por revisor y ronda con el encargo literal que recibió y su respuesta, plegados en `<details>` y con el diff en un bloque de código de cerca más larga que cualquiera de dentro (`gh pr comment N --body-file .tareas/VIC-N/g4-rR-X.md`); si pasa de 65 536 caracteres, el límite de GitHub, pártelo en dos, cada parte con sus cercas y `<details>` cerrados. Así la persona puede comprobar que G4 se hizo y que nadie recibió contexto de más (N8). Fuera de lo plegado, el comentario lleva una línea con el commit que vio el revisor, el SHA completo de la cabeza cuyo diff le pasaste (`git rev-parse HEAD` después del push): `Commit revisado: G4-<ronda>-<letra> · <sha de 40>`. Con ella, el check `cambios` calcula lo que entra después de la última ronda; sin ella, falla. Si reescribes la rama después (rebase o push forzado), ese commit deja de estar en su historia y el check también falla: repite la ronda sobre la cabeza nueva. En la descripción, solo el enlace al comentario. Publícalos desde la cuenta del agente o de la persona (`CUENTAS_G4` en `checks.py`): el check `hallazgos` no lee los de otras cuentas, porque en un repo público comenta cualquiera.
 
