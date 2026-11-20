@@ -58,8 +58,9 @@ Revisores exigidos: 2 en spec y ADR (R1 y R2) y en el código R2; 1 en el códig
   - G4-1-A-01 · debe corregirse · prueba: <test, línea o cita> · resolución: corregido en <sha>
   Resolución: `corregido en <sha>`, `descartado: <prueba>` (en un menor basta `descartado`) o `pregunta a la persona`.
   En los comentarios del PR, una línea que empieza por un ID cuenta como hallazgo: al contestar, cita el ID a mitad de línea. -->
-- **Cambios tras la última ronda:** los calcula la CI, en el resumen de `checks-sdd`, desde el commit que vio cada revisor. No los escribas aquí.
-  <!-- El comentario de cada revisor lleva, fuera de <details>, `Commit revisado: G4-<ronda>-<letra> · <sha de 40>`; sin él, el check `cambios` falla. -->
+  <!-- Lo que entra después de la última ronda lo calcula la CI desde el commit que vio cada revisor y lo publica en el resumen de `checks-sdd`.
+  No lo escribas aquí: con esa lista en la descripción, el check `cambios` falla. El comentario de cada revisor lleva, fuera de <details>,
+  `Commit revisado: G4-<ronda>-<letra> · <sha de 40>`; sin él, el check `cambios` también falla. -->
 
 ## Guía para el revisor humano
 

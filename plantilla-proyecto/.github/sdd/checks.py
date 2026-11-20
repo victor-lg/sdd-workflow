@@ -31,7 +31,8 @@ Comprueba:
                 descartar uno que debe corregirse o importante pide una prueba (`sdd-review`).
                 Las respuestas van en comentarios del PR: solo cuentan los de CUENTAS_G4.
   cambios       M8 (VIC-39): publica los commits que entraron tras la última ronda de G4, desde el
-                que vio cada revisor (`Commit revisado:` en su comentario), y falla si falta.
+                que vio cada revisor (`Commit revisado:` en su comentario), y falla si falta o si la
+                descripción trae esa lista escrita a mano.
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -1045,6 +1046,13 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, s
 # Cada revisor deja en su comentario, fuera de <details> y de bloques de código, el commit que vio:
 #   Commit revisado: G4-1-A · 0123456789abcdef0123456789abcdef01234567
 RE_COMMIT_REVISADO = re.compile(r"^\s*Commit revisado:\s*`?(G4-([1-9]\d*)-([A-Z]))`?\s*·\s*`?([0-9a-f]{40})`?\s*$")
+# Una lista escrita a mano en la descripción: un título, un elemento de lista, una cita, una tabla, una
+# etiqueta en negrita o un rótulo en HTML (`<summary>`, `<b>`) que empieza por el nombre de la sección.
+# Una lista de palabras: otra redacción no la ve. Sin retroceso sobre la línea entera: cada vuelta de
+# `(?:<…>|[*_])*` consume un `<` o una marca, y `[^>]*` para en el primer `>`.
+RE_LISTA_A_MANO = re.compile(r"^\s*(?:>\s*)*(?:#{1,6}\s+)?(?:[-*+]\s+|\d+[.)]\s+|\|\s*)?(?:\[[ xX]\]\s*)?"
+                             r"(?:<[a-z][a-z0-9]*\b[^>]*>\s*|[*_])*(?:cambios|commits)[*_]*\s+"
+                             r"(?:despu[eé]s\s+de|tras|desde|posteriores\s+a)\s+la\s+[uú]ltima\s+(?:ronda|revisi[oó]n)", re.I)
 RE_RONDA_METRICAS = re.compile(r"^Métricas G4: PR #\d+ · ronda ([1-9]\d*) ·")
 
 
@@ -1075,7 +1083,14 @@ def texto_del_resumen(texto: str) -> str:
     return html.escape(texto, quote=False).replace("`", "\\`")
 
 
-def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[str, str]]) -> None:
+def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[str, str]],
+                  cuerpo_pr: str = "") -> None:
+    # La lista no se escribe a mano (VIC-39): lo que se ve en la descripción, también lo plegado.
+    lineas, _ = lineas_visibles(cuerpo_pr)
+    if any(RE_LISTA_A_MANO.match(linea) for linea, _ in lineas):
+        inf.error("cambios", "la descripción del PR trae una lista de «Cambios tras la última ronda» escrita a mano. Quítala: "
+                             "esa lista la calcula la CI desde el commit que vio cada revisor y está en el resumen de `checks-sdd`, "
+                             "sección «Cambios tras la última ronda».")
     vistos, revisores = rondas_de_g4(comentarios)
     # Sin ninguna ronda (R0, Dependabot, antes de G4) no hay nada que calcular.
     if not revisores:
@@ -1189,7 +1204,7 @@ def main() -> int:
     if comentarios is None:
         inf.error("hallazgos", "no he podido leer los comentarios del PR (PR_COMENTARIOS): sin ellos no se comprueban las respuestas de los revisores.")
     check_hallazgos(inf, cuerpo_pr, comentarios or [])
-    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [])
+    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr)
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]
