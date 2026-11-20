@@ -1189,15 +1189,12 @@ class TestCambios(unittest.TestCase):
         self.assertIn("falta el commit que vio ningún revisor de la ronda 2", inf.errores[0])
 
     def test_un_commit_fuera_de_la_historia_falla(self):
-        for sha in ("f" * 40, self.git("rev-parse", "main")):
-            with self.subTest(sha=sha):
-                inf = self.comprobar(f"Commit revisado: G4-1-A · {sha}")
-                if sha.startswith("f"):
-                    self.assertIn("no está en la historia del PR", inf.errores[0])
-                else:
-                    # Uno de main sí es antecesor: la lista son los commits del PR.
-                    self.assertEqual(inf.errores, [])
-                    self.assertIn("feat: a", inf.secciones[0])
+        inf = self.comprobar(f"Commit revisado: G4-1-A · {'f' * 40}")
+        self.assertIn("no está en la historia del PR", inf.errores[0])
+        # Uno de main sí es antecesor: la lista son los commits del PR.
+        inf = self.comprobar(f"Commit revisado: G4-1-A · {self.git('rev-parse', 'main')}")
+        self.assertEqual(inf.errores, [])
+        self.assertIn("feat: a", inf.secciones[0])
         self.git("commit", "-q", "--amend", "-m", "feat: a reescrito")
         inf = self.comprobar(f"Commit revisado: G4-1-A · {self.visto}")
         self.assertEqual(len(inf.errores), 1, inf.errores)
