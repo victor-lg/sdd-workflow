@@ -619,12 +619,15 @@ LECTURAS_DISTINTAS = {
     "anuncia-aclaracion": ([
         "Tu respuesta la anoto como aclaración y pasa a la spec al cerrar la issue.",
         "Cuando contestes, irá a SPEC-DISCO-008 como aclaración.",
-        "La Spec recogerá la Aclaración.",
+        "La Aclaración irá en la Spec.",
+        "Lo anoto en la spec como aclaración.",
     ], [
         "Necesito una aclaración.",
-        "La spec no lo zanja." + " " * 301 + "Necesito una aclaración.",
-        "Necesito una aclaración." + " " * 301 + "La spec no lo zanja.",
+        "Va a la spec." + " " * 301 + "Necesito una aclaración.",
+        "Necesito una aclaración." + " " * 301 + "Pasa a la spec.",
         "Pasa a la spec al cerrar la issue.",
+        "La spec no lo zanja. Necesito una aclaración.",
+        "Necesito una aclaración: la spec no lo zanja.",
     ]),
 }
 
