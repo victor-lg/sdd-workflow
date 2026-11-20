@@ -61,7 +61,7 @@ El agente propone el nivel; la CI puede subirlo, nunca bajarlo. Una aclaración 
 
 ## Revisión (G4)
 
-- **Revisor:** subagente `reviewer`, de solo lectura. Recibe la spec de `main`, el diff, la CI y los ADR; nunca el razonamiento del autor ni la descripción del PR.
+- **Revisor:** subagente `reviewer`, de solo lectura. Recibe la spec de `main`, el diff, la CI y los ADR; nunca el razonamiento del autor ni la descripción del PR. En el código R1, y en R2 el que no lleva seguridad, añade el foco de mantenibilidad: los olores de Fowler y la rúbrica de calidad de thermos, copiadas en `sdd-review`, sin subir la gravedad por ellas.
 - **Ronda:** una pasada de revisión. Hasta 3; después decide la persona.
 - **Clasificación de hallazgos:** *debe corregirse* (bloquea), *importante* (se corrige o se descarta con prueba) y *menor* (opcional). Cada hallazgo lleva un ID (`G4-<ronda>-<revisor>-NN`) y una prueba: un test, una línea o una cita.
 - **Reconciliación:** el agente contrasta los hallazgos con el código, corrige y lo explica en el PR, con una línea por hallazgo y su resolución: corregido en un commit, descartado con prueba o pregunta a la persona. El check `hallazgos` de la CI comprueba que ninguno queda sin resolver. Las respuestas de los revisores van en comentarios del PR, y el check solo lee los de las cuentas autorizadas (`CUENTAS_G4` en `checks.py`).
