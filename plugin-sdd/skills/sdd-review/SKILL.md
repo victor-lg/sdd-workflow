@@ -52,7 +52,7 @@ Con las respuestas de todos los revisores:
 
    Para descartar un *debe corregirse* o un *importante*, o bajarle la gravedad, hace falta una prueba concreta: un test, una línea o una cita. Si no la tienes, pregunta a la persona.
 3. **Corrige lo que debe corregirse.** Si la corrección es sustancial, repite la revisión: **hasta 3 rondas** (la inicial y 2 repeticiones). Si persiste, pregunta a la persona.
-   - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. La lista de lo que cambia tras la última ronda no la escribes tú: la calcula el check `cambios` desde el commit de cada revisor y la publica en el resumen de `checks-sdd`, para que la persona la revise al aprobar.
+   - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. La lista de lo que cambia tras la última ronda no la escribes tú: la calcula el check `cambios` desde el commit de cada revisor y la publica en el resumen de `checks-sdd`, para que la persona la revise al aprobar. No la pongas en la descripción, ni como sección ni como viñeta: el check falla si la encuentra.
 4. **Comprueba la "Guía para el revisor humano"** contra los hallazgos: si un revisor señaló un sitio delicado que la guía no cita, añádelo.
 5. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor (con el enlace a su comentario) y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió. La reconciliación de cada ronda se publica además como comentario del PR (paso 6): es el mismo texto.
 

@@ -1231,6 +1231,28 @@ class TestCambios(unittest.TestCase):
         self.assertEqual(lista, ["fix: b &lt;!--", "fix: \\`c &lt;details&gt;"])
         self.assertIn("Ficheros: b.py, c\\`&lt;details&gt;.py", seccion)
 
+    def test_una_lista_a_mano_en_la_descripcion_falla(self):
+        """PR 2 de VIC-39: la lista la calcula la CI; escrita a mano en la descripción, falla."""
+        for linea in ("- **Cambios tras la última ronda:** los de `a1b2c3d`", "## Cambios tras la última ronda",
+                      "### 5. Cambios tras la ultima ronda", "> - cambios después de la última revisión: ninguno",
+                      "| Cambios tras la última ronda | a1b2c3d |", "* [x] __Cambios tras la última ronda__",
+                      "<details>\n\n- Cambios tras la última ronda: a1b2c3d\n\n</details>"):
+            with self.subTest(linea=linea):
+                inf = ejecutar(checks.check_cambios, "main", "HEAD", [], reconciliacion(linea))
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("**cambios:** la descripción del PR trae una lista de «Cambios tras la última ronda» escrita a mano",
+                              inf.errores[0])
+                self.assertIn("está en el resumen de `checks-sdd`", inf.errores[0])
+
+    def test_lo_que_no_es_una_lista_a_mano(self):
+        """La plantilla real, la prosa que nombra la sección, el código y los comentarios HTML."""
+        for linea in ("", "La CI calcula los cambios tras la última ronda.", "- Ver los cambios tras la última ronda en la CI.",
+                      "```\n- Cambios tras la última ronda: a1b2c3d\n```", "<!-- - Cambios tras la última ronda: a1b2c3d -->",
+                      "- `Cambios tras la última ronda`: código en línea"):
+            with self.subTest(linea=linea):
+                inf = ejecutar(checks.check_cambios, "main", "HEAD", [], reconciliacion(linea))
+                self.assertEqual(inf.errores, [])
+
     def test_sin_ninguna_ronda_no_hace_nada(self):
         inf = self.comprobar("Un comentario cualquiera.")
         self.assertEqual((inf.errores, inf.secciones), ([], []))
@@ -1369,6 +1391,12 @@ class TestPuntaAPunta(unittest.TestCase):
         r = self.correr("adr: decide y\n\nRefs: VIC-7", 'referencias: ["PR #13"]', PR_BODY=cuerpo + linea,
                         PR_COMENTARIOS=str(ruta), PR_HEAD_SHA="")
         self.assertEqual(r.returncode, 0, r.stdout)
+        # Con la lista escrita a mano en la descripción, falla aunque la calculada esté bien (PR 2 de VIC-39).
+        a_mano = subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo, capture_output=True, text=True,
+                                env={**ENTORNO_GIT, "PR_BODY": cuerpo + linea + "- **Cambios tras la última ronda:** ninguno\n",
+                                     "PR_COMENTARIOS": str(ruta), "PR_BRANCH": "adr/vic-7-0002-x", "PR_TITLE": "adr: decide x"})
+        self.assertEqual(a_mano.returncode, 1, a_mano.stdout)
+        self.assertIn("**cambios:** la descripción del PR trae una lista", a_mano.stdout)
         cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
                                 text=True, env=ENTORNO_GIT).stdout.strip()
         seccion = r.stdout.split("### Cambios tras la última ronda", 1)[1]
