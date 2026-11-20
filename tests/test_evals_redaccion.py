@@ -435,9 +435,12 @@ def modelo_juez():
     return re.search(r"--judge-model (\S+)", flujo).group(1)
 
 
+def expresion(caso, evaluador, campo):
+    return re.search(rf"^{campo}: '(.*)'$", grader(caso, evaluador), re.M).group(1).replace("''", "'")
+
+
 def crudo(caso, evaluador):
-    texto = grader(caso, evaluador)
-    return re.search(r"^pattern: '(.*)'$", texto, re.M).group(1).replace("''", "'")
+    return expresion(caso, evaluador, "pattern")
 
 
 def banderas(caso, evaluador):
@@ -599,7 +602,6 @@ class DescartaSoloConPrueba(unittest.TestCase):
         self.assertEqual(json.loads(salida.stdout), [])
 
 
-
 # N7 con M26: el esperado sale del AC (1 y 512) aunque el borrador devuelva 1.024 y 500.
 N7_FICHEROS = (
     "**`calculadora/unidades.py`**\n\n```python\ndef gb_a_tb(gb):\n    return gb / 1024\n\n\n"
@@ -684,8 +686,7 @@ def encargo(prompt, tipo="sdd:reviewer"):
 
 
 def input_match(evaluador):
-    texto = grader("n8-revisor-sin-contexto-del-autor", evaluador)
-    return re.compile(re.search(r"^input_match: '(.*)'$", texto, re.M).group(1).replace("''", "'"))
+    return re.compile(expresion("n8-revisor-sin-contexto-del-autor", evaluador, "input_match"))
 
 
 # VIC-40, M13: g4-spec-fr-sin-ac. El FR sin AC es FR-04 (AC-04 habla de él, pero cita FR-02).
@@ -723,10 +724,6 @@ FR_SIN_AC = {
         encargo(ENCARGO_SPEC),
     ]),
 }
-
-
-def expresion(caso, evaluador, campo):
-    return re.search(rf"^{campo}: '(.*)'$", grader(caso, evaluador), re.M).group(1).replace("''", "'")
 
 
 class FrSinAc(unittest.TestCase):
