@@ -554,7 +554,7 @@ Todo está en la página del PR, repartido en sus pestañas. En GitHub Mobile es
 2. **Tests que cambian.** En la descripción → "Guía para el revisor humano" → "Tests existentes que cambian". Compruébalo en **Files changed**: las líneas rojas que quiten una comprobación (`expect`, `assert`) sin otra verde equivalente son señal de alarma. El panel lateral de ficheros muestra si se toca algo fuera de `tests/`.
 3. **CI.** En el recuadro de merge, al final de Conversation, o en la pestaña **Checks**: `checks-sdd`, `gitleaks`, `osv-scanner`, `semgrep`, `mutaciones`, `codigo-sobrante`, `duplicados` y `tests` en verde.
    - **PR de Dependabot:** en la pestaña **Commits**, todos de `dependabot[bot]` y con la marca *Verified*. Si hay uno de otra cuenta o sin verificar, `checks.py` puede haber aplicado la excepción con un correo falsificado: no lo apruebes.
-4. **Revisión de la IA.** En la descripción → "Revisión IA (G4)". No debe quedar ningún hallazgo "debe corregirse" sin corregir. Si hubo cambios tras la última revisión, están listados.
+4. **Revisión de la IA.** En la descripción → "Revisión IA (G4)". No debe quedar ningún hallazgo "debe corregirse" sin corregir. Si hubo cambios tras la última revisión, el resumen de `checks-sdd` los lista en «Cambios tras la última ronda».
 5. **Dónde mirar.** En la guía del revisor: cada punto cita un fichero y una función. Ábrelo en Files changed y busca el nombre con Ctrl+F. En R1, un vistazo; en R2, lectura de verdad.
 6. **Evidencia.** En la sección "Validación": tests ejecutados, repeticiones, mutaciones detectadas, capturas o prueba en el dispositivo.
 7. **Aprobar.** Marca las cuatro casillas de "Aprobación humana (G6)" → **Files changed → Review changes → Approve → Submit** → **Squash and merge**.

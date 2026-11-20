@@ -30,6 +30,8 @@ Comprueba:
                 línea en la reconciliación del PR, con gravedad, prueba y resolución, y
                 descartar uno que debe corregirse o importante pide una prueba (`sdd-review`).
                 Las respuestas van en comentarios del PR: solo cuentan los de CUENTAS_G4.
+  cambios       M8 (VIC-39): publica los commits que entraron tras la última ronda de G4, desde el
+                que vio cada revisor (`Commit revisado:` en su comentario), y falla si falta.
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -1037,6 +1039,78 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, s
         inf.aviso("hallazgos", f"hallazgos pendientes de la persona: {', '.join(f'`{h}`' for h in preguntas)}. Respóndelos antes de aprobar.")
 
 
+# --- Cambios tras la última ronda (M8, VIC-39) ----------------------------
+
+# Cada revisor deja en su comentario, fuera de <details> y de bloques de código, el commit que vio:
+#   Commit revisado: G4-1-A · 0123456789abcdef0123456789abcdef01234567
+RE_COMMIT_REVISADO = re.compile(r"^\s*Commit revisado:\s*`?(G4-([1-9]\d*)-([A-Z]))`?\s*·\s*`?([0-9a-f]{40})`?\s*$")
+RE_RONDA_METRICAS = re.compile(r"^Métricas G4: PR #\d+ · ronda ([1-9]\d*) ·")
+
+
+def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, str], str], dict[int, set[str]]]:
+    """De los comentarios de CUENTAS_G4: el commit que vio cada revisor (ronda, letra), el último si
+    se repite, y los revisores que salen en cada ronda, por sus hallazgos o por su commit. Una ronda
+    sin hallazgos ni commit sale por su línea «Métricas G4», sin revisores."""
+    vistos, revisores = {}, {}
+    for _, cuerpo in comentarios:
+        lineas, _ = lineas_visibles(cuerpo)
+        for linea, plegada in lineas:
+            m = None if plegada else RE_COMMIT_REVISADO.match(linea)
+            if m:
+                vistos[(int(m.group(2)), m.group(3))] = m.group(4)
+                revisores.setdefault(int(m.group(2)), set()).add(m.group(3))
+            elif (r := RE_RONDA_METRICAS.match(linea)):
+                revisores.setdefault(int(r.group(1)), set())
+            # Como en `check_hallazgos`: en un comentario, toda línea que empieza por un ID es un hallazgo.
+            elif (h := RE_RESPUESTA_PLEGADA.match(linea)):
+                ronda, letra = h.group(1).split("-")[1:3]
+                revisores.setdefault(int(ronda), set()).add(letra)
+    return vistos, revisores
+
+
+def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[str, str]]) -> None:
+    vistos, revisores = rondas_de_g4(comentarios)
+    # Sin ninguna ronda (R0, Dependabot, antes de G4) no hay nada que calcular.
+    if not revisores:
+        return
+    ronda = max(revisores)
+    letras = sorted(revisores[ronda])
+    faltan = [l for l in letras if (ronda, l) not in vistos]
+    if not letras or faltan:
+        quien = ", ".join(f"`G4-{ronda}-{l}`" for l in faltan) or f"ningún revisor de la ronda {ronda}"
+        inf.error("cambios", f"falta el commit que vio {quien}: sin él no se pueden calcular los cambios tras la última ronda. "
+                             f"Añade al comentario de cada revisor, fuera de `<details>`, la línea `Commit revisado: G4-{ronda}-<letra> · <sha de 40>` (`sdd-review`).")
+        return
+    nuevos: dict[str, str] = {}
+    for letra in letras:
+        sha = vistos[(ronda, letra)]
+        # Sin el commit en la historia de la cabeza (un rebase o un push forzado) no hay diff fiable.
+        if git("merge-base", "--is-ancestor", sha, cabeza) is None:
+            inf.error("cambios", f"el commit `{sha[:12]}` que vio `G4-{ronda}-{letra}` no está en la historia del PR: "
+                                 "¿se reescribió la rama? Repite la ronda sobre la cabeza actual.")
+            return
+        salida = git("log", "--format=%H%x1f%s", cabeza, f"^{sha}", f"^{base}")
+        if salida is None:
+            inf.error("cambios", f"no he podido leer con Git los commits desde `{sha[:12]}`.")
+            return
+        for linea in salida.splitlines():
+            h, _, titulo = linea.partition("\x1f")
+            nuevos.setdefault(h, titulo)
+    vio = ", ".join(f"{l} en `{vistos[(ronda, l)][:7]}`" for l in letras)
+    lineas = [f"Ronda {ronda}; cada revisor vio: {vio}.", ""]
+    if not nuevos:
+        lineas.append("Ninguno: la cabeza del PR es lo que vieron los revisores.")
+    else:
+        # Del más antiguo al más nuevo; los ficheros, los del PR que cambian desde lo que vio cada revisor.
+        lineas += [f"- `{h[:7]}` {t}" for h, t in reversed(nuevos.items())]
+        del_pr = set((git("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or "").splitlines())
+        ficheros = sorted({f for l in letras
+                           for f in (git("diff", "--name-only", "--no-renames", vistos[(ronda, l)], cabeza) or "").splitlines()} & del_pr)
+        if ficheros:
+            lineas += ["", "Ficheros: " + ", ".join(f"`{f}`" for f in ficheros)]
+    inf.secciones.append("### Cambios tras la última ronda\n\n" + "\n".join(lineas))
+
+
 # --- Programa -------------------------------------------------------------
 
 def main() -> int:
@@ -1106,6 +1180,7 @@ def main() -> int:
     if comentarios is None:
         inf.error("hallazgos", "no he podido leer los comentarios del PR (PR_COMENTARIOS): sin ellos no se comprueban las respuestas de los revisores.")
     check_hallazgos(inf, cuerpo_pr, comentarios or [])
+    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [])
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]

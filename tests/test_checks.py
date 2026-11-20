@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 PLANTILLA = RAIZ / "plantilla-proyecto"
@@ -1090,6 +1091,142 @@ class TestHallazgosEnComentarios(unittest.TestCase):
                 self.assertIsNone(self.leer(contenido))
         self.assertIsNone(checks.comentarios_de_g4(str(pathlib.Path(self.tmp.name) / "no-existe.json")))
 
+class TestRondasDeG4(unittest.TestCase):
+    """VIC-39: de los comentarios salen el commit que vio cada revisor y los revisores de cada ronda."""
+
+    def rondas(self, *cuerpos):
+        return checks.rondas_de_g4([(f"#c{n}", c) for n, c in enumerate(cuerpos)])
+
+    def test_commit_revisado_y_revisores(self):
+        a, b = "a" * 40, "b" * 40
+        vistos, revisores = self.rondas(f"Commit revisado: G4-1-A · {a}\n<details>\n\n### G4-1-A-01 · menor\n\n</details>",
+                                        f"Commit revisado: `G4-2-B` · `{b}`", "- G4-2-A-03 · menor · prueba: x · resolución: descartado")
+        self.assertEqual(vistos, {(1, "A"): a, (2, "B"): b})
+        self.assertEqual(revisores, {1: {"A"}, 2: {"A", "B"}})
+
+    def test_lo_que_no_cuenta(self):
+        """Un SHA corto, uno plegado, en código o de otra cuenta (no llega aquí), y un ID a mitad de línea."""
+        vistos, revisores = self.rondas("Commit revisado: G4-1-A · abc1234",
+                                        f"<details>\n\nCommit revisado: G4-1-A · {'a' * 40}\n\n</details>",
+                                        f"```\nCommit revisado: G4-1-A · {'a' * 40}\n```",
+                                        "Ver G4-3-A-02 del PR 1.")
+        self.assertEqual((vistos, revisores), ({}, {}))
+
+    def test_el_ultimo_commit_del_mismo_revisor_manda(self):
+        vistos, _ = self.rondas(f"Commit revisado: G4-1-A · {'a' * 40}", f"Commit revisado: G4-1-A · {'b' * 40}")
+        self.assertEqual(vistos, {(1, "A"): "b" * 40})
+
+    def test_una_ronda_sin_hallazgos_sale_por_sus_metricas(self):
+        _, revisores = self.rondas("Métricas G4: PR #3 · ronda 2 · confirmados 0 · descartados 0 · corregidos 0")
+        self.assertEqual(revisores, {2: set()})
+
+
+class TestCambios(unittest.TestCase):
+    """VIC-39 (M8): el check `cambios` en un repo de verdad."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.repo = pathlib.Path(self.tmp.name)
+        self.git("init", "-q", "-b", "main")
+        self.commit("README.md", "chore: inicio")
+        self.git("switch", "-q", "-c", "feat/vic-7-x")
+        self.visto = self.commit("a.py", "feat: a")
+
+    def git(self, *args) -> str:
+        return subprocess.run(["git", "-C", str(self.repo), *args], check=True, env=ENTORNO_GIT,
+                              capture_output=True, text=True).stdout.strip()
+
+    def commit(self, fichero: str, mensaje: str) -> str:
+        (self.repo / fichero).write_text(mensaje + "\n", encoding="utf-8")
+        self.git("add", fichero)
+        self.git("commit", "-q", "-m", mensaje)
+        return self.git("rev-parse", "HEAD")
+
+    def comprobar(self, *cuerpos):
+        anterior = os.getcwd()
+        os.chdir(self.repo)
+        try:
+            with unittest.mock.patch.dict(os.environ, ENTORNO_GIT):
+                return ejecutar(checks.check_cambios, "main", "HEAD", [(f"#c{n}", c) for n, c in enumerate(cuerpos)])
+        finally:
+            os.chdir(anterior)
+
+    def test_un_commit_tras_la_ultima_ronda_sale_exactamente(self):
+        respuesta = f"Commit revisado: G4-1-A · {self.visto}\n\n<details>\n\n### G4-1-A-01 · menor\n\n</details>"
+        inf = self.comprobar(respuesta)
+        self.assertEqual(inf.errores, [])
+        self.assertIn("Ninguno: la cabeza del PR es lo que vieron los revisores.", inf.secciones[0])
+        nuevo = self.commit("b.py", "fix: b")
+        inf = self.comprobar(respuesta)
+        self.assertEqual(inf.errores, [])
+        lista = [l for l in inf.secciones[0].splitlines() if l.startswith("- ")]
+        self.assertEqual(lista, [f"- `{nuevo[:7]}` fix: b"])
+        self.assertIn("Ficheros: `b.py`", inf.secciones[0])
+        self.assertNotIn("`a.py`", inf.secciones[0])
+
+    def test_sin_commit_revisado_falla(self):
+        inf = self.comprobar("<details>\n\n### G4-1-A-01 · menor\n\n</details>")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("**cambios:** falta el commit que vio `G4-1-A`", inf.errores[0])
+        self.assertIn("`Commit revisado: G4-1-<letra> · <sha de 40>`", inf.errores[0])
+        self.assertEqual(inf.secciones, [])
+
+    def test_cuenta_la_ultima_ronda_y_cada_revisor(self):
+        r1 = f"Commit revisado: G4-1-A · {self.visto}"
+        nuevo = self.commit("b.py", "fix: b")
+        r2a = f"Commit revisado: G4-2-A · {nuevo}"
+        # La ronda 2 tiene a B (por su hallazgo) y su commit falta.
+        inf = self.comprobar(r1, r2a, "- G4-2-B-01 · menor")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("falta el commit que vio `G4-2-B`", inf.errores[0])
+        # B vio uno anterior que A: entra lo que alguno no vio.
+        inf = self.comprobar(r1, r2a, f"Commit revisado: G4-2-B · {self.visto}")
+        self.assertEqual(inf.errores, [])
+        self.assertEqual([l for l in inf.secciones[0].splitlines() if l.startswith("- ")], [f"- `{nuevo[:7]}` fix: b"])
+        # Una ronda sin hallazgos ni commit, solo con sus métricas, también lo pide.
+        inf = self.comprobar(r1, "Métricas G4: PR #3 · ronda 2 · confirmados 0 · descartados 0 · corregidos 0")
+        self.assertIn("falta el commit que vio ningún revisor de la ronda 2", inf.errores[0])
+
+    def test_un_commit_fuera_de_la_historia_falla(self):
+        for sha in ("f" * 40, self.git("rev-parse", "main")):
+            with self.subTest(sha=sha):
+                inf = self.comprobar(f"Commit revisado: G4-1-A · {sha}")
+                if sha.startswith("f"):
+                    self.assertIn("no está en la historia del PR", inf.errores[0])
+                else:
+                    # Uno de main sí es antecesor: la lista son los commits del PR.
+                    self.assertEqual(inf.errores, [])
+                    self.assertIn("feat: a", inf.secciones[0])
+        self.git("commit", "-q", "--amend", "-m", "feat: a reescrito")
+        inf = self.comprobar(f"Commit revisado: G4-1-A · {self.visto}")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn(f"el commit `{self.visto[:12]}` que vio `G4-1-A` no está en la historia del PR", inf.errores[0])
+
+    def test_un_merge_de_main_sale_sin_los_commits_de_main(self):
+        respuesta = f"Commit revisado: G4-1-A · {self.visto}"
+        self.git("switch", "-q", "main")
+        self.commit("m.py", "docs: m")
+        self.git("switch", "-q", "feat/vic-7-x")
+        self.git("merge", "-q", "--no-ff", "--no-edit", "main")
+        inf = self.comprobar(respuesta)
+        self.assertEqual(inf.errores, [])
+        lista = [l for l in inf.secciones[0].splitlines() if l.startswith("- ")]
+        self.assertEqual(len(lista), 1, lista)
+        self.assertIn("Merge branch 'main'", lista[0])
+        self.assertNotIn("Ficheros:", inf.secciones[0])
+
+    def test_la_lista_va_del_mas_antiguo_al_mas_nuevo(self):
+        primero, segundo = self.commit("b.py", "fix: b"), self.commit("c.py", "fix: c")
+        inf = self.comprobar(f"Commit revisado: G4-1-A · {self.visto}")
+        self.assertEqual([l for l in inf.secciones[0].splitlines() if l.startswith("- ")],
+                         [f"- `{primero[:7]}` fix: b", f"- `{segundo[:7]}` fix: c"])
+
+    def test_sin_ninguna_ronda_no_hace_nada(self):
+        inf = self.comprobar("Un comentario cualquiera.")
+        self.assertEqual((inf.errores, inf.secciones), ([], []))
+
+
 # --- De punta a punta: main() en un repo de verdad -------------------------
 
 class TestPuntaAPunta(unittest.TestCase):
@@ -1205,6 +1342,39 @@ class TestPuntaAPunta(unittest.TestCase):
                         PR_COMENTARIOS=str(self.repo / "no-existe.json"))
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("**hallazgos:** no he podido leer los comentarios del PR", r.stdout)
+
+    def test_publica_los_cambios_tras_la_ultima_ronda(self):
+        """VIC-39: con la cabeza del PR en PR_HEAD_SHA, como en la CI; sin el commit revisado, falla."""
+        cuerpo = "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n"
+        ruta = self.repo / "comentarios.json"
+        ruta.write_text(json.dumps([comentario("<details>\n\n### G4-1-A-01 · menor\n\n</details>")]), encoding="utf-8")
+        linea = "- G4-1-A-01 · menor · prueba: x · resolución: descartado\n"
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', PR_BODY=cuerpo + linea,
+                        PR_COMENTARIOS=str(ruta))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("**cambios:** falta el commit que vio `G4-1-A`", r.stdout)
+        visto = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                               text=True, env=ENTORNO_GIT).stdout.strip()
+        ruta.write_text(json.dumps([comentario(f"Commit revisado: G4-1-A · {visto}\n\n<details>\n\n"
+                                               "### G4-1-A-01 · menor\n\n</details>")]), encoding="utf-8")
+        r = self.correr("adr: decide y\n\nRefs: VIC-7", 'referencias: ["PR #13"]', PR_BODY=cuerpo + linea,
+                        PR_COMENTARIOS=str(ruta), PR_HEAD_SHA="")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                                text=True, env=ENTORNO_GIT).stdout.strip()
+        seccion = r.stdout.split("### Cambios tras la última ronda", 1)[1]
+        self.assertEqual([l for l in seccion.splitlines() if l.startswith("- ")], [f"- `{cabeza[:7]}` adr: decide y"])
+        # Como en la CI: HEAD es el merge que prueba GitHub y la cabeza del PR llega en PR_HEAD_SHA.
+        self.git("switch", "-q", "--detach", "main")
+        self.git("merge", "-q", "--no-ff", "--no-edit", cabeza)
+        entorno = {**ENTORNO_GIT, "PR_BRANCH": "adr/vic-7-0002-x", "PR_TITLE": "adr: decide x",
+                   "PR_BODY": cuerpo + linea, "PR_COMENTARIOS": str(ruta), "PR_HEAD_SHA": cabeza}
+        entorno.pop("GITHUB_STEP_SUMMARY", None)
+        r = subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo,
+                           capture_output=True, text=True, env=entorno)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        seccion = r.stdout.split("### Cambios tras la última ronda", 1)[1]
+        self.assertEqual([l for l in seccion.splitlines() if l.startswith("- ")], [f"- `{cabeza[:7]}` adr: decide y"])
 
     def test_sin_rama_ni_titulo_no_comprueba_convenciones(self):
         r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', PR_BRANCH="", PR_TITLE="",
