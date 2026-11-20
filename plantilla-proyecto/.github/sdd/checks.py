@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import html
 import json
 import os
 import re
@@ -1068,6 +1069,12 @@ def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, st
     return vistos, revisores
 
 
+def texto_del_resumen(texto: str) -> str:
+    """Un título de commit o un nombre de fichero como texto del resumen: un `<!--` o un `<details>`
+    de quien escribe el commit no puede esconder lo que sigue, ni una comilla invertida abrir código."""
+    return html.escape(texto, quote=False).replace("`", "\\`")
+
+
 def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[str, str]]) -> None:
     vistos, revisores = rondas_de_g4(comentarios)
     # Sin ninguna ronda (R0, Dependabot, antes de G4) no hay nada que calcular.
@@ -1086,10 +1093,10 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
         sha = vistos[(ronda, letra)]
         # Sin el commit en la historia de la cabeza (un rebase o un push forzado) no hay diff fiable.
         if git("merge-base", "--is-ancestor", sha, cabeza) is None:
-            inf.error("cambios", f"el commit `{sha[:12]}` que vio `G4-{ronda}-{letra}` no está en la historia del PR: "
-                                 "¿se reescribió la rama? Repite la ronda sobre la cabeza actual.")
+            inf.error("cambios", f"el commit `{sha[:12]}` que vio `G4-{ronda}-{letra}` no está en la historia del PR o Git no lo encuentra: "
+                                 "¿se reescribió la rama? Repite la ronda sobre la cabeza actual (`sdd-review`).")
             return
-        salida = git("log", "--format=%H%x1f%s", cabeza, f"^{sha}", f"^{base}")
+        salida = git("log", "--topo-order", "--reverse", "--format=%H%x1f%s", cabeza, f"^{sha}", f"^{base}")
         if salida is None:
             inf.error("cambios", f"no he podido leer con Git los commits desde `{sha[:12]}`.")
             return
@@ -1101,13 +1108,15 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
     if not nuevos:
         lineas.append("Ninguno: la cabeza del PR es lo que vieron los revisores.")
     else:
-        # Del más antiguo al más nuevo; los ficheros, los del PR que cambian desde lo que vio cada revisor.
-        lineas += [f"- `{h[:7]}` {t}" for h, t in reversed(nuevos.items())]
+        # Del más antiguo al más nuevo, en el orden de la historia de la cabeza; los ficheros, los del
+        # PR que cambian desde lo que vio cada revisor.
+        orden = (git("rev-list", "--topo-order", "--reverse", cabeza, f"^{base}") or "").split()
+        lineas += [f"- `{h[:7]}` {texto_del_resumen(nuevos[h])}" for h in orden if h in nuevos]
         del_pr = set((git("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or "").splitlines())
         ficheros = sorted({f for l in letras
                            for f in (git("diff", "--name-only", "--no-renames", vistos[(ronda, l)], cabeza) or "").splitlines()} & del_pr)
         if ficheros:
-            lineas += ["", "Ficheros: " + ", ".join(f"`{f}`" for f in ficheros)]
+            lineas += ["", "Ficheros: " + ", ".join(texto_del_resumen(f) for f in ficheros)]
     inf.secciones.append("### Cambios tras la última ronda\n\n" + "\n".join(lineas))
 
 

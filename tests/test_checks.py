@@ -1162,8 +1162,8 @@ class TestCambios(unittest.TestCase):
         self.assertEqual(inf.errores, [])
         lista = [l for l in inf.secciones[0].splitlines() if l.startswith("- ")]
         self.assertEqual(lista, [f"- `{nuevo[:7]}` fix: b"])
-        self.assertIn("Ficheros: `b.py`", inf.secciones[0])
-        self.assertNotIn("`a.py`", inf.secciones[0])
+        self.assertIn("Ficheros: b.py", inf.secciones[0])
+        self.assertNotIn("a.py", inf.secciones[0])
 
     def test_sin_commit_revisado_falla(self):
         inf = self.comprobar("<details>\n\n### G4-1-A-01 · menor\n\n</details>")
@@ -1218,6 +1218,18 @@ class TestCambios(unittest.TestCase):
         inf = self.comprobar(f"Commit revisado: G4-1-A · {self.visto}")
         self.assertEqual([l for l in inf.secciones[0].splitlines() if l.startswith("- ")],
                          [f"- `{primero[:7]}` fix: b", f"- `{segundo[:7]}` fix: c"])
+
+    def test_un_titulo_no_esconde_lo_que_sigue(self):
+        """G4-1-B-01: un `<!--`, un `<details>` o una comilla invertida en un título o un fichero es texto."""
+        self.commit("b.py", "fix: b <!--")
+        self.commit("c`<details>.py", "fix: `c <details>")
+        inf = self.comprobar(f"Commit revisado: G4-1-A · {self.visto}")
+        seccion = inf.secciones[0]
+        self.assertNotIn("<!--", seccion)
+        self.assertNotIn("<details>", seccion)
+        lista = [l.split(" ", 2)[2] for l in seccion.splitlines() if l.startswith("- ")]
+        self.assertEqual(lista, ["fix: b &lt;!--", "fix: \\`c &lt;details&gt;"])
+        self.assertIn("Ficheros: b.py, c\\`&lt;details&gt;.py", seccion)
 
     def test_sin_ninguna_ronda_no_hace_nada(self):
         inf = self.comprobar("Un comentario cualquiera.")
