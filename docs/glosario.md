@@ -65,6 +65,7 @@ El agente propone el nivel; la CI puede subirlo, nunca bajarlo. Una aclaración 
 - **Ronda:** una pasada de revisión. Hasta 3; después decide la persona.
 - **Clasificación de hallazgos:** *debe corregirse* (bloquea), *importante* (se corrige o se descarta con prueba) y *menor* (opcional). Cada hallazgo lleva un ID (`G4-<ronda>-<revisor>-NN`) y una prueba: un test, una línea o una cita.
 - **Reconciliación:** el agente contrasta los hallazgos con el código, corrige y lo explica en el PR, con una línea por hallazgo y su resolución: corregido en un commit, descartado con prueba o pregunta a la persona. El check `hallazgos` de la CI comprueba que ninguno queda sin resolver. Las respuestas de los revisores van en comentarios del PR, y el check solo lee los de las cuentas autorizadas (`CUENTAS_G4` en `checks.py`).
+- **Aclaración:** la lectura de un requisito que decide la persona cuando dos revisores lo leen de forma distinta y la spec no lo zanja. Se anota en el PR («Revisión IA») y pasa a la spec en un PR de spec antes de cerrar la issue.
 - **Cambios tras la última ronda:** lo que entra después sin otro revisor. Lo calcula el check `cambios` de la CI desde el commit que vio cada revisor (`Commit revisado:` en su comentario) y lo publica en el resumen de `checks-sdd`, para que lo leas. Escrita a mano en la descripción del PR, el check falla.
 
 ## La CI (`checks-sdd` y `tests`)

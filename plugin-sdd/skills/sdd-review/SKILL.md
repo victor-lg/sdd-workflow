@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; camino corto para aclaraciones, VIC-40). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, camino corto para aclaraciones, VIC-40). -->
 
 # sdd-review
 
@@ -43,7 +43,7 @@ Lanza el subagente `reviewer` una vez por revisor, en invocaciones independiente
 - el prefijo de sus IDs de hallazgo, `G4-<ronda>-<letra>`: una letra por revisor (A, B) y la misma en todas las rondas;
 - en una aclaración por el camino corto, que lo es y la respuesta literal de la persona, con su enlace: es lo que el revisor contrasta.
 
-Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y que aplique las reglas de `reviewer.md` para anotar un hallazgo: que un usuario real pueda llegar al caso, una prueba por hallazgo y la gravedad sin exagerar. La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
+Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y que aplique las reglas de `reviewer.md` para anotar un hallazgo: que un usuario real pueda llegar al caso, una prueba por hallazgo y la gravedad sin exagerar. En un PR de spec, pídele también que cruce cada FR con los AC que lo citan y anote los FR sin AC (`reviewer.md`). La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
 
 **Deja rastro:** publica en el PR un comentario por revisor y ronda con el encargo literal que recibió y su respuesta, plegados en `<details>` y con el diff en un bloque de código de cerca más larga que cualquiera de dentro (`gh pr comment N --body-file .tareas/VIC-N/g4-rR-X.md`); si pasa de 65 536 caracteres, el límite de GitHub, pártelo en dos, cada parte con sus cercas y `<details>` cerrados. Así la persona puede comprobar que G4 se hizo y que nadie recibió contexto de más (N8). Fuera de lo plegado, el comentario lleva una línea con el commit que vio el revisor, el SHA completo de la cabeza cuyo diff le pasaste (`git rev-parse HEAD` después del push): `Commit revisado: G4-<ronda>-<letra> · <sha de 40>`. Con ella, el check `cambios` calcula lo que entra después de la última ronda; sin ella, falla. Si reescribes la rama después (rebase o push forzado), ese commit deja de estar en su historia y el check también falla: repite la ronda sobre la cabeza nueva. En la descripción, solo el enlace al comentario. Publícalos desde la cuenta del agente o de la persona (`CUENTAS_G4` en `checks.py`): el check `hallazgos` no lee los de otras cuentas, porque en un repo público comenta cualquiera.
 
@@ -54,6 +54,12 @@ Pide expresamente a cada revisor que compruebe si algún test existente se ha de
 Con las respuestas de todos los revisores:
 
 1. **Confirma cada hallazgo contra el código o la spec.** Descarta lo que no se sostenga y explica por qué.
+
+   **Lecturas distintas de la spec.** Si dos revisores leen un mismo FR o AC de forma distinta (uno da por cumplido lo que el otro señala, o piden arreglos opuestos) y ni la spec, ni sus AC, ni un ADR lo zanjan, no eliges tú la lectura: decide la persona. Pregúntale con el texto literal del requisito, las dos lecturas y lo que cambia según cuál valga; los hallazgos que dependen de ello llevan `resolución: pregunta a la persona`. Cuando conteste, resuélvelos con su respuesta (corregido, o descartado con el enlace a la respuesta como prueba) y anótala como **aclaración** en «Revisión IA», una línea por requisito, para pasarla a la spec al cerrar (sección 4):
+
+   ```
+   - Aclaración SPEC-CALC-003/FR-05: «redondear» es al decimal más cercano, no hacia abajo. Respuesta: <enlace>
+   ```
 2. **Clasifica:**
    - *debe corregirse:* bloquea el merge;
    - *importante:* se corrige o se descarta con prueba;
@@ -104,5 +110,7 @@ Con las respuestas de todos los revisores:
    - Si usas esta skill y no queda ninguna línea válida, el resumen de métricas marca la issue con "⚠ sin línea".
 
 ## 4. Cerrar
+
+Si el PR tiene aclaraciones (paso 3.1), pásalas antes a la spec: con `sdd-spec`, en un PR de spec aparte (un PR de código no cambia la spec), que cita cada respuesta. Enlázalo desde «Revisión IA»: la persona fusiona los dos, y así la aclaración está en la spec cuando se cierra la issue.
 
 Cuando no quede nada que deba corregirse y la CI esté en verde, comprueba que el título sigue `docs/convenciones.md` del workflow (Conventional Commits, alcance como zona y no como ID) y que la "Guía para el revisor humano" está completa, y quita el estado de borrador con `gh pr ready N`. El hook comprueba antes que todos los checks del último commit estén en verde, sin ninguno cancelado (M5), y si no lo están lo bloquea: no lo quites por otra vía. La aprobación y el merge son de la persona (G6).
