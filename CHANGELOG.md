@@ -4,6 +4,11 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Cada FR con sus AC en la revisión de una spec (VIC-40, PR 1; M13). Plugin `sdd` 1.12.0.**
+  - `reviewer`: en un PR de spec, antes de anotar hallazgos, cruza cada FR con los AC que lo citan y pone el cruce en su respuesta, una línea por FR. Cuenta el ID que cita el AC, no el tema: un AC que prueba lo de FR-04 pero cita FR-02 no cubre FR-04. Cada FR sin AC es un hallazgo *importante*, salvo que la spec diga por qué no se puede comprobar.
+  - `sdd-review`: el encargo de un PR de spec pide el cruce.
+  - Caso nuevo `g4-spec-fr-sin-ac` (M35): una spec nueva con un FR que ningún AC cita (el AC que lo prueba cita otro FR); la reconciliación lo deja como hallazgo sin descartar, y el encargo pide el cruce. Tests de sus evaluadores en `tests/test_evals_redaccion.py`.
+
 - **Sin lista de cambios tras la última ronda escrita a mano (VIC-39, PR 2; M8). Plugin `sdd` 1.11.0.**
   - `checks.py` de la plantilla, check `cambios`: falla si la descripción del PR trae la lista escrita a mano: un título, una viñeta, una cita, una tabla, una etiqueta en negrita o un rótulo en HTML (`<summary>`, `<b>`) que empieza por «Cambios» o «Commits», seguido de «tras», «después de», «desde» o «posteriores a» y de «la última ronda» o «la última revisión». También cuenta plegada en `<details>`. No cuenta lo que va en código o en comentarios HTML, ni la prosa que nombra la sección a mitad de línea. Es una lista de palabras: otra redacción («Changes since last round») no la ve. El mensaje dice que la lista la calcula la CI y que está en el resumen de `checks-sdd`. Decisión de Víctor (2026-11-20): rechazarla en vez de compararla con la calculada (punto 2 del alcance).
   - Plantilla de PR: «Revisión IA» ya no muestra la sección; un comentario HTML explica dónde está la lista y que no se escribe. `sdd-review` dice que no se pone en la descripción.
