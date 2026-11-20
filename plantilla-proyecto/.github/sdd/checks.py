@@ -1046,10 +1046,13 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, s
 # Cada revisor deja en su comentario, fuera de <details> y de bloques de código, el commit que vio:
 #   Commit revisado: G4-1-A · 0123456789abcdef0123456789abcdef01234567
 RE_COMMIT_REVISADO = re.compile(r"^\s*Commit revisado:\s*`?(G4-([1-9]\d*)-([A-Z]))`?\s*·\s*`?([0-9a-f]{40})`?\s*$")
-# Una lista escrita a mano en la descripción: un título, un elemento de lista, una cita, una tabla o
-# una etiqueta en negrita que empieza por el nombre de la sección. Sin retroceso sobre la línea entera.
-RE_LISTA_A_MANO = re.compile(r"^\s*(?:>\s*)*(?:#{1,6}\s+)?(?:[-*+]\s+|\d+[.)]\s+|\|\s*)?(?:\[[ xX]\]\s*)?[*_]*"
-                             r"cambios\s+(?:despu[eé]s\s+de|tras)\s+la\s+[uú]ltima\s+(?:ronda|revisi[oó]n)", re.I)
+# Una lista escrita a mano en la descripción: un título, un elemento de lista, una cita, una tabla, una
+# etiqueta en negrita o un rótulo en HTML (`<summary>`, `<b>`) que empieza por el nombre de la sección.
+# Una lista de palabras: otra redacción no la ve. Sin retroceso sobre la línea entera: cada vuelta de
+# `(?:<…>|[*_])*` consume un `<` o una marca, y `[^>]*` para en el primer `>`.
+RE_LISTA_A_MANO = re.compile(r"^\s*(?:>\s*)*(?:#{1,6}\s+)?(?:[-*+]\s+|\d+[.)]\s+|\|\s*)?(?:\[[ xX]\]\s*)?"
+                             r"(?:<[a-z][a-z0-9]*\b[^>]*>\s*|[*_])*(?:cambios|commits)[*_]*\s+"
+                             r"(?:despu[eé]s\s+de|tras|desde|posteriores\s+a)\s+la\s+[uú]ltima\s+(?:ronda|revisi[oó]n)", re.I)
 RE_RONDA_METRICAS = re.compile(r"^Métricas G4: PR #\d+ · ronda ([1-9]\d*) ·")
 
 

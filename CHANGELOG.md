@@ -5,9 +5,9 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 ## v1.1 — en curso
 
 - **Sin lista de cambios tras la última ronda escrita a mano (VIC-39, PR 2; M8). Plugin `sdd` 1.11.0.**
-  - `checks.py` de la plantilla, check `cambios`: falla si la descripción del PR trae la lista escrita a mano (un título, una viñeta, una cita, una tabla o una etiqueta en negrita que empieza por «Cambios tras la última ronda» o «Cambios después de la última revisión»), también plegada en `<details>`; no cuenta lo que va en código o en comentarios HTML, ni la prosa que nombra la sección. El mensaje dice que la lista la calcula la CI y que está en el resumen de `checks-sdd`. Decisión de Víctor (2026-11-20): rechazarla en vez de compararla con la calculada (punto 2 del alcance).
+  - `checks.py` de la plantilla, check `cambios`: falla si la descripción del PR trae la lista escrita a mano: un título, una viñeta, una cita, una tabla, una etiqueta en negrita o un rótulo en HTML (`<summary>`, `<b>`) que empieza por «Cambios» o «Commits», seguido de «tras», «después de», «desde» o «posteriores a» y de «la última ronda» o «la última revisión». También cuenta plegada en `<details>`. No cuenta lo que va en código o en comentarios HTML, ni la prosa que nombra la sección a mitad de línea. Es una lista de palabras: otra redacción («Changes since last round») no la ve. El mensaje dice que la lista la calcula la CI y que está en el resumen de `checks-sdd`. Decisión de Víctor (2026-11-20): rechazarla en vez de compararla con la calculada (punto 2 del alcance).
   - Plantilla de PR: «Revisión IA» ya no muestra la sección; un comentario HTML explica dónde está la lista y que no se escribe. `sdd-review` dice que no se pone en la descripción.
-  - Los PR abiertos con rondas sin la línea `Commit revisado:` fallan en `cambios` (aceptado por Víctor, 2026-11-20).
+  - Los PR abiertos con rondas sin la línea `Commit revisado:` fallan en `cambios` (aceptado por Víctor, 2026-11-20). También los abiertos con la plantilla del PR 1, que mostraba la viñeta «Cambios tras la última ronda»: se arreglan quitándola de la descripción.
   - Tests en `tests/test_checks.py`.
 
 - **Cambios tras la última ronda calculados por la CI (VIC-39, PR 1; M8). Plugin `sdd` 1.10.0.**

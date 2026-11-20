@@ -1236,7 +1236,12 @@ class TestCambios(unittest.TestCase):
         for linea in ("- **Cambios tras la última ronda:** los de `a1b2c3d`", "## Cambios tras la última ronda",
                       "### 5. Cambios tras la ultima ronda", "> - cambios después de la última revisión: ninguno",
                       "| Cambios tras la última ronda | a1b2c3d |", "* [x] __Cambios tras la última ronda__",
-                      "<details>\n\n- Cambios tras la última ronda: a1b2c3d\n\n</details>"):
+                      "<details>\n\n- Cambios tras la última ronda: a1b2c3d\n\n</details>",
+                      # G4-1-B-01 y G4-1-B-02 del PR 2: un rótulo en HTML y otras redacciones.
+                      "<details><summary>Cambios tras la última ronda</summary>\n\n- a1b2c3d\n\n</details>",
+                      "- <b>Cambios tras la última ronda</b>: ninguno", '<p align="left"><strong>Cambios tras la última ronda</strong>',
+                      "- **Cambios** tras la última ronda: ninguno", "- Cambios desde la última ronda: ninguno",
+                      "- Commits posteriores a la última revisión: ninguno"):
             with self.subTest(linea=linea):
                 inf = ejecutar(checks.check_cambios, "main", "HEAD", [], reconciliacion(linea))
                 self.assertEqual(len(inf.errores), 1, inf.errores)
@@ -1248,7 +1253,7 @@ class TestCambios(unittest.TestCase):
         """La plantilla real, la prosa que nombra la sección, el código y los comentarios HTML."""
         for linea in ("", "La CI calcula los cambios tras la última ronda.", "- Ver los cambios tras la última ronda en la CI.",
                       "```\n- Cambios tras la última ronda: a1b2c3d\n```", "<!-- - Cambios tras la última ronda: a1b2c3d -->",
-                      "- `Cambios tras la última ronda`: código en línea"):
+                      "- `Cambios tras la última ronda`: código en línea", "- <b>Nota</b>: los cambios tras la última ronda, en la CI"):
             with self.subTest(linea=linea):
                 inf = ejecutar(checks.check_cambios, "main", "HEAD", [], reconciliacion(linea))
                 self.assertEqual(inf.errores, [])
