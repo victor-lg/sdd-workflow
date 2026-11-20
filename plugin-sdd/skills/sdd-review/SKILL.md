@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39). -->
 
 # sdd-review
 
@@ -36,7 +36,7 @@ Lanza el subagente `reviewer` una vez por revisor, en invocaciones independiente
 
 Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y que aplique las reglas de `reviewer.md` para anotar un hallazgo: que un usuario real pueda llegar al caso, una prueba por hallazgo y la gravedad sin exagerar. La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
 
-**Deja rastro:** publica en el PR un comentario por revisor y ronda con el encargo literal que recibió y su respuesta, plegados en `<details>` y con el diff en un bloque de código de cerca más larga que cualquiera de dentro (`gh pr comment N --body-file .tareas/VIC-N/g4-rR-X.md`); si pasa de 65 536 caracteres, el límite de GitHub, pártelo en dos, cada parte con sus cercas y `<details>` cerrados. Así la persona puede comprobar que G4 se hizo y que nadie recibió contexto de más (N8). En la descripción, solo el enlace al comentario. Publícalos desde la cuenta del agente o de la persona (`CUENTAS_G4` en `checks.py`): el check `hallazgos` no lee los de otras cuentas, porque en un repo público comenta cualquiera.
+**Deja rastro:** publica en el PR un comentario por revisor y ronda con el encargo literal que recibió y su respuesta, plegados en `<details>` y con el diff en un bloque de código de cerca más larga que cualquiera de dentro (`gh pr comment N --body-file .tareas/VIC-N/g4-rR-X.md`); si pasa de 65 536 caracteres, el límite de GitHub, pártelo en dos, cada parte con sus cercas y `<details>` cerrados. Así la persona puede comprobar que G4 se hizo y que nadie recibió contexto de más (N8). Fuera de lo plegado, el comentario lleva una línea con el commit que vio el revisor, el SHA completo de la cabeza cuyo diff le pasaste (`git rev-parse HEAD` después del push): `Commit revisado: G4-<ronda>-<letra> · <sha de 40>`. Con ella, el check `cambios` calcula lo que entra después de la última ronda; sin ella, falla. Si reescribes la rama después (rebase o push forzado), ese commit deja de estar en su historia y el check también falla: repite la ronda sobre la cabeza nueva. En la descripción, solo el enlace al comentario. Publícalos desde la cuenta del agente o de la persona (`CUENTAS_G4` en `checks.py`): el check `hallazgos` no lee los de otras cuentas, porque en un repo público comenta cualquiera.
 
 **Nunca** le pases tu razonamiento, tu plan, tus conclusiones ni las respuestas de otro revisor. Si lo haces por error, esa revisión está contaminada y se repite (caso N8).
 
@@ -52,7 +52,7 @@ Con las respuestas de todos los revisores:
 
    Para descartar un *debe corregirse* o un *importante*, o bajarle la gravedad, hace falta una prueba concreta: un test, una línea o una cita. Si no la tienes, pregunta a la persona.
 3. **Corrige lo que debe corregirse.** Si la corrección es sustancial, repite la revisión: **hasta 3 rondas** (la inicial y 2 repeticiones). Si persiste, pregunta a la persona.
-   - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. Anota en el PR la lista exacta de lo que cambia tras la última revisión, para que la persona lo revise al aprobar.
+   - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. La lista de lo que cambia tras la última ronda no la escribes tú: la calcula el check `cambios` desde el commit de cada revisor y la publica en el resumen de `checks-sdd`, para que la persona la revise al aprobar.
 4. **Comprueba la "Guía para el revisor humano"** contra los hallazgos: si un revisor señaló un sitio delicado que la guía no cita, añádelo.
 5. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor (con el enlace a su comentario) y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió. La reconciliación de cada ronda se publica además como comentario del PR (paso 6): es el mismo texto.
 

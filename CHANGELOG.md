@@ -4,6 +4,13 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Cambios tras la última ronda calculados por la CI (VIC-39, PR 1; M8). Plugin `sdd` 1.10.0.**
+  - `sdd-review`: el comentario de cada revisor lleva, fuera de lo plegado, `Commit revisado: G4-<ronda>-<letra> · <sha de 40>`, la cabeza cuyo diff recibió. La skill ya no escribe la lista de cambios tras la última ronda.
+  - `checks.py` de la plantilla, check `cambios`: de los comentarios de `CUENTAS_G4`, toma la última ronda (por sus hallazgos, su commit revisado o su línea «Métricas G4») y exige el commit de cada revisor que sale en ella. Falla si falta o si no está en la historia de la cabeza del PR (una rama reescrita). Publica en el resumen los commits que entraron después, sin los de la rama base (un merge de `main` sale como un commit), y los ficheros del PR que cambian desde entonces. Sin ninguna ronda, no hace nada. `sdd.yml` no cambia: ya pasa los comentarios y la cabeza del PR.
+  - Plantilla de PR, `AGENTS.md` de la plantilla, glosario, guía de instalación y REG-100.
+  - Queda para el PR 2: fallar si la descripción declara una lista distinta de la calculada.
+  - Tests en `tests/test_checks.py`.
+
 - **Alarma de mutantes por tiempo en la CI de la plantilla (VIC-44).** El job `mutaciones` de `calidad.yml` imprime `nproc` antes de Stryker y, después, calcula la puntuación contando los mutantes `Timeout` como supervivientes: falla si baja de `PUNTUACION_MINIMA_SIN_TIEMPO` (90). Con 2 vCPU los `Timeout` suben a decenas, Stryker los cuenta como detectados y el check se quedaba ciego en verde. Es el paso de la calculadora (calculadora-discos#65); en la plantilla, el error remite a `docs/herramientas.md` («Stryker») y el comentario avisa de que el mínimo no sale de `thresholds.break`. Tests en `tests/test_calidad_plantilla.py`: el paso sobre informes de prueba (las cifras con 4 y 2 CPU, el límite de 90, el mínimo inválido, el informe roto o ausente, la ruta de `jsonReporter` y la salida entre `::stop-commands::`) y sobre el informe real de Stryker en `tests/fixtures/stryker`.
 
 - **Respuestas de G4 en comentarios, reglas del adversarial de Kem y caso de evaluación (VIC-38, PR 2). Plugin `sdd` 1.9.0.**
