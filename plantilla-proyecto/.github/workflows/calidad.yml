@@ -166,8 +166,10 @@ jobs:
       # Stryker ha fallado. Falla cerrado: la cuenta se hace en Python, y cualquier error al leer
       # el informe o el mínimo hace fallar el paso. Ficheros y sustituciones salen del código de
       # la rama: van entre stop-commands, como la salida de Stryker. Un proceso que dejara vivo
-      # un test de la rama podría reescribir el informe antes de este paso: es el mismo límite
-      # aceptado que `__STRYKER_ACTIVE_MUTANT__` (cabecera), y lo ve la revisión. Cambiar el
+      # un test de la rama podría reescribir el informe antes de este paso, y lo que un test
+      # escriba en $GITHUB_PATH o $GITHUB_ENV (otro python3, BASH_ENV) cambia el entorno de este
+      # paso: es el mismo límite aceptado que `__STRYKER_ACTIVE_MUTANT__` (cabecera), y lo ve
+      # la revisión. Cambiar el
       # mínimo es R2. No sale de `thresholds.break`: con un break por debajo del mínimo, la alarma
       # puede fallar sin mutantes por tiempo, y el proyecto baja aquí el mínimo.
       - name: Mutantes por tiempo
