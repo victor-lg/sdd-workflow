@@ -22,7 +22,7 @@ También la organizas para los PR que abre Claude desde el navegador (los que to
 **Camino corto para aclaraciones.** Un PR de spec que solo pasa a la spec una lectura que la persona ya decidió (su respuesta en un PR o en la issue, por ejemplo cuando dos revisores leen un requisito de forma distinta) lleva **un revisor y una ronda**, en R1 y en R2. Vale solo si:
 
 - la descripción del PR dice que es una aclaración y enlaza la respuesta, con su texto literal;
-- el diff solo cambia la redacción de los FR o AC que la respuesta toca, o añade AC que fijan esa lectura, y la versión;
+- el diff solo cambia la redacción de los FR o AC que la respuesta toca, o añade AC que fijan esa lectura, además de la versión y el `estado` (`sdd-spec`);
 - no añade, quita ni renumera FR o NFR, ni decide nada que la respuesta no diga.
 
 Si falla algo, es un PR de spec normal (dos revisores). Tras la ronda, lo que se corrige entra sin otra (paso 3.3); si el revisor encuentra algo que va más allá de la respuesta, el PR sale del camino corto: se corrige y se revisa como uno normal.

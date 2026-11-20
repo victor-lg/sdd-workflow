@@ -5,7 +5,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 ## v1.1 — en curso
 
 - **Camino corto para aclaraciones de spec (VIC-40, PR 3; M1). Plugin `sdd` 1.14.0.**
-  - `sdd-review`: un PR de spec que solo pasa a la spec una lectura que la persona ya decidió lleva un revisor y una ronda, en R1 y en R2, si la descripción lo dice y enlaza la respuesta con su texto literal, y el diff solo cambia la redacción de los FR o AC que la respuesta toca (o añade AC que la fijan) y la versión, sin añadir, quitar ni renumerar FR o NFR. Si no, o si el revisor encuentra algo que va más allá de la respuesta, es un PR de spec normal. El encargo lleva la respuesta literal.
+  - `sdd-review`: un PR de spec que solo pasa a la spec una lectura que la persona ya decidió lleva un revisor y una ronda, en R1 y en R2, si la descripción lo dice y enlaza la respuesta con su texto literal, y el diff solo cambia la redacción de los FR o AC que la respuesta toca (o añade AC que la fijan), la versión y el `estado`, sin añadir, quitar ni renumerar FR o NFR. Si no, o si el revisor encuentra algo que va más allá de la respuesta, es un PR de spec normal. El encargo lleva la respuesta literal.
   - `reviewer`: en una aclaración, comprueba que el cambio recoge la respuesta y nada más; lo que vaya más allá es *debe corregirse*.
   - `sdd-spec`: una aclaración no repite la Fase 1; cambia solo lo que la respuesta toca y el PR lo dice («Aclaración (camino corto)», con el enlace y el texto de la respuesta).
   - Glosario, debajo de los niveles de riesgo. Los niveles y las gates no cambian: solo cuántos revisores lleva este tipo de PR de spec.
