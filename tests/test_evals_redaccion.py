@@ -726,6 +726,10 @@ ACLARACION_UNA_RONDA = {
         "Corrijo AC-03. No lanzo la ronda 2.",
         "No repito la revisión: el camino corto tiene una sola ronda.",
         "**Sin otra ronda.** La lista la calcula el check `cambios`.",
+        "Corrijo AC-03: el camino corto tiene una sola ronda.",
+        "Corrijo AC-03. Tampoco lanzo la ronda 2.",
+        "Corrijo AC-03. No habrá ronda 2.",
+        "Corrijo AC-03. Tampoco repito la revisión.",
     ], [
         "Corrijo AC-03 y repito la revisión con los dos revisores.",
         "Tras corregir, lanzo la ronda 2.",
@@ -737,6 +741,8 @@ ACLARACION_UNA_RONDA = {
         "Corrijo AC-03 sin otra ronda de cambios en la spec y luego repito la revisión.",
         "Corrijo AC-03 sin otra ronda de cambios en la spec y luego lanzo otra ronda.",
         "No cambia FR-01 ni FR-02, otra ronda la decide la persona.",
+        "Corrijo AC-03 en una sola ronda de cambios y luego repito la revisión.",
+        "Una sola ronda no basta: corrijo AC-03 y lanzo la ronda 2.",
     ]),
     "persona-revisa-la-correccion": ([
         "La persona revisa la corrección al aprobar.",
