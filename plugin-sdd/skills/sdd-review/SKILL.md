@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, VIC-40). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, camino corto para aclaraciones, VIC-40). -->
 
 # sdd-review
 
@@ -19,6 +19,14 @@ También la organizas para los PR que abre Claude desde el navegador (los que to
 | ADR | — | 2 | 2 |
 | Código | Opcional | 1 | 2 |
 
+**Camino corto para aclaraciones.** Un PR de spec que solo pasa a la spec una lectura que la persona ya decidió (su respuesta en un PR o en la issue, por ejemplo cuando dos revisores leen un requisito de forma distinta) lleva los revisores de un PR de spec (dos) y **una sola ronda**, en R1 y en R2. Vale solo si:
+
+- la descripción del PR dice que es una aclaración y enlaza la respuesta, con su texto literal;
+- el diff solo cambia la redacción de los FR o AC que la respuesta toca, o añade AC que fijan esa lectura, además de la versión y el `estado` (`sdd-spec`);
+- no añade, quita ni renumera FR o NFR, ni decide nada que la respuesta no diga.
+
+Si falla algo, es un PR de spec normal, con sus rondas. Tras la ronda no hay otra: lo que deba corregirse se corrige sin otra ronda, y la persona revisa la corrección al aprobar (la lista la calcula el check `cambios`, paso 3.3). Lo que vaya más allá de la respuesta se quita; si para corregirlo hace falta decidir algo que la respuesta no dice, deja de ser una aclaración y se revisa como un PR de spec normal.
+
 **Modelo (v0.20):** el subagente `reviewer` usa Sonnet por defecto. Las revisiones eran la mayor parte del consumo (un 90 % según `/usage`), y Sonnet ya encontró defectos reales en el PR #5 de `calculadora-discos`. **En R2, uno de los revisores de código se centra en seguridad y se lanza con Opus** (en el lanzamiento del subagente, indica el modelo `opus`). Si un defecto se escapa a una revisión con Sonnet (métrica "defectos escapados"), se anota y se reconsidera este reparto.
 
 Si no puedes lanzar los revisores exigidos, el PR **no** está revisado. Dilo y no lo marques como listo.
@@ -32,7 +40,8 @@ Lanza el subagente `reviewer` una vez por revisor, en invocaciones independiente
 - el diff;
 - los resultados de la CI;
 - los ADR enlazados;
-- el prefijo de sus IDs de hallazgo, `G4-<ronda>-<letra>`: una letra por revisor (A, B) y la misma en todas las rondas.
+- el prefijo de sus IDs de hallazgo, `G4-<ronda>-<letra>`: una letra por revisor (A, B) y la misma en todas las rondas;
+- en una aclaración por el camino corto, que lo es y la respuesta literal de la persona, con su enlace: es lo que el revisor contrasta.
 
 Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y que aplique las reglas de `reviewer.md` para anotar un hallazgo: que un usuario real pueda llegar al caso, una prueba por hallazgo y la gravedad sin exagerar. En un PR de spec, pídele también que cruce cada FR con los AC que lo citan y anote los FR sin AC (`reviewer.md`). La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
 
@@ -57,7 +66,7 @@ Con las respuestas de todos los revisores:
    - *menor:* opcional.
 
    Para descartar un *debe corregirse* o un *importante*, o bajarle la gravedad, hace falta una prueba concreta: un test, una línea o una cita. Si no la tienes, pregunta a la persona.
-3. **Corrige lo que debe corregirse.** Si la corrección es sustancial, repite la revisión: **hasta 3 rondas** (la inicial y 2 repeticiones). Si persiste, pregunta a la persona.
+3. **Corrige lo que debe corregirse.** Si la corrección es sustancial, repite la revisión: **hasta 3 rondas** (la inicial y 2 repeticiones). Si persiste, pregunta a la persona. En una aclaración por el camino corto hay una sola: lo que deba corregirse se corrige sin repetirla.
    - **Después de la última ronda,** las aclaraciones y decisiones de la persona se aplican **sin otra ronda**, salvo que añadan reglas de negocio nuevas. La lista de lo que cambia tras la última ronda no la escribes tú: la calcula el check `cambios` desde el commit de cada revisor y la publica en el resumen de `checks-sdd`, para que la persona la revise al aprobar. No la pongas en la descripción, ni como sección ni como viñeta: el check falla si la encuentra.
 4. **Comprueba la "Guía para el revisor humano"** contra los hallazgos: si un revisor señaló un sitio delicado que la guía no cita, añádelo.
 5. **Escribe en el PR,** en la sección "Revisión IA", el resumen de cada revisor (con el enlace a su comentario) y la reconciliación: qué se confirmó, qué se descartó y qué se corrigió. La reconciliación de cada ronda se publica además como comentario del PR (paso 6): es el mismo texto.

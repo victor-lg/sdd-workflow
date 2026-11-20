@@ -83,7 +83,7 @@
 | **M8** | La lista de "cambios tras la última ronda" la calcula la CI (diff desde el commit que vio el último revisor), no el agente. Cada revisión queda atada al SHA que vio (idea de la revisión con recibo de Gentle-AI) |
 | **M13** | Encargo del revisor de spec: cruzar cada FR con los AC que lo citan |
 | **M15** | Si dos revisores leen la spec de forma distinta, el agente pregunta; la respuesta se anota como aclaración y se pasa a la spec al cerrar la issue |
-| **M1** | Camino corto para aclaraciones: un PR de spec, un revisor, una ronda |
+| **M1** | Camino corto para aclaraciones: un PR de spec, dos revisores (los que pide el ADR-0001) y una sola ronda; lo que deba corregirse se corrige sin otra y la persona lo revisa al aprobar (decisión de Víctor, 2026-11-20) |
 | **M23** (rúbrica) | Un revisor con foco de mantenibilidad: los olores de Fowler (Pocock) y la rúbrica de calidad de thermos (sin leer la discusión del PR ni sus flujos de fusión), con la regla de no exagerar la gravedad |
 | **M34** | Revisor en la CI con modelo configurable (compatible con OpenAI, por ejemplo DeepSeek de OpenCode Go): la clave como secreto de GitHub y permiso solo para comentar |
 | Coste | Se mide cuánto cuesta cada revisión y se decide si el revisor de código R1 sigue aportando con los controles del bloque 3 (mejora #2 del primer recorrido) |

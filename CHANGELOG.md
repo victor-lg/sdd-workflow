@@ -4,6 +4,13 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Camino corto para aclaraciones de spec (VIC-40, PR 3; M1). Plugin `sdd` 1.14.0.**
+  - `sdd-review`: un PR de spec que solo pasa a la spec una lectura que la persona ya decidió lleva los dos revisores de una spec y una sola ronda, en R1 y en R2, si la descripción lo dice y enlaza la respuesta con su texto literal, y el diff solo cambia la redacción de los FR o AC que la respuesta toca (o añade AC que la fijan), la versión y el `estado`, sin añadir, quitar ni renumerar FR o NFR. Si no, es un PR de spec normal. Lo que deba corregirse tras la ronda se corrige sin otra, y la persona revisa la corrección al aprobar (la lista la calcula el check `cambios`); si para corregirlo hace falta decidir algo que la respuesta no dice, deja de ser una aclaración. El encargo lleva la respuesta literal. Decisión de Víctor (2026-11-20): sin tocar el ADR-0001, que pide dos revisores en las specs R1 y en todo R2.
+  - `reviewer`: en una aclaración, comprueba que el cambio recoge la respuesta y nada más; lo que vaya más allá es *debe corregirse*.
+  - `sdd-spec`: una aclaración no repite la Fase 1; cambia solo lo que la respuesta toca y el PR lo dice («Aclaración (camino corto)», con el enlace y el texto de la respuesta).
+  - Glosario, debajo de los niveles de riesgo. Los niveles, las gates y el número de revisores no cambian: solo cuántas rondas lleva este tipo de PR de spec.
+  - Caso nuevo `g4-aclaracion-una-ronda` (M35): en un PR de spec R1 de aclaración, los dos revisores encuentran un *debe corregirse* en la ronda 1; se corrige sin otra ronda, y la persona revisa la corrección al aprobar. Tests de sus evaluadores en `tests/test_evals_redaccion.py`.
+
 - **Lecturas distintas de la spec y aclaraciones (VIC-40, PR 2; M15). Plugin `sdd` 1.13.0.**
   - `sdd-review`: si dos revisores leen un mismo FR o AC de forma distinta y ni la spec, ni sus AC, ni un ADR lo zanjan, no elige la lectura: pregunta a la persona con el texto del requisito, las dos lecturas y lo que cambia, y los hallazgos que dependen de ello quedan con `resolución: pregunta a la persona`. Con la respuesta, los resuelve y la anota como aclaración en «Revisión IA» (`- Aclaración SPEC-XXX-NNN/FR-NN: … Respuesta: <enlace>`). Antes de quitar el borrador, pasa las aclaraciones a la spec con `sdd-spec`, en un PR de spec aparte enlazado desde el de código.
   - `reviewer`: en un PR de código, si un hallazgo (o algo que da por cumplido) depende de cómo se lee un FR o AC, cita la frase y dice qué lectura usa.

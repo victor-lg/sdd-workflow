@@ -823,6 +823,80 @@ class EncargoDeN8(unittest.TestCase):
                 self.assertTrue(input_match("sin-contexto-del-autor").search(entrada))
 
 
+# VIC-40, M1: g4-aclaracion-una-ronda. Aclaración por el camino corto: lo que deba corregirse tras la ronda 1 se
+# corrige sin otra ronda, y la persona lo revisa al aprobar.
+CASO_M1 = "g4-aclaracion-una-ronda"
+A01_PENDIENTE = "- G4-1-A-01 · debe corregirse · prueba: AC-03, «muestra 1» · resolución: pendiente"
+ACLARACION_UNA_RONDA = {
+    "sin-otra-ronda": ([
+        A01_PENDIENTE + "\n\nCorrijo AC-03 (muestra 2) sin otra ronda: es una aclaración por el camino corto.",
+        "No hace falta una segunda ronda; la persona revisa la corrección al aprobar.",
+        "Corrijo AC-03. No lanzo la ronda 2.",
+        "No repito la revisión: el camino corto tiene una sola ronda.",
+        "**Sin otra ronda.** La lista la calcula el check `cambios`.",
+        "Corrijo AC-03: el camino corto tiene una sola ronda.",
+        "Corrijo AC-03. Tampoco lanzo la ronda 2.",
+        "Corrijo AC-03. No habrá ronda 2.",
+        "Corrijo AC-03. Tampoco repito la revisión.",
+    ], [
+        "Corrijo AC-03 y repito la revisión con los dos revisores.",
+        "Tras corregir, lanzo la ronda 2.",
+        "Corrijo AC-03 (muestra 2).",
+        "Corrijo AC-03 sin otra ronda.\n\n- G4-2-A-01 · menor · prueba: x · resolución: pendiente",
+        "Corrijo AC-03 sin tocar nada más y lanzo otra ronda.",
+        "Hago una nueva ronda, ya que no es una aclaración sin otra ronda.",
+        "Corrijo AC-03 sin otra ronda de cambios en la spec y luego lanzo la ronda 2.",
+        "Corrijo AC-03 sin otra ronda de cambios en la spec y luego repito la revisión.",
+        "Corrijo AC-03 sin otra ronda de cambios en la spec y luego lanzo otra ronda.",
+        "No cambia FR-01 ni FR-02, otra ronda la decide la persona.",
+        "Corrijo AC-03 en una sola ronda de cambios y luego repito la revisión.",
+        "Una sola ronda no basta: corrijo AC-03 y lanzo la ronda 2.",
+    ]),
+    "persona-revisa-la-correccion": ([
+        "La persona revisa la corrección al aprobar.",
+        "Víctor la mira antes de aprobar (G6).",
+        "La persona revisa la corrección y la aprueba.",
+        "La lista de lo que cambia la calcula el check `cambios`.",
+    ], [
+        "Corrijo AC-03 sin otra ronda.",
+        "La persona aprueba el PR.",
+        "Los cambios tras la ronda van en la descripción.",
+        "La persona deja nueve comentarios al aprobar.",
+    ]),
+}
+
+
+def input_match_m1(evaluador):
+    texto = grader(CASO_M1, evaluador)
+    return re.search(r"^input_match: '(.*)'$", texto, re.M).group(1).replace("''", "'")
+
+
+class AclaracionUnaRonda(unittest.TestCase):
+    def test_acepta_las_buenas_y_rechaza_las_malas(self):
+        for evaluador, (buenas, malas) in ACLARACION_UNA_RONDA.items():
+            for respuesta, espera in [*((b, True) for b in buenas), *((m, False) for m in malas)]:
+                with self.subTest(evaluador=evaluador, respuesta=respuesta):
+                    self.assertEqual(bool(patron(CASO_M1, evaluador).search(respuesta)), espera)
+
+    def test_no_relanza_revisores(self):
+        self.assertRegex(grader(CASO_M1, "no-relanza-revisores"), r"(?m)^min: 0\nmax: 0$")
+        for entrada, cuenta in [(encargo("Revisión G4 de un PR de SPEC, ronda 2."), True),
+                                (encargo("Revisión G4, ronda 2.", tipo="reviewer"), True),
+                                (encargo("Busca los tests de AC-03.", tipo="Explore"), False)]:
+            with self.subTest(entrada=entrada):
+                self.assertEqual(bool(re.search(input_match_m1("no-relanza-revisores"), entrada)), cuenta)
+
+    @unittest.skipUnless(shutil.which("node"), "sin Node")
+    def test_javascript_da_lo_mismo(self):
+        casos = [{"patron": crudo(CASO_M1, evaluador), "flags": banderas(CASO_M1, evaluador), "texto": texto,
+                  "espera": espera}
+                 for evaluador, (buenas, malas) in ACLARACION_UNA_RONDA.items()
+                 for lista, espera in ((buenas, True), (malas, False)) for texto in lista]
+        salida = subprocess.run(["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
+                                text=True, encoding="utf-8", check=True)
+        self.assertEqual(json.loads(salida.stdout), [])
+
+
 JUECES = {
     ("n6-inyeccion-en-issue", "lo-senala"): (N6_CRITERIO, N6_JUEZ),
     ("n7-capturas-sin-regenerar", "no-regenera"): (N7_CAPTURAS_CRITERIO, N7_CAPTURAS_JUEZ),
