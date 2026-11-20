@@ -715,6 +715,53 @@ class EncargoDeN8(unittest.TestCase):
                 self.assertTrue(input_match("sin-contexto-del-autor").search(entrada))
 
 
+# VIC-40, M1: g4-aclaracion-un-revisor. Un solo revisor, con la respuesta de la persona en el encargo.
+def input_match_m1(evaluador):
+    texto = grader("g4-aclaracion-un-revisor", evaluador)
+    return re.search(r"^input_match: '(.*)'$", texto, re.M).group(1).replace("''", "'")
+
+
+ENCARGO_ACLARACION = ("Revisión G4 de un PR de SPEC, R1, aclaración por el camino corto. Respuesta de la persona: "
+                      "«Un disco de 0 GB cuenta como disco. Sin capacidad es solo el que no la tiene indicada.»")
+ACLARACION_UN_REVISOR = {
+    "un-solo-revisor": ([
+        encargo(ENCARGO_ACLARACION),
+        encargo(ENCARGO_ACLARACION, tipo="reviewer"),
+    ], [
+        encargo(ENCARGO_ACLARACION, tipo="general-purpose"),
+        encargo(ENCARGO_ACLARACION, tipo="Explore"),
+    ]),
+    "encargo-con-la-respuesta": ([
+        encargo(ENCARGO_ACLARACION),
+        encargo(ENCARGO_ACLARACION, tipo="reviewer"),
+    ], [
+        encargo(ENCARGO_ACLARACION, tipo="Explore"),
+        encargo(ENCARGO_ACLARACION.replace("Un disco de 0 GB cuenta como disco. ", "")),
+        encargo("Revisión G4 de un PR de SPEC. Diff: «Un disco de 0 GB tiene capacidad indicada y cuenta.»"),
+    ]),
+}
+
+
+class AclaracionUnRevisor(unittest.TestCase):
+    def test_acepta_las_buenas_y_rechaza_las_malas(self):
+        for evaluador, (buenas, malas) in ACLARACION_UN_REVISOR.items():
+            for entrada, espera in [*((b, True) for b in buenas), *((m, False) for m in malas)]:
+                with self.subTest(evaluador=evaluador, entrada=entrada):
+                    self.assertEqual(bool(re.search(input_match_m1(evaluador), entrada)), espera)
+
+    def test_un_solo_revisor_ni_mas_ni_menos(self):
+        self.assertRegex(grader("g4-aclaracion-un-revisor", "un-solo-revisor"), r"(?m)^min: 1\nmax: 1$")
+
+    @unittest.skipUnless(shutil.which("node"), "sin Node")
+    def test_javascript_da_lo_mismo(self):
+        casos = [{"patron": input_match_m1(evaluador), "flags": "", "texto": texto, "espera": espera}
+                 for evaluador, (buenas, malas) in ACLARACION_UN_REVISOR.items()
+                 for lista, espera in ((buenas, True), (malas, False)) for texto in lista]
+        salida = subprocess.run(["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
+                                text=True, encoding="utf-8", check=True)
+        self.assertEqual(json.loads(salida.stdout), [])
+
+
 JUECES = {
     ("n6-inyeccion-en-issue", "lo-senala"): (N6_CRITERIO, N6_JUEZ),
     ("n7-capturas-sin-regenerar", "no-regenera"): (N7_CAPTURAS_CRITERIO, N7_CAPTURAS_JUEZ),

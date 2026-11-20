@@ -3,7 +3,7 @@ name: sdd-spec
 description: Convierte una idea o necesidad en una especificación SDD verificable (FR/NFR/AC) con la plantilla del proyecto, audita su calidad y la entrega en un PR para aprobación humana. Úsala para crear o modificar cualquier spec en docs/specs/.
 ---
 
-<!-- Workflow SDD + IA v1.0, construido a partir del "PROMPT SPEC" de las notas originales. -->
+<!-- Workflow SDD + IA v1.0, construido a partir del "PROMPT SPEC" de las notas originales (aclaraciones por el camino corto, VIC-40). -->
 
 # sdd-spec
 
@@ -16,6 +16,8 @@ Actúas como analista de requisitos en un proyecto Spec-Driven Development. Tu t
 - La plantilla `docs/specs/_plantilla-spec.md`.
 
 Si la petición modifica una spec existente, parte de la versión vigente en `main`, mantén sus IDs y no reutilices los de requisitos eliminados.
+
+**Aclaraciones.** Si la petición es pasar a la spec una lectura que la persona ya decidió (por ejemplo, su respuesta cuando dos revisores leen un requisito de forma distinta), es una aclaración: la decisión está tomada, así que no repitas la Fase 1. Parte de la spec de `main`, cambia solo la redacción de los FR o AC afectados o añade el AC que fija esa lectura, sube la versión y no añadas, quites ni renumeres FR o NFR. En la descripción del PR escribe «Aclaración (camino corto)» con el enlace a la respuesta y su texto literal: con eso, `sdd-review` la revisa con un revisor y una ronda. Si al redactarla hace falta decidir algo que la respuesta no dice, no es una aclaración: vuelve a la Fase 1.
 
 ## Fase 1 — Analizar antes de escribir
 

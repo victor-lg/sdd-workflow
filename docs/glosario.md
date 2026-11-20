@@ -57,7 +57,7 @@ Hay dos series de ADR: los del **proyecto** (`calculadora-discos/docs/adr/`, por
 | R1 normal | Una funcionalidad o una corrección | 2 / 1 |
 | R2 sensible | Dependencias, CI, permisos, rutas sensibles (en la calculadora: `app/sw.js`, la CSP de `app/index.html`, el test de sin conexión) | 2 / 2, uno de seguridad con Opus |
 
-El agente propone el nivel; la CI puede subirlo, nunca bajarlo.
+El agente propone el nivel; la CI puede subirlo, nunca bajarlo. Una aclaración de spec (un PR que solo pasa a la spec una lectura que la persona ya decidió) va por el camino corto: un revisor y una ronda en R1 y R2 (`sdd-review`).
 
 ## Revisión (G4)
 
