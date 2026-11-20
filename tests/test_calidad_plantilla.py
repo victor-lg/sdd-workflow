@@ -133,6 +133,8 @@ class Borrador(unittest.TestCase):
         nodo = next(p for p in self.PASOS if p.get("uses", "").startswith("actions/setup-node@"))
         self.assertEqual(nodo["if"], fuera)
         self.assertEqual(self.paso("Stryker")["if"], fuera)
+        self.assertEqual(self.paso("CPU del runner")["if"], fuera)
+        self.assertEqual(self.paso("Mutantes por tiempo")["if"], "${{ !cancelled() && " + fuera + " }}")
         self.assertNotIn("gh api", CALIDAD)
         # La configuración se valida también en borrador: es barato y avisa antes.
         self.assertNotIn("if", self.paso("Configuración de Stryker de main"))
@@ -410,6 +412,154 @@ class StrykerEnLaCi(unittest.TestCase):
         estado, texto, _ = self.stryker()
         self.assertEqual(estado, 1, texto)
         self.assertIn("Force mode is activated", texto)
+
+    def test_la_alarma_lee_el_informe_de_stryker(self):
+        """VIC-44: el paso «Mutantes por tiempo» sobre el informe que deja el paso Stryker."""
+        self.assertEqual(self.stryker()[0], 0)
+        estado, texto, _ = ejecutar("Mutantes por tiempo", self.proyecto, self.temporal,
+                                    PUNTUACION_MINIMA_SIN_TIEMPO="90", RESULTADO_STRYKER="success")
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("Puntuación contándolos como supervivientes: 7/7 = 100.00 (mínimo 90)", texto)
+
+
+def mutante(estado, linea=1):
+    return {"id": str(linea), "mutatorName": "EqualityOperator", "replacement": "a <= b", "status": estado,
+            "location": {"start": {"line": linea, "column": 1}, "end": {"line": linea, "column": 5}}}
+
+
+class MutantesPorTiempo(unittest.TestCase):
+    """VIC-44: con 2 vCPU los mutantes por tiempo suben a decenas y Stryker los cuenta como detectados.
+    La alarma cuenta los Timeout como supervivientes y falla si la puntuación baja del mínimo. Las cifras
+    son las de la calculadora (calculadora-discos#65): 728 muertos de 792 válidos con 4 CPU."""
+    PASO = "Mutantes por tiempo"
+    PASOS = Borrador.PASOS
+
+    def setUp(self):
+        self.temporal = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.temporal)
+        self.proyecto = self.temporal / "proyecto"
+        self.proyecto.mkdir()
+        self.config({})
+
+    def config(self, config):
+        (self.temporal / "stryker.config.json").write_text(json.dumps(dict(CONFIG, **config)))
+
+    def informe(self, muertos, por_tiempo, supervivientes, otros=(), ruta="reports/mutation/mutation.json"):
+        mutantes = ([mutante("Killed", i) for i in range(muertos)]
+                    + [mutante("Timeout", 10000 + i) for i in range(por_tiempo)]
+                    + [mutante("Survived", 20000 + i) for i in range(supervivientes)]
+                    + [mutante(e, 30000 + i) for i, e in enumerate(otros)])
+        fichero = self.proyecto / ruta
+        fichero.parent.mkdir(parents=True, exist_ok=True)
+        fichero.write_text(json.dumps({"schemaVersion": "2", "files": {"src/a.js": {"mutants": mutantes}}}))
+
+    def alarma(self, minimo=None, resultado="success"):
+        if minimo is None:
+            minimo = self.paso(self.PASO)["env"]["PUNTUACION_MINIMA_SIN_TIEMPO"]
+        return ejecutar(self.PASO, self.proyecto, self.temporal,
+                        PUNTUACION_MINIMA_SIN_TIEMPO=minimo, RESULTADO_STRYKER=resultado)[:2]
+
+    def paso(self, nombre):
+        return next(p for p in self.PASOS if p.get("name") == nombre)
+
+    def test_pasos_y_minimo(self):
+        nombres = [p.get("name") for p in self.PASOS]
+        self.assertLess(nombres.index("CPU del runner"), nombres.index("Stryker"))
+        self.assertLess(nombres.index("Stryker"), nombres.index(self.PASO))
+        self.assertEqual(self.paso("CPU del runner")["run"], "nproc")
+        self.assertEqual(self.paso("Stryker")["id"], "stryker")
+        self.assertEqual(self.paso(self.PASO)["env"],
+                         {"PUNTUACION_MINIMA_SIN_TIEMPO": "90", "RESULTADO_STRYKER": "${{ steps.stryker.outcome }}"})
+
+    def test_con_4_cpu_pasa(self):
+        self.informe(728, 6, 58, otros=["RuntimeError"] * 50)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("Mutantes por tiempo: 6", texto)
+        self.assertIn("728/792 = 91.92 (mínimo 90)", texto)
+        self.assertIn("src/a.js:10000 EqualityOperator: 'a <= b'", texto)
+
+    def test_el_limite(self):
+        """713/792 = 90,03 pasa; 712/792 = 89,90 falla. Los NoCoverage cuentan como válidos."""
+        for muertos, esperado in ((713, 0), (712, 1)):
+            with self.subTest(muertos=muertos):
+                self.informe(muertos, 792 - muertos - 50, 40, otros=["NoCoverage"] * 10)
+                estado, texto = self.alarma()
+                self.assertEqual(estado, esperado, texto)
+        self.assertIn("::error::Contando como supervivientes los mutantes por tiempo, la puntuación baja de 90", texto)
+        self.assertIn("docs/herramientas.md del workflow, sección Stryker", texto)
+
+    def test_con_2_cpu_falla(self):
+        """643 muertos y 85 por tiempo: Stryker daría 91,92 y la alarma, 81,19."""
+        self.informe(643, 91, 58)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("643/792 = 81.19", texto)
+
+    def test_el_minimo_se_aplica(self):
+        self.informe(728, 6, 58)
+        self.assertEqual(self.alarma(minimo="92")[0], 1)
+        self.assertEqual(self.alarma(minimo="91.9")[0], 0)
+
+    def test_un_minimo_invalido_falla(self):
+        self.informe(10, 0, 0)
+        for minimo in ("", "0", "-5", "100.5", "NaN", "Infinity", "noventa"):
+            with self.subTest(minimo=minimo):
+                estado, texto = self.alarma(minimo=minimo)
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::No se ha podido leer el informe JSON de Stryker o el mínimo", texto)
+
+    def test_un_informe_roto_o_sin_mutantes_validos_falla(self):
+        fichero = self.proyecto / "reports" / "mutation" / "mutation.json"
+        casos = {"no es JSON": "{", "sin files": "{}", "sin válidos": None}
+        for caso, contenido in casos.items():
+            with self.subTest(caso=caso):
+                if contenido is None:
+                    self.informe(0, 0, 0, otros=["RuntimeError", "CompileError", "Ignored"])
+                else:
+                    fichero.parent.mkdir(parents=True, exist_ok=True)
+                    fichero.write_text(contenido)
+                estado, texto = self.alarma()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::No se ha podido leer el informe JSON de Stryker", texto)
+
+    def test_sin_informe(self):
+        """Con Stryker en verde, falla; con Stryker en rojo, el job ya está en rojo y el paso no añade nada."""
+        for resultado, esperado in (("success", 1), ("failure", 0), ("skipped", 0)):
+            with self.subTest(resultado=resultado):
+                estado, texto = self.alarma(resultado=resultado)
+                self.assertEqual(estado, esperado, texto)
+        self.assertIn("Sin informe JSON en reports/mutation/mutation.json", texto)
+
+    def test_la_ruta_del_informe_sale_de_la_configuracion(self):
+        self.config({"jsonReporter": {"fileName": "otro/informe.json"}})
+        self.informe(728, 6, 58)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("no hay informe JSON en otro/informe.json", texto)
+        self.informe(728, 6, 58, ruta="otro/informe.json")
+        self.assertEqual(self.alarma()[0], 0)
+
+    def test_lo_de_la_rama_va_entre_stop_commands(self):
+        """El fichero y la sustitución salen del código de la rama: no pueden inyectar anotaciones."""
+        self.informe(1, 0, 0)
+        fichero = self.proyecto / "reports" / "mutation" / "mutation.json"
+        datos = json.loads(fichero.read_text())
+        datos["files"]["\n::error::inyectada\n::stop-commands::otro\n"] = {"mutants": [mutante("Timeout", 2)]}
+        datos["files"]["::error::fichero"] = {"mutants": [dict(mutante("Timeout", 3), replacement="\n::error::sustitución\n")]}
+        fichero.write_text(json.dumps(datos))
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 1, texto)
+        lineas = texto.splitlines()
+        parar = [l for l in lineas if l.startswith("::stop-commands::")]
+        self.assertEqual(len(parar), 2, texto)  # el del paso y el que trae el informe
+        token = parar[0].removeprefix("::stop-commands::")
+        self.assertRegex(token, r"^[0-9a-f]{32}$")
+        seguir = lineas.index(f"::{token}::")
+        self.assertLess(lineas.index(parar[0]), lineas.index("::error::inyectada"))
+        self.assertLess(lineas.index("::error::inyectada"), seguir)
+        self.assertFalse([l for l in lineas[seguir + 1:] if "inyectada" in l or "::error::fichero" in l])
+        self.assertTrue(lineas[seguir + 1].startswith("::error::Contando como supervivientes"))
 
 
 class BaseSinAmbiguedad(unittest.TestCase):

@@ -109,6 +109,12 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      # VIC-44: vCPU del runner (en los repos privados, 2; en los públicos, 4), para leer la
+      # alarma de mutantes por tiempo.
+      - name: CPU del runner
+        if: steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft
+        run: nproc
+
       # --force: ejecuta todos los mutantes aunque la rama traiga un fichero incremental.
       # Con cero mutantes la puntuación es NaN y Stryker no aplica el umbral: falla aquí.
       # Un mutante Ignored no cuenta en la puntuación: lo dejan así un comentario
@@ -116,6 +122,7 @@ jobs:
       # deba mutar se saca con `mutate`, en la configuración de `main`. Se mira en el informe
       # JSON de Stryker, no en el texto del diff, que tenía formas de esconderse (G4).
       - name: Stryker
+        id: stryker
         if: steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
@@ -150,6 +157,76 @@ jobs:
           ' "$informe" || { echo "::error::Hay mutantes Ignored: no cuentan en la puntuación"; exit 1; }
           fi
           exit "$estado"
+
+      # Alarma de VIC-44: con 2 vCPU (repo privado o runner propio) los mutantes por tiempo suben
+      # a decenas, Stryker los cuenta como detectados y la puntuación se infla sin que el check
+      # se ponga rojo. Este paso lista cada mutante Timeout y calcula la puntuación contándolos
+      # todos como supervivientes: muertos / (muertos + por tiempo + supervivientes + sin
+      # cobertura), en %. Falla si baja de PUNTUACION_MINIMA_SIN_TIEMPO. Corre también si
+      # Stryker ha fallado. Falla cerrado: la cuenta se hace en Python, y cualquier error al leer
+      # el informe o el mínimo hace fallar el paso. Ficheros y sustituciones salen del código de
+      # la rama: van entre stop-commands, como la salida de Stryker. Un proceso que dejara vivo
+      # un test de la rama podría reescribir el informe antes de este paso: es el mismo límite
+      # aceptado que `__STRYKER_ACTIVE_MUTANT__` (cabecera), y lo ve la revisión. Cambiar el
+      # mínimo es R2. No sale de `thresholds.break`: con un break por debajo del mínimo, la alarma
+      # puede fallar sin mutantes por tiempo, y el proyecto baja aquí el mínimo.
+      - name: Mutantes por tiempo
+        if: ${{ !cancelled() && steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft }}
+        env:
+          PUNTUACION_MINIMA_SIN_TIEMPO: "90"
+          RESULTADO_STRYKER: ${{ steps.stryker.outcome }}
+        run: |
+          informe=$(python3 -I -c '
+          import json, sys
+          print((json.load(open(sys.argv[1], encoding="utf-8")).get("jsonReporter") or {}).get("fileName") or "reports/mutation/mutation.json")
+          ' "$RUNNER_TEMP/stryker.config.json")
+          if [ ! -f "$informe" ]; then
+            if [ "$RESULTADO_STRYKER" = success ]; then
+              echo "::error::Stryker ha terminado bien pero no hay informe JSON en $informe: la alarma de mutantes por tiempo no puede comprobarse"; exit 1
+            fi
+            # El paso Stryker ya ha fallado (o no corrió): el job está en rojo por él.
+            echo "Sin informe JSON en $informe: no hay mutantes que contar."; exit 0
+          fi
+          token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "::stop-commands::$token"
+          estado=0
+          python3 -I -c '
+          import json, sys
+          from decimal import Decimal
+          minimo = Decimal(sys.argv[2])
+          if not minimo.is_finite() or not 0 < minimo <= 100:
+              sys.exit("El mínimo tiene que ser un número mayor que 0 y no mayor que 100")
+          informe = json.load(open(sys.argv[1], encoding="utf-8"))
+          cuenta = {"Killed": 0, "Timeout": 0, "Survived": 0, "NoCoverage": 0}
+          for f, datos in sorted(informe["files"].items()):
+              for m in datos["mutants"]:
+                  estado = m["status"]
+                  if estado in cuenta:
+                      cuenta[estado] += 1
+                  if estado != "Timeout":
+                      continue
+                  linea = (m.get("location") or {}).get("start", {}).get("line")
+                  mutador = m.get("mutatorName")
+                  sustitucion = m.get("replacement")
+                  print(f"{f}:{linea} {mutador}: {sustitucion!r}")
+          validos = sum(cuenta.values())
+          if validos == 0:
+              sys.exit("El informe no tiene mutantes válidos")
+          muertos = cuenta["Killed"]
+          por_tiempo = cuenta["Timeout"]
+          puntuacion = Decimal(muertos) * 100 / validos
+          print(f"Mutantes por tiempo: {por_tiempo}")
+          print(f"Puntuación contándolos como supervivientes: {muertos}/{validos} = {puntuacion:.2f} (mínimo {minimo})")
+          sys.exit(3 if puntuacion < minimo else 0)
+          ' "$informe" "$PUNTUACION_MINIMA_SIN_TIEMPO" || estado=$?
+          echo "::$token::"
+          if [ "$estado" -eq 3 ]; then
+            echo "::error::Contando como supervivientes los mutantes por tiempo, la puntuación baja de $PUNTUACION_MINIMA_SIN_TIEMPO (la cuenta y la lista, arriba). Stryker los cuenta como detectados, así que su puntuación está inflada y el check no ve los tests debilitados. Suele ser un runner con menos CPU (mira el paso «CPU del runner»). Ver docs/herramientas.md del workflow, sección Stryker."
+            exit 1
+          elif [ "$estado" -ne 0 ]; then
+            echo "::error::No se ha podido leer el informe JSON de Stryker o el mínimo (salida $estado): la alarma de mutantes por tiempo no puede comprobarse"; exit 1
+          fi
+          echo "Puntuación contando los mutantes por tiempo como supervivientes: dentro del mínimo."
 
       - name: Aviso de borrador
         if: steps.preparar.outputs.stryker == 'si' && github.event.pull_request.draft
