@@ -17,7 +17,7 @@ Actúas como analista de requisitos en un proyecto Spec-Driven Development. Tu t
 
 Si la petición modifica una spec existente, parte de la versión vigente en `main`, mantén sus IDs y no reutilices los de requisitos eliminados.
 
-**Aclaraciones.** Si la petición es pasar a la spec una lectura que la persona ya decidió (por ejemplo, su respuesta cuando dos revisores leen un requisito de forma distinta), es una aclaración: la decisión está tomada, así que no repitas la Fase 1. Parte de la spec de `main`, cambia solo la redacción de los FR o AC afectados o añade el AC que fija esa lectura, sube la versión, pon el `estado` como en cualquier PR de spec (Fase 4) y no añadas, quites ni renumeres FR o NFR. En la descripción del PR escribe «Aclaración (camino corto)» con el enlace a la respuesta y su texto literal: con eso, `sdd-review` la revisa con un revisor y una ronda. Si al redactarla hace falta decidir algo que la respuesta no dice, no es una aclaración: vuelve a la Fase 1.
+**Aclaraciones.** Si la petición es pasar a la spec una lectura que la persona ya decidió (por ejemplo, su respuesta cuando dos revisores leen un requisito de forma distinta), es una aclaración: la decisión está tomada, así que no repitas la Fase 1. Parte de la spec de `main`, cambia solo la redacción de los FR o AC afectados o añade el AC que fija esa lectura, sube la versión, pon el `estado` como en cualquier PR de spec (Fase 4) y no añadas, quites ni renumeres FR o NFR. En la descripción del PR escribe «Aclaración (camino corto)» con el enlace a la respuesta y su texto literal: con eso, `sdd-review` la revisa en una sola ronda. Si al redactarla hace falta decidir algo que la respuesta no dice, no es una aclaración: vuelve a la Fase 1.
 
 ## Fase 1 — Analizar antes de escribir
 
