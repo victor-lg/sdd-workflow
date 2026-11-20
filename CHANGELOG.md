@@ -4,6 +4,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Lecturas distintas de la spec y aclaraciones (VIC-40, PR 2; M15). Plugin `sdd` 1.13.0.**
+  - `sdd-review`: si dos revisores leen un mismo FR o AC de forma distinta y ni la spec, ni sus AC, ni un ADR lo zanjan, no elige la lectura: pregunta a la persona con el texto del requisito, las dos lecturas y lo que cambia, y los hallazgos que dependen de ello quedan con `resolución: pregunta a la persona`. Con la respuesta, los resuelve y la anota como aclaración en «Revisión IA» (`- Aclaración SPEC-XXX-NNN/FR-NN: … Respuesta: <enlace>`). Antes de quitar el borrador, pasa las aclaraciones a la spec con `sdd-spec`, en un PR de spec aparte enlazado desde el de código.
+  - `reviewer`: en un PR de código, si un hallazgo (o algo que da por cumplido) depende de cómo se lee un FR o AC, cita la frase y dice qué lectura usa.
+  - Glosario: «Aclaración».
+  - Caso nuevo `g4-lecturas-distintas` (M35): un revisor lee «sin capacidad» como sin capacidad indicada y el otro incluye los discos de 0 GB; la spec no lo zanja. El hallazgo se queda en `pregunta a la persona`, sin descartarlo ni corregirlo, y la respuesta se anuncia como aclaración de la spec. Tests de sus evaluadores en `tests/test_evals_redaccion.py`.
+
 - **Sin lista de cambios tras la última ronda escrita a mano (VIC-39, PR 2; M8). Plugin `sdd` 1.11.0.**
   - `checks.py` de la plantilla, check `cambios`: falla si la descripción del PR trae la lista escrita a mano: un título, una viñeta, una cita, una tabla, una etiqueta en negrita o un rótulo en HTML (`<summary>`, `<b>`) que empieza por «Cambios» o «Commits», seguido de «tras», «después de», «desde» o «posteriores a» y de «la última ronda» o «la última revisión». También cuenta plegada en `<details>`. No cuenta lo que va en código o en comentarios HTML, ni la prosa que nombra la sección a mitad de línea. Es una lista de palabras: otra redacción («Changes since last round») no la ve. El mensaje dice que la lista la calcula la CI y que está en el resumen de `checks-sdd`. Decisión de Víctor (2026-11-20): rechazarla en vez de compararla con la calculada (punto 2 del alcance).
   - Plantilla de PR: «Revisión IA» ya no muestra la sección; un comentario HTML explica dónde está la lista y que no se escribe. `sdd-review` dice que no se pone en la descripción.
