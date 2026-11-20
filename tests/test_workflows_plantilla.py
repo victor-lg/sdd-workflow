@@ -43,6 +43,13 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         self.assertEqual(jobs(leer("sdd.yml")), {"checks-sdd"})
         self.assertEqual(jobs(leer("calidad.yml")), {"mutaciones", "codigo-sobrante", "duplicados"})
 
+    def test_sdd_pasa_los_comentarios_a_checks_py(self):
+        """Todas las páginas, en el fichero que lee checks.py (VIC-38)."""
+        texto = leer("sdd.yml")
+        self.assertIn('gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" > '
+                      '"$RUNNER_TEMP/sdd/comentarios.json"', texto)
+        self.assertIn("PR_COMENTARIOS: ${{ runner.temp }}/sdd/comentarios.json", texto)
+
     def test_sdd_solo_en_un_pr(self):
         """Fuera de un PR, github.base_ref está vacío: el paso que toma checks.py falla (BaseConEtiqueta)."""
         self.assertEqual(disparadores(leer("sdd.yml")), {"pull_request"})
@@ -92,10 +99,15 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
                     self.assertRegex(uso, r"@[0-9a-f]{40}$")
 
     def test_sin_credenciales_ni_mas_permisos(self):
+        # sdd.yml lee además los comentarios del PR: las respuestas de los revisores de G4 (VIC-38).
+        extra = {"sdd.yml": ["pull-requests: read"]}
         for fichero in WORKFLOWS.glob("*.yml"):
             texto = fichero.read_text(encoding="utf-8")
             with self.subTest(fichero=fichero.name):
-                self.assertIn("permissions:\n  contents: read\n", texto)
+                bloque = re.search(r"^permissions:\n((?:  .*\n)+)", texto, re.M).group(1)
+                permisos = [l.strip() for l in bloque.splitlines() if not l.strip().startswith("#")]
+                self.assertEqual(permisos, ["contents: read", *extra.get(fichero.name, [])])
+                self.assertEqual(texto.count("permissions:"), 1)
                 self.assertEqual(texto.count("persist-credentials: false"), texto.count("actions/checkout@"))
 
 

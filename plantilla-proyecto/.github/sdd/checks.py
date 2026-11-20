@@ -29,6 +29,7 @@ Comprueba:
   hallazgos     VIC-38: cada hallazgo de G4 de las respuestas de los revisores tiene su
                 línea en la reconciliación del PR, con gravedad, prueba y resolución, y
                 descartar uno que debe corregirse o importante pide una prueba (`sdd-review`).
+                Las respuestas van en comentarios del PR: solo cuentan los de CUENTAS_G4.
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -36,7 +37,9 @@ Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC:
 Uso local:
   PR_BODY="$(cat cuerpo.md)" PR_TITLE="feat(calculo): …" PR_BRANCH="feat/vic-12-calculo" \
     python3 .github/sdd/checks.py --base refs/remotes/origin/main
-Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta.
+Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta. PR_COMENTARIOS es la ruta
+de los comentarios del PR (`gh api --paginate …/issues/N/comments`); sin ella, el
+check de hallazgos solo lee la descripción.
 
 Como hook `commit-msg` de lefthook, solo el formato del mensaje:
   python3 -I .github/sdd/checks.py --mensaje .git/COMMIT_EDITMSG
@@ -852,6 +855,9 @@ PREGUNTA = "pregunta a la persona"
 RE_PLEGADO = re.compile(r"<details\b|</details\s*>", re.I)
 RE_CERCA = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 RE_COMENTARIO_BLOQUE = re.compile(r"^ {0,3}<!--")
+# Las respuestas de los revisores van en comentarios del PR. El repo puede ser público y comentar
+# puede cualquiera: solo cuentan los comentarios de estas cuentas (la de la persona y la del agente).
+CUENTAS_G4 = ("victor-lg-bot", "victor-lg")
 
 
 def sin_codigo_en_linea(linea: str) -> str:
@@ -920,18 +926,49 @@ def gravedad_al_principio(texto: str) -> str:
     return next((g for g in GRAVEDADES if texto.startswith(g)), SIN_GRAVEDAD)
 
 
-def gravedades_de_los_revisores(lineas: list[tuple[str, bool]]) -> dict[str, str]:
-    """La gravedad de cada hallazgo de las respuestas; si un ID sale varias veces, la mayor. Sin
-    gravedad reconocible, cuenta como grave: para descartarlo hace falta prueba."""
-    gravedades: dict[str, str] = {}
+def mas_grave(previa: str | None, gravedad: str) -> str:
+    """Sin gravedad reconocible cuenta como la mayor: para descartarlo hace falta prueba."""
+    if previa is None:
+        return gravedad
+    if SIN_GRAVEDAD in (previa, gravedad):
+        return SIN_GRAVEDAD
+    return min(previa, gravedad, key=GRAVEDADES.index)
+
+
+def gravedades_de_los_revisores(lineas: list[tuple[str, bool]],
+                                gravedades: dict[str, str] | None = None) -> dict[str, str]:
+    """La gravedad de cada hallazgo de las respuestas, añadida a `gravedades` si se da; si un ID sale
+    varias veces, la mayor."""
+    gravedades = {} if gravedades is None else gravedades
     for linea, plegada in lineas:
         m = (RE_RESPUESTA_PLEGADA if plegada else RE_RESPUESTA).match(linea)
         if m:
-            gravedad, previa = gravedad_al_principio(m.group(2)), gravedades.get(m.group(1))
-            if previa is None or (previa != SIN_GRAVEDAD and
-                                  (gravedad == SIN_GRAVEDAD or GRAVEDADES.index(gravedad) < GRAVEDADES.index(previa))):
-                gravedades[m.group(1)] = gravedad
+            gravedades[m.group(1)] = mas_grave(gravedades.get(m.group(1)), gravedad_al_principio(m.group(2)))
     return gravedades
+
+
+def comentarios_de_g4(ruta: str) -> list[tuple[str, str]] | None:
+    """El enlace y el cuerpo de los comentarios del PR que escribieron las cuentas de CUENTAS_G4, de
+    la salida de `gh api --paginate`: una lista por página, una detrás de otra. None si no se puede leer."""
+    lector, paginas, i = json.JSONDecoder(), [], 0
+    try:
+        texto = Path(ruta).read_text(encoding="utf-8")
+        while i < len(texto.rstrip()):
+            pagina, i = lector.raw_decode(texto, len(texto) - len(texto[i:].lstrip()))
+            paginas.append(pagina)
+    except (OSError, ValueError):
+        return None
+    if not paginas or not all(isinstance(p, list) for p in paginas):
+        return None
+    comentarios = []
+    for c in (c for p in paginas for c in p):
+        if not isinstance(c, dict):
+            return None
+        # Sin usuario (una cuenta borrada) no es de CUENTAS_G4: se ignora, no se falla por él.
+        usuario = c.get("user") if isinstance(c.get("user"), dict) else {}
+        if usuario.get("login") in CUENTAS_G4 and isinstance(c.get("body"), str):
+            comentarios.append((str(c.get("html_url", "")), c["body"]))
+    return comentarios
 
 
 def campos_de_hallazgo(campos: str) -> tuple[str, str, str] | None:
@@ -949,12 +986,18 @@ def campos_de_hallazgo(campos: str) -> tuple[str, str, str] | None:
     return gravedad, resto[prueba.end():resoluciones[-1].start()], resto[resoluciones[-1].end():]
 
 
-def check_hallazgos(inf: Informe, cuerpo_pr: str) -> None:
+def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, str]] = ()) -> None:
     lineas, sin_cerrar = lineas_visibles(cuerpo_pr)
     # Sin ningún ID de hallazgo, no hay nada que esconder: un PR sin G4 (R0, Dependabot) no falla aquí.
     for que in sin_cerrar if RE_ALGUN_HALLAZGO.search(cuerpo_pr) else []:
         inf.error("hallazgos", f"la descripción del PR tiene {que} sin cerrar: lo que sigue no se puede comprobar.")
     del_revisor = gravedades_de_los_revisores(lineas)
+    # En un comentario, toda línea que empieza por un ID es un hallazgo, como en lo plegado.
+    for enlace, cuerpo in comentarios:
+        en_comentario, abierto = lineas_visibles(cuerpo)
+        for que in abierto if RE_ALGUN_HALLAZGO.search(cuerpo) else []:
+            inf.error("hallazgos", f"el comentario {enlace or 'del PR'} tiene {que} sin cerrar: lo que sigue no se puede comprobar.")
+        gravedades_de_los_revisores([(linea, True) for linea, _ in en_comentario], del_revisor)
     vistos, preguntas = set(), []
     for linea, plegada in lineas:
         m = None if plegada else RE_HALLAZGO.match(linea)
@@ -1058,7 +1101,11 @@ def main() -> int:
     texto_lefthook = git("show", f":{LEFTHOOK_CONFIG}") if normal else None
     en_base = git("ls-tree", "--name-only", args.base, "--", LEFTHOOK_CONFIG)
     check_lefthook(inf, versionados, texto_lefthook, None if en_base is None else bool(en_base.strip()))
-    check_hallazgos(inf, cuerpo_pr)
+    ruta_comentarios = os.environ.get("PR_COMENTARIOS")
+    comentarios = comentarios_de_g4(ruta_comentarios) if ruta_comentarios else []
+    if comentarios is None:
+        inf.error("hallazgos", "no he podido leer los comentarios del PR (PR_COMENTARIOS): sin ellos no se comprueban las respuestas de los revisores.")
+    check_hallazgos(inf, cuerpo_pr, comentarios or [])
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]

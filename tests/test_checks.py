@@ -1010,6 +1010,86 @@ class TestHallazgos(unittest.TestCase):
                 self.assertEqual(self.comprobar(respuesta, "- G4-1-A-01 · menor · prueba: x · resolución: descartado").errores, [])
 
 
+def comentario(cuerpo: str, login: str = "victor-lg-bot", n: int = 1) -> dict:
+    return {"user": {"login": login}, "body": cuerpo, "html_url": f"https://github.com/o/r/pull/1#issuecomment-{n}"}
+
+
+class TestHallazgosEnComentarios(unittest.TestCase):
+    """PR 2 de VIC-38: las respuestas de los revisores van en comentarios del PR, y solo cuentan los
+    de las cuentas autorizadas (CUENTAS_G4)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def comprobar(self, comentarios, *lineas):
+        return ejecutar(checks.check_hallazgos, reconciliacion(*lineas),
+                        [(c["html_url"], c["body"]) for c in comentarios])
+
+    def leer(self, contenido) -> list | None:
+        ruta = pathlib.Path(self.tmp.name) / "comentarios.json"
+        # Como `gh api --paginate`: una lista por página, una detrás de otra.
+        texto = contenido if isinstance(contenido, str) else "\n".join(json.dumps(p) for p in contenido)
+        ruta.write_text(texto, encoding="utf-8")
+        return checks.comentarios_de_g4(str(ruta))
+
+    def test_respuesta_en_comentario_exige_su_linea(self):
+        for respuesta in ("### G4-1-A-01 · importante\n\n- **Dónde:** x", "- **G4-1-A-01** · importante",
+                          "<details>\n\n### G4-1-A-01 · importante\n\n</details>"):
+            with self.subTest(respuesta=respuesta):
+                inf = self.comprobar([comentario(respuesta)])
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("`G4-1-A-01` y la reconciliación no tiene su línea", inf.errores[0])
+                inf = self.comprobar([comentario(respuesta)],
+                                     "- G4-1-A-01 · importante · prueba: x · resolución: corregido en 1a2b3c4")
+                self.assertEqual(inf.errores, [])
+
+    def test_la_gravedad_del_comentario_cuenta_para_descartar(self):
+        comentarios = [comentario("### G4-1-A-01 · menor"), comentario("### G4-1-A-01 · debe corregirse", n=2)]
+        inf = self.comprobar(comentarios, "- G4-1-A-01 · menor · prueba: x · resolución: descartado")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("(debe corregirse) se descarta sin prueba", inf.errores[0])
+        inf = self.comprobar(comentarios, "- G4-1-A-01 · menor · prueba: x · resolución: descartado: `a.py:3`")
+        self.assertEqual(inf.errores, [])
+
+    def test_sin_gravedad_gana_en_cualquier_orden(self):
+        for previa in checks.GRAVEDADES:
+            with self.subTest(previa=previa):
+                self.assertEqual(checks.mas_grave(previa, checks.SIN_GRAVEDAD), checks.SIN_GRAVEDAD)
+                self.assertEqual(checks.mas_grave(checks.SIN_GRAVEDAD, previa), checks.SIN_GRAVEDAD)
+        self.assertEqual(checks.mas_grave("menor", "importante"), "importante")
+        self.assertEqual(checks.mas_grave(None, "menor"), "menor")
+
+    def test_codigo_y_comentarios_html_del_comentario_no_cuentan(self):
+        inf = self.comprobar([comentario("```\n### G4-1-A-01 · importante\n```\n<!-- G4-1-A-02 · menor -->")])
+        self.assertEqual(inf.errores, [])
+
+    def test_comentario_sin_cerrar_falla_con_su_enlace(self):
+        """Lo abierto solo esconde lo que sigue en el mismo comentario: sin ningún ID en él, no falla."""
+        inf = self.comprobar([comentario("```\n### G4-1-A-02 · importante", n=7)],
+                             "- G4-1-A-01 · menor · prueba: x · resolución: descartado")
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("el comentario https://github.com/o/r/pull/1#issuecomment-7 tiene un bloque de código", inf.errores[0])
+        self.assertEqual(self.comprobar([comentario("```\nx")]).errores, [])
+
+    def test_solo_las_cuentas_autorizadas(self):
+        paginas = [[comentario("### G4-1-A-01 · menor", login) for login in
+                    ("victor-lg-bot", "intruso", "victor-lg-bot2", "Victor-LG-bot")],
+                   [comentario("### G4-1-A-02 · menor", "victor-lg", n=2), {"user": {"login": "victor-lg"}},
+                    {"user": None, "body": "### G4-1-A-03 · menor"}, {"body": "### G4-1-A-03 · menor"},
+                    {"user": "victor-lg", "body": "### G4-1-A-03 · menor"}]]
+        self.assertEqual(self.leer(paginas), [(paginas[0][0]["html_url"], "### G4-1-A-01 · menor"),
+                                              (paginas[1][0]["html_url"], "### G4-1-A-02 · menor")])
+        self.assertEqual(self.leer([[]]), [])
+        self.assertEqual(self.leer("[][]\n"), [])
+        self.assertEqual(checks.CUENTAS_G4, ("victor-lg-bot", "victor-lg"))
+
+    def test_sin_poder_leer_los_comentarios_es_none(self):
+        for contenido in ("", " \n", "{", "{}", "[]{}", "[] x", "[1]", '[["x"]]'):
+            with self.subTest(contenido=contenido):
+                self.assertIsNone(self.leer(contenido))
+        self.assertIsNone(checks.comentarios_de_g4(str(pathlib.Path(self.tmp.name) / "no-existe.json")))
+
 # --- De punta a punta: main() en un repo de verdad -------------------------
 
 class TestPuntaAPunta(unittest.TestCase):
@@ -1109,6 +1189,22 @@ class TestPuntaAPunta(unittest.TestCase):
         r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #13"]',
                         PR_BODY=cuerpo + hallazgo + "corregido en 1a2b3c4\n")
         self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_lee_las_respuestas_de_los_comentarios(self):
+        cuerpo = "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n"
+        ruta = self.repo / "comentarios.json"
+        for n, (login, codigo) in enumerate((("victor-lg-bot", 1), ("intruso", 0))):
+            with self.subTest(login=login):
+                ruta.write_text(json.dumps([comentario("### G4-1-A-01 · importante", login)]), encoding="utf-8")
+                r = self.correr("adr: decide x\n\nRefs: VIC-7", f'referencias: ["PR #{20 + n}"]',
+                                PR_BODY=cuerpo, PR_COMENTARIOS=str(ruta))
+                self.assertEqual(r.returncode, codigo, r.stdout)
+                if codigo:
+                    self.assertIn("`G4-1-A-01` y la reconciliación no tiene su línea", r.stdout)
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #22"]', PR_BODY=cuerpo,
+                        PR_COMENTARIOS=str(self.repo / "no-existe.json"))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("**hallazgos:** no he podido leer los comentarios del PR", r.stdout)
 
     def test_sin_rama_ni_titulo_no_comprueba_convenciones(self):
         r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', PR_BRANCH="", PR_TITLE="",

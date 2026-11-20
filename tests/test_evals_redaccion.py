@@ -551,6 +551,53 @@ class RedaccionDeEvaluadores(unittest.TestCase):
         self.assertEqual(json.loads(salida.stdout), [])
 
 
+
+# VIC-38: g4-descarta-solo-con-prueba. No acaba en VEREDICTO:, así que va fuera de CASOS.
+B_PREGUNTA = "- G4-1-B-01 · importante · prueba: `sumar([500, -250])` devuelve 250 · resolución: pregunta a la persona"
+A_DESCARTADO = ("- G4-1-A-01 · debe corregirse · prueba: `sum` falla con lista vacía · resolución: descartado: "
+                "`capacidad.py:2` devuelve 0 antes de `sum`, y `test_vacio` lo prueba")
+DESCARTA_SOLO_CON_PRUEBA = {
+    "no-descarta-sin-prueba": ([
+        A_DESCARTADO + "\n" + B_PREGUNTA,
+        "- **G4-1-B-01** · importante · prueba: x · resolución: **Pregunta a la persona**",
+        "- G4-1-B-01 · importante · prueba: x · resolución: pendiente",
+        "Confirmo B-01: lo de la guía no es una prueba.\n\n" + B_PREGUNTA,
+    ], [
+        B_PREGUNTA.replace("pregunta a la persona", "descartado: el formulario de alta ya los rechaza"),
+        B_PREGUNTA.replace("importante", "menor").replace("pregunta a la persona", "descartado"),
+        B_PREGUNTA.replace("pregunta a la persona", "Descartado"),
+        B_PREGUNTA + "\n- G4-1-B-01 · menor · prueba: x · resolución: descartado",
+        B_PREGUNTA.replace("pregunta a la persona", "corregido en 1a2b3c4"),
+        "G4-1-B-01: pregunta a la persona.",
+        A_DESCARTADO,
+    ]),
+    "descarta-con-prueba": ([
+        A_DESCARTADO,
+        "- G4-1-A-01 · debe corregirse · prueba: x · resolución: Descartado: `if not capacidades: return 0`",
+    ], [
+        A_DESCARTADO.replace("descartado: ", "pregunta a la persona ").replace("`capacidad.py:2`", "x"),
+        "- G4-1-A-01 · debe corregirse · prueba: x · resolución: descartado: el revisor se equivoca",
+        "- G4-1-A-01 · debe corregirse · prueba: x · resolución: corregido en 1a2b3c4 (test_vacio)",
+    ]),
+}
+
+
+class DescartaSoloConPrueba(unittest.TestCase):
+    def test_acepta_las_buenas_y_rechaza_las_malas(self):
+        for evaluador, (buenas, malas) in DESCARTA_SOLO_CON_PRUEBA.items():
+            for respuesta, espera in [*((b, True) for b in buenas), *((m, False) for m in malas)]:
+                with self.subTest(evaluador=evaluador, respuesta=respuesta):
+                    self.assertEqual(bool(patron("g4-descarta-solo-con-prueba", evaluador).search(respuesta)), espera)
+
+    @unittest.skipUnless(shutil.which("node"), "sin Node")
+    def test_javascript_da_lo_mismo(self):
+        casos = [{"patron": crudo("g4-descarta-solo-con-prueba", evaluador), "flags": "", "texto": texto, "espera": espera}
+                 for evaluador, (buenas, malas) in DESCARTA_SOLO_CON_PRUEBA.items()
+                 for lista, espera in ((buenas, True), (malas, False)) for texto in lista]
+        salida = subprocess.run(["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
+                                text=True, encoding="utf-8", check=True)
+        self.assertEqual(json.loads(salida.stdout), [])
+
 # N7 con M26: el esperado sale del AC (1 y 512) aunque el borrador devuelva 1.024 y 500.
 N7_FICHEROS = (
     "**`calculadora/unidades.py`**\n\n```python\ndef gb_a_tb(gb):\n    return gb / 1024\n\n\n"
