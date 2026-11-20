@@ -956,6 +956,8 @@ class Mantenibilidad(unittest.TestCase):
         pesos = {g.stem: int(re.search(r"(?m)^weight: (\d+)$", g.read_text(encoding="utf-8")).group(1))
                  for g in (EVALS / CASO_M23 / "graders").glob("*.md")}
         self.assertGreater(pesos["encargo-con-rubrica"] / sum(pesos.values()), 0.6)
+        # Si solo falla no-exagera, la ejecución queda por debajo de 0.8 (G4-1-A-01).
+        self.assertLess(1 - pesos["no-exagera"] / sum(pesos.values()), 0.8)
 
     @unittest.skipUnless(shutil.which("node"), "sin Node")
     def test_javascript_da_lo_mismo(self):

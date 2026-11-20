@@ -7,5 +7,5 @@ tool: Agent
 # discusión del PR («por cero» solo sale del comentario de cursor-bugbot). Falla si no se pega la rúbrica (main).
 input_match: '^(?![\s\S]*(?:[Bb]ug[Bb]ot|por cero))(?=[\s\S]*"subagent_type"\s*:\s*"(?:sdd:)?reviewer")(?=[\s\S]*Refused Bequest)(?=[\s\S]*code[ -]judo)(?=[\s\S]*NEVER misreport)'
 min: 1
-weight: 10
+weight: 11
 ---

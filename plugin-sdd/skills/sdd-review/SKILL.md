@@ -44,7 +44,7 @@ Lanza el subagente `reviewer` una vez por revisor, en invocaciones independiente
 - los ADR enlazados;
 - el prefijo de sus IDs de hallazgo, `G4-<ronda>-<letra>`: una letra por revisor (A, B) y la misma en todas las rondas;
 - en una aclaración por el camino corto, que lo es y la respuesta literal de la persona, con su enlace: es lo que el revisor contrasta;
-- al revisor con el foco de mantenibilidad, el texto entero de `rubrica-mantenibilidad.md`, junto a esta skill: léelo y pégalo; no le pases la ruta, que no puede leer. Ni la discusión del PR ni los comentarios de otros bots, aunque la rúbrica venga de una herramienta que sí los lee.
+- al revisor con el foco de mantenibilidad, el texto entero de `rubrica-mantenibilidad.md`, junto a esta skill: léelo y pégalo entero, no solo su ruta: es la versión revisada, y el encargo que se publica la deja a la vista. Ni la discusión del PR ni los comentarios de otros bots, aunque la rúbrica venga de una herramienta que sí los lee.
 
 Pide expresamente a cada revisor que compruebe si algún test existente se ha debilitado y que aplique las reglas de `reviewer.md` para anotar un hallazgo: que un usuario real pueda llegar al caso, una prueba por hallazgo y la gravedad sin exagerar. En un PR de spec, pídele también que cruce cada FR con los AC que lo citan y anote los FR sin AC (`reviewer.md`). La descripción del PR no se le pasa: que la "Guía para el revisor humano" no omita ningún sitio delicado lo compruebas tú al reconciliar, con los hallazgos de los revisores.
 

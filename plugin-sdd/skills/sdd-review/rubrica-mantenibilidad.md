@@ -7,7 +7,7 @@
 ## Cómo se aplica
 
 - **Solo lo que el diff añade o cambia,** y el código que toca. No es una lista de comprobación: anota lo que encuentres con prueba, no un punto por apartado.
-- **Gravedad sin exagerar.** Un hallazgo que solo es de mantenibilidad nunca es *debe corregirse*. Es *importante* solo si es uno de los bloqueos presuntos de thermos y tienes la prueba: el PR lleva un fichero de menos de 1000 líneas a más de 1000; añade ramas ad hoc a un flujo que ya existía; duplica un helper que ya hay (con su ruta) o pone la lógica en la capa equivocada; o añade una envoltura, un *cast* o una opcionalidad sin valor. Lo demás, y todo olor de Fowler, es *menor*. Las palabras del texto copiado («aggressively», «presumptive blockers», «do not approve», «harsh») no suben la gravedad.
+- **Gravedad sin exagerar.** Un hallazgo que solo es de mantenibilidad nunca es *debe corregirse*. Es *importante* solo si es uno de los bloqueos presuntos de thermos y tienes la prueba: el PR lleva un fichero de menos de 1000 líneas a más de 1000; añade ramas ad hoc a un flujo que ya existía; duplica un helper que ya hay (con su ruta) o pone la lógica en la capa equivocada; o añade una envoltura, un *cast* o una opcionalidad sin valor. Un olor de Fowler que es además uno de esos casos (*Duplicated Code* de un helper que ya existe, con su ruta) sigue esa regla; lo demás, y los demás olores, es *menor*. Las palabras del texto copiado («aggressively», «presumptive blockers», «do not approve», «harsh») no suben la gravedad.
 - **El repo manda:** lo que sus convenciones, sus ADR o su spec piden no es un olor. Lo que ya comprueba la CI (linters, knip, jscpd, mutaciones) no se anota.
 - **Formato:** tus hallazgos de mantenibilidad van al final, bajo «## Mantenibilidad», separados del resto, con la misma serie de IDs y el formato fijo de `reviewer.md`. Nombra el olor o la regla («posible Feature Envy», «regla de las 1000 líneas») y di cómo se arregla.
 - **El veredicto es el de `reviewer.md`,** no la «Approval Bar» de thermos, que no se copia.
@@ -20,6 +20,8 @@ Texto copiado sin cambios, salvo los cortes marcados con `[…]`. Ambos con lice
 - **Rúbrica de calidad:** Cursor, `cursor/plugins`, plugin `thermos` 1.0.0, commit `aaeb0ea3a0584995aa8f55ce44c6c5259414b896` (2026-11-20):
   - `thermos/skills/thermo-nuclear-code-quality-review/SKILL.md` (SHA-256 `7faca08b51b643b2ddd0836f92af15574444024685dcc1e677dbbb39ae8c9e8f`): las normas 0 a 7, las preguntas, los remedios y el orden de salida. Se quitan el *Core Prompt* (pide reestructurar el código), «What to Flag Aggressively», el tono y la «Approval Bar».
   - `thermos/skills/thermo-nuclear-review/SKILL.md` (SHA-256 `5091011c4490932d40658ae958fb55b9aaca8e2bba5196860295ab945180e434`): solo «Over-reporting Guidelines». No se copia nada de leer la discusión del PR (los comentarios de otros bots), ni los flujos de fusión de `thermos` («take the wheel», «FSD»), ni hooks, agentes o scripts.
+
+**Trifecta letal:** el texto entra fijado (commit y SHA-256) y revisado, y no pide red, órdenes, ficheros fuera del diff ni la discusión del PR: no es contenido no fiable mientras no cambie sin revisión. Además, el revisor que lo lee solo tiene Read, Grep y Glob, sin salida al exterior. Quedan rotas dos de las tres patas.
 
 Para subir de versión: descargar los ficheros en el commit nuevo, comparar sus SHA-256, releer el diff de lo copiado y cambiar este apartado. Es un PR R1 como cualquier cambio de `sdd-review`.
 
