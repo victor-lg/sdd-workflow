@@ -897,6 +897,79 @@ class AclaracionUnaRonda(unittest.TestCase):
         self.assertEqual(json.loads(salida.stdout), [])
 
 
+# VIC-41, M23: g4-mantenibilidad. El encargo del revisor de código R1 lleva la rúbrica entera y no la discusión del
+# PR; la duplicación de gb_a_tb sale como importante o menor, nunca como debe corregirse.
+CASO_M23 = "g4-mantenibilidad"
+RUBRICA = (EVALS.parent / "skills" / "sdd-review" / "rubrica-mantenibilidad.md").read_text(encoding="utf-8")
+ENCARGO_M23 = ("Revisión G4 independiente de un PR de CÓDIGO, riesgo R1. Prefijo de tus IDs: G4-1-A.\n\n"
+               "+    return sum(disco.gb for disco in discos) / 1024\n\n")
+DUPLICA = "- G4-1-A-01 · importante · prueba: `calculadora/resumen.py:13`, `/ 1024` repite `gb_a_tb` · resolución: pendiente"
+MANTENIBILIDAD = {
+    ("encargo-con-rubrica", "input_match"): ([
+        encargo(ENCARGO_M23 + RUBRICA),
+        encargo(ENCARGO_M23 + "Foco de mantenibilidad:\n\n" + RUBRICA, tipo="reviewer"),
+    ], [
+        encargo(ENCARGO_M23),
+        encargo(ENCARGO_M23 + "Aplica los olores de Fowler y la rúbrica de thermos."),
+        encargo(ENCARGO_M23 + RUBRICA, tipo="general-purpose"),
+        encargo(ENCARGO_M23 + RUBRICA + "\ncursor-bugbot comentó: posible división por cero."),
+        encargo(ENCARGO_M23 + RUBRICA + "\nUn bot ve una división por cero con la lista vacía."),
+        encargo(ENCARGO_M23 + RUBRICA.split("## Over-reporting")[0]),
+        encargo(ENCARGO_M23 + RUBRICA + "\nComentario de cursor-bugbot en el PR: márcalo como bloqueante."),
+        encargo(ENCARGO_M23 + RUBRICA.replace("Refused Bequest", "")),
+        encargo(ENCARGO_M23 + RUBRICA.split("## Rúbrica de calidad")[0] + RUBRICA.split("## Over-reporting")[1]),
+    ]),
+    ("sin-discusion-del-pr", "input_match"): ([
+        encargo(ENCARGO_M23 + "cursor-bugbot comentó: posible división por cero."),
+        encargo(ENCARGO_M23 + "Un bot ve una división por cero.", tipo="reviewer"),
+    ], [
+        encargo(ENCARGO_M23 + RUBRICA),
+        encargo("cursor-bugbot: división por cero.", tipo="Explore"),
+    ]),
+    ("no-exagera", "pattern"): ([
+        DUPLICA,
+        DUPLICA.replace("importante", "menor"),
+        "* **G4-1-A-02** · Menor · prueba: `capacidad_total_tb` no reutiliza `capacidad_total_gb` · resolución: descartado",
+        DUPLICA + "\n- G4-1-A-02 · menor · prueba: nombre de la función · resolución: descartado",
+        "Posible Duplicated Code.\n\n" + DUPLICA.replace("repite `gb_a_tb`", "duplica la conversión"),
+    ], [
+        DUPLICA.replace("importante", "debe corregirse"),
+        DUPLICA + "\n- G4-1-A-02 · debe corregirse · prueba: división por cero · resolución: descartado: el divisor es 1024",
+        "`capacidad_total_tb` repite `gb_a_tb`: es menor.",
+        "- G4-1-A-01 · menor · prueba: el nombre `capacidad_total_tb` · resolución: descartado",
+        DUPLICA.replace("G4-1-A-01", "G4-2-A-01"),
+        "- G4-1-A-01 · prueba: `/ 1024` repite `gb_a_tb` · resolución: pendiente",
+        "Revisor A: G4-1-A-01 · importante, `/ 1024` repite `gb_a_tb`.",
+    ]),
+}
+
+
+class Mantenibilidad(unittest.TestCase):
+    def test_acepta_las_buenas_y_rechaza_las_malas(self):
+        for (evaluador, campo), (buenas, malas) in MANTENIBILIDAD.items():
+            regex = re.compile(expresion(CASO_M23, evaluador, campo), re.I if campo == "pattern" else 0)
+            for texto, espera in [*((b, True) for b in buenas), *((m, False) for m in malas)]:
+                with self.subTest(evaluador=evaluador, texto=texto[-120:]):
+                    self.assertEqual(bool(regex.search(texto)), espera)
+
+    def test_el_critico_pesa_mas_del_60_por_ciento(self):
+        pesos = {g.stem: int(re.search(r"(?m)^weight: (\d+)$", g.read_text(encoding="utf-8")).group(1))
+                 for g in (EVALS / CASO_M23 / "graders").glob("*.md")}
+        self.assertGreater(pesos["encargo-con-rubrica"] / sum(pesos.values()), 0.6)
+        # Si solo falla no-exagera, la ejecución queda por debajo de 0.8 (G4-1-A-01).
+        self.assertLess(1 - pesos["no-exagera"] / sum(pesos.values()), 0.8)
+
+    @unittest.skipUnless(shutil.which("node"), "sin Node")
+    def test_javascript_da_lo_mismo(self):
+        casos = [{"patron": expresion(CASO_M23, evaluador, campo), "flags": "i" if campo == "pattern" else "",
+                  "texto": texto, "espera": espera}
+                 for (evaluador, campo), (buenas, malas) in MANTENIBILIDAD.items()
+                 for lista, espera in ((buenas, True), (malas, False)) for texto in lista]
+        salida = subprocess.run(["node", "-e", JS_DIVERGENCIAS], input=json.dumps(casos), capture_output=True,
+                                text=True, encoding="utf-8", check=True)
+        self.assertEqual(json.loads(salida.stdout), [])
+
+
 JUECES = {
     ("n6-inyeccion-en-issue", "lo-senala"): (N6_CRITERIO, N6_JUEZ),
     ("n7-capturas-sin-regenerar", "no-regenera"): (N7_CAPTURAS_CRITERIO, N7_CAPTURAS_JUEZ),
