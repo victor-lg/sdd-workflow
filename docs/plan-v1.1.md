@@ -85,10 +85,9 @@
 | **M15** | Si dos revisores leen la spec de forma distinta, el agente pregunta; la respuesta se anota como aclaración y se pasa a la spec al cerrar la issue |
 | **M1** | Camino corto para aclaraciones: un PR de spec, dos revisores (los que pide el ADR-0001) y una sola ronda; lo que deba corregirse se corrige sin otra y la persona lo revisa al aprobar (decisión de Víctor, 2026-11-20) |
 | **M23** (rúbrica) | Un revisor con foco de mantenibilidad: los olores de Fowler (Pocock) y la rúbrica de calidad de thermos (sin leer la discusión del PR ni sus flujos de fusión), con la regla de no exagerar la gravedad |
-| **M34** | Revisor en la CI con modelo configurable (compatible con OpenAI, por ejemplo DeepSeek de OpenCode Go): la clave como secreto de GitHub y permiso solo para comentar |
 | Coste | Se mide cuánto cuesta cada revisión y se decide si el revisor de código R1 sigue aportando con los controles del bloque 3 (mejora #2 del primer recorrido) |
 
-**Hecho cuando:** un PR de la calculadora pasa por la reconciliación nueva con el revisor de la CI, y la métrica de hallazgos confirmados queda registrada.
+**Hecho cuando:** un PR de la calculadora pasa por la reconciliación nueva, y la métrica de hallazgos confirmados queda registrada. El revisor de la CI (M34) pasó al bloque 7 el 2026-11-21 (VIC-43, `historial/coste-revision-bloque-4.md`).
 
 ## Bloque 5 — Tu papel, la autonomía del agente y dejar este chat
 
@@ -143,6 +142,7 @@
 **ADR-0010 del workflow (modifica ADR-0002):**
 - **M29:** una tabla en un solo fichero con qué modelo y qué esfuerzo para cada tarea, y la regla de empezar barato y subir si fallan los tests. Cambiar de modelo es cambiar una línea.
 - **M30:** piloto de portabilidad con OpenCode y un modelo de Go, en contenedor, con los mismos ficheros y repitiendo N1–N8.
+- **M34 (VIC-42):** revisor en la CI con modelo configurable (compatible con OpenAI, por ejemplo DeepSeek de OpenCode Go): la clave como secreto de GitHub y permiso solo para comentar. Viene del bloque 4: GitHub Models, el proveedor gratuito previsto, se retiró el 30 de julio de 2026, y Víctor no quiere pagar otro proveedor por ahora (2026-11-21). Se retoma con la tabla de modelos de la M29.
 - **Perfil Go** (mejora #10 del primer recorrido): se retoma dentro de este bloque.
 - **Medición fuera de Claude Code:** un medidor equivalente a `sdd-metricas` para OpenCode.
 - **Evaluaciones con el modelo de Go:** si se adopta el perfil Go, el plugin se evalúa (M35) también con ese modelo, porque será el que lo use. Hasta entonces se evalúa solo con Claude.
@@ -183,7 +183,7 @@ Aceptadas por Víctor el 2026-11-19, tras la retrospectiva del bloque 3, donde l
 3. **Unas 400 líneas por PR como tope,** sin contar capturas ni lockfiles. Tres rondas de G4 son señal de partir el PR, no la norma.
 4. **Coste en el contrato:** el "Hecho cuando" incluye el tiempo de espera de la CI por push si la entrega añade un job, y el tiempo del trozo más lento si toca los E2E.
 5. **Varias issues por bloque desde el principio,** cada una con su "Hecho cuando":
-   - **Bloque 4:** formato de hallazgos y su check (reconciliación), diff calculado por la CI (M8), encargos del revisor (M13, M15, M1), revisor de mantenibilidad (M23), revisor en la CI (M34, R2 con su ADR) y la medición del coste.
+   - **Bloque 4:** formato de hallazgos y su check (reconciliación), diff calculado por la CI (M8), encargos del revisor (M13, M15, M1), revisor de mantenibilidad (M23) y la medición del coste. El revisor en la CI (M34, R2 con su ADR) pasó al bloque 7.
    - **Bloque 5:** el ADR-0009 del workflow solo, en su PR (con una línea "No confundir con el ADR-0009 de la calculadora"); después, ruleset y CODEOWNERS, M28 en la plantilla de issue y M4/M20, por separado.
    - **Bloque 6:** una skill por issue.
-   - **Bloque 7:** el ADR-0010 primero; la tabla de modelos y el piloto de OpenCode, aparte.
+   - **Bloque 7:** el ADR-0010 primero; la tabla de modelos, el piloto de OpenCode y el revisor en la CI (M34), aparte.

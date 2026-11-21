@@ -4,6 +4,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Coste de la revisión en el bloque 4 (VIC-43).** `historial/coste-revision-bloque-4.md`: por ronda de G4, los revisores, el modelo, los tokens, el tiempo, el coste estimado y los hallazgos confirmados y descartados por gravedad, de sdd-workflow #52 a #60 y calculadora-discos #67 a #71 y #74, con el coste de las evaluaciones.
+  - **Revisor de código R1:** unos 0,15 $ y menos de un minuto y medio por ronda. En 10 rondas, 4 *importantes* confirmados que no veía ningún control fijo, y nada en los PR que solo reorganizan tests.
+  - **Propuesta a Víctor:** mantener el revisor de código R1 y las 3 ejecuciones por caso de las evaluaciones. Decide él; no cambia ninguna regla.
+  - **Hueco:** la línea `Métricas G4` no guarda revisor, gravedad, tokens ni tiempo. Se propone una issue aparte.
+  - **`docs/plan-v1.1.md`:** M34 (VIC-42, revisor en la CI) pasa del bloque 4 al 7. GitHub Models se retiró el 30 de julio de 2026 y Víctor no quiere pagar otro proveedor por ahora (2026-11-21). El «Hecho cuando» del bloque 4 ya no pide el revisor de la CI.
+
 - **Revisor de mantenibilidad (VIC-41; M23). Plugin `sdd` 1.15.0.**
   - `sdd-review`: en un PR de código R1, el único revisor lleva también el foco de mantenibilidad; en R2, el revisor que no se centra en seguridad. Es un encargo más dentro de los revisores del ADR-0001, no un revisor más, y no va en spec, ADR, R0 ni en diffs sin código. El encargo lleva entera `rubrica-mantenibilidad.md`, y nunca la discusión del PR ni comentarios de otros bots.
   - `rubrica-mantenibilidad.md` (nueva): los doce olores de Fowler de `mattpocock/skills` (`code-review`, commit `abeeaf9`) y la rúbrica de calidad de `thermos` 1.0.0 de `cursor/plugins` (commit `aaeb0ea`), más su regla contra exagerar la gravedad. Texto copiado sin cambios, con los cortes marcados, el SHA-256 de cada fichero y las licencias MIT. Sin hooks, agentes ni scripts, sin la lectura de la discusión del PR ni los flujos de fusión. Delante, las reglas propias: un hallazgo solo de mantenibilidad nunca es *debe corregirse*; es *importante* solo en los bloqueos presuntos de thermos con prueba; lo demás, *menor*; lo que ya mira la CI no se anota.
