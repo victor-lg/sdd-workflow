@@ -39,7 +39,7 @@ PR medidos:
   - **sdd #59, G4-1-A-02:** la condición del camino corto no admitía el cambio de `estado` que hace toda aclaración.
   - **sdd #60, G4-1-A-01:** con los pesos de los evaluadores, el caso nuevo pasaba de 0,8 aunque fallase lo que debía probar.
   - **calc #71:** el baseline daba por hecho que Dependabot ya no proponía `three`, y `dependabot.yml` de `main` aún lo proponía.
-- **Menores:** cuatro de los nueve son de los evaluadores o los tests del propio caso (#57, #58, #59 r2, #60). La evaluación no comprueba a sus evaluadores; el revisor sí lo hizo.
+- **Evaluadores:** tres de los nueve menores son de los evaluadores o los tests del propio caso (#57, #58 y #59 r2), además del *importante* de #60. La evaluación no comprueba a sus evaluadores; el revisor sí lo hizo.
 - **calc #67 a #69:** en los PR que solo reorganizan tests, el revisor no confirmó nada (5 descartados). Ahí los controles fijos ya cubren lo que mira: los tests, las mutaciones y jscpd.
 - **Tiempo:** el revisor tarda de 0,3 a 1,4 minutos por ronda. Lo que más tarda no es el revisor: preparar el encargo, reconciliar y esperar a la CI. Eso no se mide aparte.
 
@@ -63,7 +63,7 @@ El revisor Opus de seguridad es el 74 % del coste de la revisión en R2. Encontr
 
 - **Revisores:** los de los PR de las tablas cuestan unos 7,8 $. Las sesiones del bloque 4 (del 19-11 a las 21:08 al 21-11) suman unos 71 $ en `sdd-metricas`. La revisión es el 10–11 % del coste: no he comprobado si la cifra de Claude Code incluye a los subagentes, y con ellos o sin ellos sale lo mismo.
 - **Revisor R1:** 0,15 $ de media por ronda. Las 10 rondas son el 2 % del coste de las sesiones del bloque.
-- **Evaluaciones:** unos 2 $ por PR de skills, según Víctor, con 3 ejecuciones por caso (`runsPerCase: 3`, umbral 0,8 sobre la media). En el bloque 4, cinco PR traen un caso nuevo (#53, #57, #58, #59 y #60): unos 10 $. Una evaluación cuesta lo que unas 13 rondas de revisor R1.
+- **Evaluaciones:** unos 2 $ por PR de skills, según Víctor, con 3 ejecuciones por caso y umbral 0,8 sobre la media (`runsPerCase: 3` en los resultados locales de noviembre, `plugin-sdd/evals/results/*/aggregate-result.json`, que Git no guarda). En el bloque 4, cinco PR traen un caso nuevo (#53, #57, #58, #59 y #60): unos 10 $. Una evaluación cuesta lo que unas 13 rondas de revisor R1.
 
 ## 5. Las comprobaciones menores que fallan una de cada tres veces
 
@@ -79,7 +79,8 @@ El revisor Opus de seguridad es el 74 % del coste de la revisión en R2. Encontr
 **Revisor de código R1: mantenerlo (recomendado).**
 - **Lo que cuesta:** unos 0,15 $ y menos de un minuto y medio por ronda.
 - **Lo que encuentra:** en 10 rondas, 4 *importantes* confirmados que ningún control fijo podía ver: contradicciones con un ADR o con la configuración, y pesos de evaluación que dejaban pasar el fallo.
-- **Sin él:** esos cuatro le llegaban a Víctor en G6.
+- **Dónde los encuentra:** los cuatro son de PR de texto de skills, de evaluadores o de documentación (#59, #60 y calc #71), donde los controles del bloque 3 no llegan. En el código con controles fijos (calc #67 a #70, solo tests) lleva 0 *importantes* en 4 rondas: para esa parte, la muestra no dice que aporte. Mantenerlo se apoya en que la mayoría de los PR R1 del workflow son de texto.
+- **Sin él:** esos cuatro habrían quedado para Víctor en G6, si los veía.
 - **Alternativas:**
   - *Reducir:* quitarlo en los PR que solo reorganizan tests, con mutaciones y duplicados en verde. Ahorraría unos 0,33 $ en tres PR. Además, el ADR-0001 pide un revisor con contexto limpio en todo el código R1: quitarlo ahí pide otro ADR.
   - *Quitar:* ahorraría 1,48 $ en el bloque, a cambio de esos cuatro *importantes*.
