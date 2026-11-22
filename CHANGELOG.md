@@ -4,6 +4,14 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Retrospectiva del bloque 4 en `historial/retrospectiva-bloque-4.md` (VIC-49).** El «Hecho cuando» se cumple: calculadora-discos #74 pasó por la reconciliación nueva y fue la primera CI real de `hallazgos` y `cambios`.
+  - **Lecciones:** lo que la plantilla trae y este repo no ejecuta se prueba primero en la calculadora, y las evaluaciones forman parte del verde. El #55 se fusionó antes de ellas, y la orden sobre `origin/<rama>` falla tras el squash.
+  - **Las cinco reglas de entrega, en su primer bloque:** se cumplieron la 1 y la 5; la 2, la 3 y la 4, a medias.
+  - **`AGENTS.md` de la plantilla:** de ~1417 a ~1494 tokens desde la poda de VIC-37.
+  - **Decisiones:** las ya tomadas por Víctor (revisor de código R1 y 3 ejecuciones por caso, M34 al bloque 7, three en 0.170) se copian tal cual. Las propuestas las decidió Víctor en el PR (2026-11-22): `mutaciones` se marca como requerido después de VIC-45, porque la causa confirmada a medias basta con la alarma; VIC-48 es la primera issue del bloque 5 y VIC-47 va antes de tocar el ruleset; VIC-36 se hace antes de entrar en el bloque 5; las evaluaciones en los PR de skills son VIC-51; la evaluación semanal en rojo y los evaluadores inestables, VIC-50, antes del bloque 6; V1–V7 y #8, VIC-52; la poda de `AGENTS.md` se mide al cerrar el bloque 5, con ~1548 tokens como tope.
+  - **Regla 2 de las entregas,** en el plan: un check o un workflow de la plantilla que este repo no ejecuta se prueba en la calculadora en el primer PR.
+  - **`docs/plan-v1.1.md`:** el bloque 4, cerrado, y las condiciones de entrada del bloque 5 con el estado de VIC-29, 44, 45, 32, 47, 23, 48 y 36. `mutaciones` aún no es check requerido en la calculadora; `duplicados`, sí.
+
 - **Coste de la revisión en el bloque 4 (VIC-43).** `historial/coste-revision-bloque-4.md`: por ronda de G4, los revisores, el modelo, los tokens, el tiempo, el coste estimado y los hallazgos confirmados y descartados por gravedad, de sdd-workflow #52 a #60 y calculadora-discos #67 a #71 y #74, con el coste de las evaluaciones.
   - **Revisor de código R1:** unos 0,15 $ y menos de un minuto y medio por ronda. En 10 rondas, 4 *importantes* confirmados que no veía ningún control fijo, y nada en los PR que solo reorganizan tests.
   - **Propuesta a Víctor:** mantener el revisor de código R1 y las 3 ejecuciones por caso de las evaluaciones. Decide él; no cambia ninguna regla.
