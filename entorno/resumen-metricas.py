@@ -21,6 +21,15 @@ la tabla marca "⚠ sin línea" en vez de 0; lo mismo con sdd-implement y la mut
 (una entrega sin mutaciones lo dice con "Métricas mutación: sin mutaciones").
 Así se distingue "no hubo hallazgos" de "la skill no anotó la línea".
 
+Revisores de G4 (VIC-48): de las líneas "Métricas revisor" de sdd-review, dos tablas
+más. Una fila por PR, ronda y revisor, con el formato de la §2 de
+historial/coste-revision-bloque-4.md: tokens (entrada, caché y salida), salida,
+minutos, coste estimado y hallazgos confirmados por gravedad y descartados. Y los
+totales por issue y revisor. Una misma ronda de un revisor cuenta una vez (la
+última). El coste sale de PRECIOS, a precio de API; un modelo sin precio deja la
+celda en "?" y no suma. Si sdd-metricas no encontró el transcript del subagente,
+sus tokens, minutos y coste salen como "—".
+
 Los defectos escapados no salen de las sesiones, sino de Linear: las issues con la
 etiqueta "defecto-escapado". --defectos recibe un CSV con las columnas issue y
 origen (la issue del defecto y la issue cuya entrega lo dejó pasar), exportado de
@@ -42,6 +51,87 @@ from collections import Counter, defaultdict
 
 ID = re.compile(r"^vic-\d+$", re.I)
 SIN_LINEA = "⚠ sin línea"
+# Dólares por millón de tokens: entrada, salida y lectura de caché. La escritura de
+# caché, a 1,25 veces la entrada. Los de historial/coste-revision-bloque-4.md, §1.
+PRECIOS = {"claude-opus-5-5": (4, 20, 0.20), "claude-sonnet-5-5": (2, 10, 0.10)}
+GRAVEDADES = ("debe", "importante", "menor")
+
+
+def coste_de(tokens):
+    """Coste estimado de {modelo: tokens}, o None si algún modelo no tiene precio."""
+    total = 0.0
+    for modelo, t in tokens.items():
+        if modelo not in PRECIOS:
+            return None
+        entrada, salida, lectura = PRECIOS[modelo]
+        total += (t.get("entrada", 0) * entrada + t.get("salida", 0) * salida + t.get("cache_lectura", 0) * lectura
+                  + t.get("cache_escritura", 0) * entrada * 1.25) / 1e6
+    return total
+
+
+def miles(n, decimales=0):
+    """196 k, 8,1 k o 1,5 M, como en las tablas del historial."""
+    if n >= 10 ** 6:
+        return f"{n / 1e6:.1f} M".replace(".", ",")
+    return f"{n / 1000:.{decimales}f} k".replace(".", ",")
+
+
+def coma(x, decimales):
+    return f"{x:.{decimales}f}".replace(".", ",")
+
+
+def tabla_revisores(revisores):
+    """Las dos tablas de revisores: una fila por PR, ronda y revisor, y por issue y revisor."""
+    print("\n| Issue | PR | Ronda | Revisor | Modelo | Tokens | Salida | Min | Coste est. | "
+          "Confirmados (deb. / imp. / men.) | Descartados |")
+    print("| --- | --- | ---: | --- | --- | ---: | ---: | ---: | ---: | --- | ---: |")
+    total = {"tokens": 0, "min": 0.0, "coste": 0.0, "conf": [0, 0, 0], "desc": 0}
+    por_issue = defaultdict(lambda: {"rondas": 0, "modelos": [], "tokens": 0, "min": 0.0, "coste": 0.0,
+                                     "conf": [0, 0, 0], "desc": 0})
+    sin_precio, sin_transcript = set(), 0
+    for (clave, pr, ronda, letra), r in sorted(revisores.items(), key=lambda x: tuple(map(str, x[0]))):
+        consumo = r.get("consumo") if isinstance(r.get("consumo"), dict) else None
+        tokens = consumo.get("tokens") or {} if consumo else {}
+        modelos = ", ".join(tokens) or r.get("modelo") or "—"
+        conf = [int((r.get("confirmados") or {}).get(g) or 0) for g in GRAVEDADES]
+        desc = sum(int((r.get("descartados") or {}).get(g) or 0) for g in GRAVEDADES)
+        t = por_issue[(clave, letra)]
+        t["rondas"] += 1
+        t["modelos"] = list(dict.fromkeys(t["modelos"] + modelos.split(", ")))
+        if consumo:
+            n = sum(sum(x.values()) for x in tokens.values())
+            salida = sum(x.get("salida", 0) for x in tokens.values())
+            minutos = consumo.get("minutos") or 0
+            coste = coste_de(tokens)
+            celdas = [miles(n), miles(salida, 1), coma(minutos, 1), "?" if coste is None else f"{coma(coste, 2)} $"]
+            for d in (t, total):
+                d["tokens"] += n
+                d["min"] += minutos
+                d["coste"] += coste or 0
+            if coste is None:
+                sin_precio.update(m for m in tokens if m not in PRECIOS)
+        else:
+            celdas = ["—"] * 4
+            sin_transcript += 1
+        for d in (t, total):
+            d["conf"] = [a + b for a, b in zip(d["conf"], conf)]
+            d["desc"] += desc
+        print(f"| {clave} | #{pr} | {ronda} | {celda(letra)} | {celda(modelos)} | {' | '.join(celdas)} | "
+              f"{' / '.join(map(str, conf))} | {desc} |")
+    print(f"| **Total ({len(revisores)} rondas)** | | | | | **{miles(total['tokens'])}** | | "
+          f"**{coma(total['min'], 1)}** | **{coma(total['coste'], 2)} $** | **{' / '.join(map(str, total['conf']))}** | "
+          f"**{total['desc']}** |")
+    if sin_precio:
+        print(f"\n?: sin precio para {', '.join(sorted(sin_precio))} en PRECIOS; no suma al total.")
+    if sin_transcript:
+        print(f"\n—: {sin_transcript} sin el transcript del subagente; no suman al total.")
+
+    print("\n| Issue | Revisor | Modelo | Rondas | Tokens | Min | Coste est. | "
+          "Confirmados (deb. / imp. / men.) | Descartados |")
+    print("| --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: |")
+    for (clave, letra), t in sorted(por_issue.items()):
+        print(f"| {clave} | {celda(letra)} | {celda(', '.join(t['modelos']))} | {t['rondas']} | {miles(t['tokens'])} | "
+              f"{coma(t['min'], 1)} | {coma(t['coste'], 2)} $ | {' / '.join(map(str, t['conf']))} | {t['desc']} |")
 
 
 def lee_defectos(ruta):
@@ -107,6 +197,7 @@ def main(argv=None):
     # (clave, pr, ronda) -> ronda de G4; gana la de fecha más reciente. La clave es la
     # issue y no el repo, que es el nombre de la carpeta y cambia en cada worktree.
     rondas = {}
+    revisores = {}  # (clave, pr, ronda, letra) -> revisor; gana el de fecha más reciente
     usos = defaultdict(set)  # clave -> skills con métricas usadas en esa issue
     for s in sesiones:
         clave = celda(", ".join(s.get("issues") or []) or ", ".join(s.get("ramas") or []) or "—")
@@ -136,6 +227,12 @@ def main(argv=None):
             k = (r.get("issue") or clave, r.get("pr"), r.get("ronda"))
             if k not in rondas or (r.get("fecha") or "") >= (rondas[k].get("fecha") or ""):
                 rondas[k] = r
+        for r in (s.get("revisores") or {}).values():
+            if not isinstance(r, dict):
+                continue
+            k = (r.get("issue") or clave, r.get("pr"), r.get("ronda"), r.get("revisor"))
+            if k not in revisores or (r.get("fecha") or "") >= (revisores[k].get("fecha") or ""):
+                revisores[k] = r
 
     g4 = defaultdict(lambda: [0, 0, 0, 0])  # rondas, confirmados, descartados, corregidos
     for (clave, _, _), r in rondas.items():
@@ -168,6 +265,8 @@ def main(argv=None):
     if marcas:
         print(f"\n{SIN_LINEA}: se usó sdd-review (G4) o sdd-implement (mutación) en esa issue y no hay "
               "ninguna línea de métricas válida en un gh pr comment.")
+    if revisores:
+        tabla_revisores(revisores)
     print(f"\nTotal: {len(sesiones)} sesiones, ${sum(t['coste'] for t in tot.values()):.2f} estimados.")
     if sin_origen:
         print(f"Defectos sin issue de origen: {', '.join(sin_origen)}.")

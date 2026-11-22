@@ -20,6 +20,16 @@ def ronda(pr, r, conf, desc, corr, fecha):
                           "corregidos": corr, "fecha": fecha}}
 
 
+def revisor(pr, r, letra, fecha, issue="VIC-48", conf=(0, 1, 2), desc=(0, 0, 1), tokens=None, minutos=1.0):
+    datos = {"pr": pr, "ronda": r, "revisor": letra, "modelo": "sonnet", "agente": "a1", "fecha": fecha,
+             "issue": issue, "confirmados": dict(zip(("debe", "importante", "menor"), conf)),
+             "descartados": dict(zip(("debe", "importante", "menor"), desc)),
+             "consumo": None if tokens is False else {"minutos": minutos, "tokens": tokens or {
+                 "claude-sonnet-5-5": {"entrada": 20, "cache_escritura": 20000, "cache_lectura": 170000,
+                                       "salida": 8100}}}}
+    return {f"{pr}/{r}/{letra}": datos}
+
+
 class Resumen(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -236,6 +246,71 @@ class DeLaSesionAlResumen(unittest.TestCase):
                      if l.startswith("| VIC-")}
             self.assertEqual(filas["VIC-70"][5:9], ["⚠ sin línea", "—", "—", "—"])
             self.assertEqual(filas["VIC-71"][5:9], ["1", "2", "1", "2"])
+
+
+class Revisores(unittest.TestCase):
+    """Tablas por revisor (VIC-48), con el formato de historial/coste-revision-bloque-4.md, §2."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        os.makedirs(os.path.join(self.dir.name, "sesiones"))
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def guarda(self, nombre, revisores):
+        with open(os.path.join(self.dir.name, "sesiones", nombre + ".json"), "w", encoding="utf-8") as f:
+            json.dump({"inicio": "2026-11-22T10:00", "issues": ["VIC-48"], "revisores": revisores}, f)
+
+    def ejecuta(self):
+        with redirect_stdout(io.StringIO()) as salida:
+            resumen.main([self.dir.name])
+        return salida.getvalue()
+
+    def filas(self, salida, cabecera):
+        tabla = salida.split(cabecera, 1)[1].split("\n\n", 1)[0]
+        return [[c.strip() for c in l.strip("|").split("|")] for l in tabla.splitlines()[2:]]
+
+    def test_una_fila_por_pr_ronda_y_revisor_con_total(self):
+        opus = {"claude-opus-5-5": {"entrada": 10, "cache_escritura": 50000, "cache_lectura": 900000,
+                                    "salida": 20000}}
+        self.guarda("s1", {**revisor(52, 1, "A", "2026-11-22T10:00"),
+                           **revisor(52, 1, "B", "2026-11-22T10:00", conf=(1, 2, 0), desc=(0, 1, 0),
+                                     tokens=opus, minutos=2.35)})
+        # Sesión reanudada que repite la ronda 1 de A con otros números: cuenta la última.
+        self.guarda("s2", revisor(52, 1, "A", "2026-11-22T11:00", conf=(0, 0, 1)))
+        filas = self.filas(self.ejecuta(), "| Issue | PR | Ronda | Revisor")
+        # Sonnet: 20×2 + 8100×10 + 170000×0,10 + 20000×2×1,25 = 148 040 µ$ → 0,15 $.
+        self.assertEqual(filas[0], ["VIC-48", "#52", "1", "A", "claude-sonnet-5-5", "198 k", "8,1 k", "1,0",
+                                    "0,15 $", "0 / 0 / 1", "1"])
+        # Opus: 10×4 + 20000×20 + 900000×0,20 + 50000×4×1,25 = 830 040 µ$ → 0,83 $.
+        self.assertEqual(filas[1], ["VIC-48", "#52", "1", "B", "claude-opus-5-5", "970 k", "20,0 k", "2,4",
+                                    "0,83 $", "1 / 2 / 0", "1"])
+        self.assertEqual(filas[2], ["**Total (2 rondas)**", "", "", "", "", "**1,2 M**", "", "**3,4**",
+                                    "**0,98 $**", "**1 / 2 / 1**", "**2**"])
+
+    def test_por_issue_y_revisor(self):
+        self.guarda("s1", {**revisor(52, 1, "A", "2026-11-22T10:00"), **revisor(52, 2, "A", "2026-11-22T12:00"),
+                           **revisor(9, 1, "A", "2026-11-22T10:00", issue="VIC-7")})
+        filas = self.filas(self.ejecuta(), "| Issue | Revisor | Modelo | Rondas")
+        self.assertEqual(filas, [["VIC-48", "A", "claude-sonnet-5-5", "2", "396 k", "2,0", "0,30 $", "0 / 2 / 4", "2"],
+                                 ["VIC-7", "A", "claude-sonnet-5-5", "1", "198 k", "1,0", "0,15 $", "0 / 1 / 2", "1"]])
+
+    def test_sin_transcript_ni_precio(self):
+        self.guarda("s1", {**revisor(52, 1, "A", "2026-11-22T10:00", tokens=False),
+                           **revisor(52, 1, "B", "2026-11-22T10:00",
+                                     tokens={"claude-nuevo|x": {"entrada": 1000, "salida": 0}})})
+        salida = self.ejecuta()
+        filas = self.filas(salida, "| Issue | PR | Ronda | Revisor")
+        self.assertEqual(filas[0][4:9], ["sonnet", "—", "—", "—", "—"])
+        # El | del modelo va escapado: aquí parte la celda en dos.
+        self.assertEqual(filas[1][4:10], ["claude-nuevo\\", "x", "1 k", "0,0 k", "1,0", "?"])
+        self.assertIn("?: sin precio para claude-nuevo|x", salida)
+        self.assertIn("—: 1 sin el transcript del subagente", salida)
+
+    def test_sin_revisores_no_hay_tablas(self):
+        self.guarda("s1", {})
+        self.assertNotIn("| Revisor |", self.ejecuta())
 
 
 if __name__ == "__main__":

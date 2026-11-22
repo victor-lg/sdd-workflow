@@ -23,11 +23,18 @@ de la rama. Del transcript de la sesión guarda solo recuentos:
 - G4: las líneas "Métricas G4: PR #N · ronda R · confirmados X · descartados Y ·
   corregidos Z" que sdd-review escribe en el comentario de reconciliación, una por
   PR y ronda (la última manda);
+- revisores de G4 (VIC-48): las líneas "Métricas revisor: PR #N · ronda R · revisor
+  L · modelo M · agente ID · confirmados D/I/M · descartados D/I/M" del mismo
+  comentario, una por revisor y ronda, con los hallazgos por gravedad (debe
+  corregirse / importante / menor). Con el ID del agente, del transcript de ese
+  subagente (<sesión>/subagents/agent-ID.jsonl) guarda sus tokens por modelo
+  (entrada, escritura y lectura de caché y salida) y sus minutos, del primer al
+  último mensaje; si no lo encuentra, sin ellos;
 - mutación: la última línea "Métricas mutación: detectados X de Y" (o "sin
   mutaciones") de sdd-implement;
 - qué sesiones usaron sdd-review o sdd-implement, para avisar si falta su línea.
 
-Las dos líneas solo cuentan en la entrada de una llamada a Bash del agente principal
+Las líneas solo cuentan en la entrada de una llamada a Bash del agente principal
 con gh pr comment al principio de una orden, y solo cuando llega su resultado sin
 error (una orden fallida o rechazada no cuenta). Nunca se leen del resultado, del
 texto suelto del asistente (Claude Code no siempre lo guarda literal) ni de gh pr
@@ -43,14 +50,17 @@ detecta cuando queda más corto o el byte guardado ya no cierra una línea. No
 guarda el contenido de la conversación ni rutas fuera del proyecto: del transcript,
 solo el nombre del fichero y el principio del uuid de cada intervención.
 
-No lee nada aparte de lo que le pasa Claude Code, el transcript que le indica y la
-rama de Git del proyecto.
+No lee nada aparte de lo que le pasa Claude Code, el transcript que le indica, los
+transcripts de los subagentes que citan las líneas de revisor (en la carpeta de esa
+sesión o, si no está, en la de otra sesión del mismo proyecto) y la rama de Git del
+proyecto.
 Corre fuera del sandbox porque lo lanza Claude Code, no el agente; por eso solo
 escribe en su carpeta. Si algo falla, imprime la línea igualmente y no guarda nada.
 
 Carpeta: la variable SDD_METRICAS_DIR o, si no está,
 /mnt/c/Users/victor/Documents/sdd-metricas (C:\\Users\\victor\\Documents\\sdd-metricas).
 """
+import glob
 import json
 import os
 import re
@@ -67,6 +77,14 @@ ISSUE = re.compile(r"^(?:[a-z]+/)?vic-(\d+)\b", re.I)
 N = r"(\d{1,6})"
 LINEA_G4 = re.compile(rf"^[ \t]*Métricas G4: PR #{N} · ronda {N} · confirmados {N} · "
                       rf"descartados {N} · corregidos {N}[ \t\r]*$", re.M)
+# Una línea por revisor: letra, modelo, ID del subagente y hallazgos por gravedad
+# (debe corregirse / importante / menor). El ID solo lleva letras y cifras: con él se
+# forma la ruta del transcript del subagente.
+LINEA_REVISOR = re.compile(rf"^[ \t]*Métricas revisor: PR #{N} · ronda {N} · revisor ([A-Z]) · "
+                           rf"modelo ([\w.:-]{{1,60}}) · agente ([A-Za-z0-9]{{1,64}}) · "
+                           rf"confirmados {N}/{N}/{N} · descartados {N}/{N}/{N}[ \t\r]*$", re.M)
+# Lo que se lee del transcript de un subagente, de una vez.
+MAX_SUBAGENTE = 64 * 1024 * 1024
 # "sin mutaciones" dice que la entrega no las tuvo, sin dar números.
 LINEA_MUTACION = re.compile(rf"^[ \t]*Métricas mutación: (?:detectados {N} de {N}|(sin mutaciones))[ \t\r]*$",
                             re.M)
@@ -75,6 +93,7 @@ LINEA_MUTACION = re.compile(rf"^[ \t]*Métricas mutación: (?:detectados {N} de 
 # es un error: ni un fallo ni una orden rechazada. gh pr edit no vale porque reenvía
 # la descripción entera y con ella líneas viejas.
 GH_PR = re.compile(r"(?:^|[;&|({])[ \t]*gh[ \t]+pr[ \t]+comment\b", re.M)
+GRAVEDADES = ("debe", "importante", "menor")
 # Skills cuyo uso sin ninguna línea válida se avisa en el resumen.
 SKILLS_CON_METRICAS = ("sdd-review", "sdd-implement")
 SKILL_DE_BARRA = re.compile(r"\s*(?:<command-message>[^<]*</command-message>\s*)?"
@@ -151,12 +170,70 @@ def lineas_de(orden, fecha, issue):
         pr, ronda, conf, desc, corr = (int(x) for x in m.groups())
         g4[f"{pr}/{ronda}"] = {"pr": pr, "ronda": ronda, "confirmados": conf, "descartados": desc,
                                "corregidos": corr, "fecha": fecha, "issue": issue}
+    revisores = {}
+    for m in LINEA_REVISOR.finditer(texto):
+        pr, ronda, letra, modelo, agente = int(m.group(1)), int(m.group(2)), m.group(3), m.group(4), m.group(5)
+        conf, desc = (dict(zip(GRAVEDADES, (int(x) for x in m.groups()[i:i + 3]))) for i in (5, 8))
+        revisores[f"{pr}/{ronda}/{letra}"] = {"pr": pr, "ronda": ronda, "revisor": letra, "modelo": modelo,
+                                             "agente": agente, "confirmados": conf, "descartados": desc,
+                                             "fecha": fecha, "issue": issue}
     mutacion = None
     for m in LINEA_MUTACION.finditer(texto):
         mutacion = ({"sin_mutaciones": True} if m.group(3) else
                     {"detectados": int(m.group(1)), "total": int(m.group(2))})
         mutacion.update(fecha=fecha, issue=issue)
-    return {"g4": g4, "mutacion": mutacion} if g4 or mutacion else None
+    return {"g4": g4, "revisores": revisores, "mutacion": mutacion} if g4 or revisores or mutacion else None
+
+
+def transcript_de_agente(ruta, agente):
+    """El transcript del subagente: en la carpeta de la sesión o en la de otra del proyecto."""
+    nombre = f"agent-{agente}.jsonl"
+    propio = os.path.join(os.path.splitext(ruta)[0], "subagents", nombre)
+    if os.path.isfile(propio):
+        return propio
+    otros = glob.glob(os.path.join(glob.escape(os.path.dirname(ruta)), "*", "subagents", nombre))
+    return otros[0] if otros else None
+
+
+def consumo_de(ruta):
+    """Tokens por modelo y minutos de un subagente, o None si no se puede leer.
+
+    Claude Code escribe una entrada por bloque de cada respuesta, todas con el mismo
+    message.id y el mismo uso: cuenta una vez por id. El tiempo va del primer al
+    último mensaje del transcript.
+    """
+    try:
+        with open(ruta, "rb") as f:
+            bloque = f.read(MAX_SUBAGENTE)
+    except OSError:
+        return None
+    usos, fechas = {}, []
+    for linea in bloque.split(b"\n"):
+        try:
+            e = json.loads(linea.decode("utf-8", errors="replace"))
+        except ValueError:
+            continue
+        if not isinstance(e, dict):
+            continue
+        if isinstance(e.get("timestamp"), str):
+            fechas.append(e["timestamp"])
+        m = dic(e.get("message"))
+        modelo, uso = m.get("model"), dic(m.get("usage"))
+        # "<synthetic>" son mensajes que Claude Code genera sin llamar a la API.
+        if e.get("type") == "assistant" and uso and isinstance(modelo, str) and not modelo.startswith("<"):
+            usos[m.get("id") or len(usos)] = (modelo[:60], uso)
+    tokens = {}
+    for modelo, uso in usos.values():
+        t = tokens.setdefault(modelo, {"entrada": 0, "cache_escritura": 0, "cache_lectura": 0, "salida": 0})
+        for clave, campo in (("entrada", "input_tokens"), ("cache_escritura", "cache_creation_input_tokens"),
+                             ("cache_lectura", "cache_read_input_tokens"), ("salida", "output_tokens")):
+            t[clave] += entero(uso.get(campo))
+    try:
+        inicio, fin = (datetime.fromisoformat(x.replace("Z", "+00:00")) for x in (min(fechas), max(fechas)))
+        minutos = round((fin - inicio).total_seconds() / 60, 2)
+    except ValueError:
+        minutos = None
+    return {"tokens": tokens, "minutos": minutos}
 
 
 def dic(v):
@@ -209,6 +286,7 @@ def lee_transcript(ruta, antes):
     estado = {
         "intervenciones": entero(antes.get("intervenciones")),
         "g4": dict(dic(antes.get("g4"))),
+        "revisores": dict(dic(antes.get("revisores"))),
         "mutacion": antes.get("mutacion") if isinstance(antes.get("mutacion"), dict) else None,
         "skills": {k: list(v) for k, v in dic(antes.get("skills")).items() if isinstance(v, list)},
         # Líneas de un gh pr comment cuyo resultado aún no ha llegado, por tool_use_id.
@@ -223,7 +301,8 @@ def lee_transcript(ruta, antes):
         if antes.get("transcript") != nombre or reescrito:
             # Otro fichero o uno reescrito: se cuenta desde el principio.
             desde, ids, a_media_linea = 0, [], False
-            estado = {"intervenciones": 0, "g4": {}, "mutacion": None, "skills": {}, "pendientes": {}}
+            estado = {"intervenciones": 0, "g4": {}, "revisores": {}, "mutacion": None, "skills": {},
+                      "pendientes": {}}
         f.seek(desde)
         bloque = f.read(MAX_LECTURA)
     if a_media_linea:
@@ -256,6 +335,10 @@ def lee_transcript(ruta, antes):
                         lineas = estado["pendientes"].pop(str(b.get("tool_use_id")), None)
                         if isinstance(lineas, dict) and b.get("is_error") is not True:
                             estado["g4"].update(dic(lineas.get("g4")))
+                            for clave, r in dic(lineas.get("revisores")).items():
+                                if isinstance(r, dict) and isinstance(r.get("agente"), str):
+                                    sub = transcript_de_agente(ruta, r["agente"])
+                                    estado["revisores"][clave] = {**r, "consumo": consumo_de(sub) if sub else None}
                             if isinstance(lineas.get("mutacion"), dict):
                                 estado["mutacion"] = lineas["mutacion"]
             if e.get("type") == "user" and not e.get("isSidechain") and "toolUseResult" not in e:
@@ -368,7 +451,7 @@ def main():
     }
     # Recuentos de la conversación; si el transcript falla, se conservan los anteriores.
     conversacion = {k: antes[k] for k in ("transcript", "transcript_leido", "intervenciones",
-                                          "intervenciones_ids", "g4", "mutacion",
+                                          "intervenciones_ids", "g4", "revisores", "mutacion",
                                           "skills", "pendientes", "transcript_a_media_linea") if k in antes}
     transcript = g(e, "transcript_path")
     if transcript:
