@@ -4,6 +4,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Límites aceptados de VIC-28 y medición de la CI en borrador (VIC-36).** `docs/herramientas.md`, sin tocar código ni workflows, como decidió Víctor en la retrospectiva del bloque 3:
+  - `rev-parse` frente a `show-ref` para la rama base en `seguridad.yml`, `calidad.yml` y `sdd.yml`: límite aceptado, porque la etiqueta que ganaría a la rama no se da con `fetch-depth: 0` (G4 de VIC-26).
+  - La versión de osv-scanner, escrita en `seguridad.yml` y en `osv-mensual.yml`: límite aceptado, porque cada binario sigue comprobado por su suma.
+  - Las reglas de Semgrep sin fijar: basta con la nota que ya había.
+  - CI en borrador (VIC-33), medida en calculadora-discos#62: unos 10 minutos facturables por push en borrador, frente a unos 40 fuera. Se quita el «Pendiente de medir».
+
 - **Retrospectiva del bloque 4 en `historial/retrospectiva-bloque-4.md` (VIC-49).** El «Hecho cuando» se cumple: calculadora-discos #74 pasó por la reconciliación nueva y fue la primera CI real de `hallazgos` y `cambios`.
   - **Lecciones:** lo que la plantilla trae y este repo no ejecuta se prueba primero en la calculadora, y las evaluaciones forman parte del verde. El #55 se fusionó antes de ellas, y la orden sobre `origin/<rama>` falla tras el squash.
   - **Las cinco reglas de entrega, en su primer bloque:** se cumplieron la 1 y la 5; la 2, la 3 y la 4, a medias.
