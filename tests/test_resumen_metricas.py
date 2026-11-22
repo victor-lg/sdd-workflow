@@ -318,6 +318,9 @@ class Revisores(unittest.TestCase):
         salida = self.ejecuta()
         filas = self.filas(salida, "| Issue | PR | Ronda | Revisor")
         self.assertEqual(filas[0][4:9], ["sonnet", "—", "—", "—", "—"])
+        self.assertEqual(filas[2][0], "**Total (2 rondas)**")
+        self.guarda("s1", revisor(52, 1, "A", "2026-11-22T10:00"))
+        self.assertEqual(self.filas(self.ejecuta(), "| Issue | PR | Ronda | Revisor")[1][0], "**Total (1 ronda)**")
         # El | del modelo va escapado: aquí parte la celda en dos.
         self.assertEqual(filas[1][4:10], ["claude-nuevo\\", "x", "1 k", "0,0 k", "1,0", "?"])
         self.assertIn("?: sin precio para claude-nuevo|x", salida)

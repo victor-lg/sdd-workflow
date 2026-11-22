@@ -120,7 +120,7 @@ def tabla_revisores(revisores):
             d["desc"] += desc
         print(f"| {clave} | #{pr} | {ronda} | {celda(letra)} | {celda(modelos)} | {' | '.join(celdas)} | "
               f"{' / '.join(map(str, conf))} | {desc} |")
-    print(f"| **Total ({len(revisores)} rondas)** | | | | | **{miles(total['tokens'])}** | | "
+    print(f"| **Total ({len(revisores)} ronda{'' if len(revisores) == 1 else 's'})** | | | | | **{miles(total['tokens'])}** | | "
           f"**{coma(total['min'], 1)}** | **{coma(total['coste'], 2)} $** | **{' / '.join(map(str, total['conf']))}** | "
           f"**{total['desc']}** |")
     if sin_precio:
