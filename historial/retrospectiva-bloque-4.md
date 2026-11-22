@@ -24,11 +24,11 @@ Tiempo de espera de la CI por push, la regla 4 de las entregas: `checks-sdd` en 
 
 ## Qué funcionó
 
-- **Menos rondas.** En el bloque 3, los PR de ADR y de código iban a tres rondas. En este, 19 PR con G4 suman 23 rondas: solo #52 llegó a tres, y #59 y calc #66 a dos. Ninguno pasa de unas 400 líneas sin tests (#52, el mayor: unas 200 sin tests, 554 con ellos).
+- **Menos rondas.** En el bloque 3, los PR de ADR y de código iban a tres rondas. En este, 19 PR con G4 suman 23 rondas: solo #52 llegó a tres, y #59 y calc #66 a dos. Solo #52 pasa de unas 400 líneas (554, de ellas 337 de tests).
 - **El revisor de seguridad sigue siendo el que más encuentra.** Encontró algún *importante* en cinco de los seis PR de R2 medidos, y en tres de ellos (#54, #55 y calc #74) el revisor A no encontró ninguno. De él salen VIC-45 (#54) y VIC-47 (calc #74).
 - **El revisor R1 encontró lo que no ve ningún control:** 4 *importantes* en 10 rondas, por unos 0,15 $ la ronda, todos en PR de texto, de evaluadores o de documentación.
 - **Las decisiones de fondo se tomaron en el PR, sin ADR nuevo:** rechazar la lista escrita a mano (M8), el camino corto sin tocar el ADR-0001 (M1), la alarma por puntuación mínima en vez de un número fijo de mutantes, y three en 0.170.0. Ninguna entrega esperó a un ADR.
-- **VIC-29 se cerró midiendo antes de tocar.** Desde que el repo es público, la CI da 6 mutantes por tiempo y 92,68, igual que en local. La causa más probable son los 4 vCPU frente a 2. El umbral subió a 92 y la alarma avisa si vuelve a pasar.
+- **VIC-29 se cerró midiendo antes de tocar.** Desde que el repo es público, la CI da 6 mutantes por tiempo y 92,68, igual que en local. La causa más probable son los 4 vCPU frente a 2, confirmada solo a medias: `nproc` da 4 hoy, pero no hay medición del periodo con 2 vCPU (baseline de la calculadora). El umbral subió a 92 y la alarma avisa si vuelve a pasar.
 - **Sin defectos escapados:** `historial/defectos-escapados.csv` sigue vacío. La muestra es de tres días.
 
 ## Qué estorbó
@@ -75,7 +75,7 @@ En este bloque, ocho PR cambian skills o evaluaciones (#52 a #60, salvo el #54),
 | --- | --- |
 | 1. Una issue por decisión de fondo | Sí. Lo que salió en G4 pasó a issues nuevas (VIC-45, 47 y 48), y ninguna entrega necesitó un ADR que no estuviera en su contrato |
 | 2. Primero el corte más pequeño en la calculadora | A medias: sí en VIC-44, no en VIC-38 y VIC-39 (lección 1) |
-| 3. Unas 400 líneas por PR; tres rondas, señal de partir | Sí: ningún PR pasa de 400 sin tests. El único con tres rondas (#52) era el primero de los dos PR de VIC-38 |
+| 3. Unas 400 líneas por PR; tres rondas, señal de partir | Casi: solo #52 pasa de 400 (554 con tests, 217 sin ellos; la regla solo descuenta capturas y lockfiles), y fue también el único con tres rondas. Era el primero de los dos PR de VIC-38 |
 | 4. Tiempo de espera de la CI en el «Hecho cuando» | Casi: lo llevan VIC-38, 44 y 46, y se midió en #65 y #74. VIC-39, que añadía el check `cambios`, no lo llevaba |
 | 5. Varias issues por bloque desde el principio | Sí: VIC-38 a 43 desde el principio; VIC-46 se añadió para llevar los checks a la calculadora |
 
@@ -85,7 +85,7 @@ Víctor, antes de esta retrospectiva:
 
 | Fecha | Tema | Decisión |
 | --- | --- | --- |
-| 2026-11-21 (VIC-43, #61) | Revisor de código R1 y evaluaciones | El revisor de código R1 y las 3 ejecuciones por caso se mantienen. El ahorro se busca en el revisor Opus de seguridad en el bloque 7 (M29) |
+| 2026-11-21 (VIC-43, #61) | Revisor de código R1 y evaluaciones | «Se mantiene el revisor de código en R1 y las 3 ejecuciones por caso en las evaluaciones. El ahorro se buscará en el revisor Opus de seguridad de R2 (74 % del coste de R2), en el bloque 7 con la tabla de modelos (M29, ADR-0010).» |
 | 2026-11-21 | M34 | Al bloque 7 |
 | 2026-11-20 (VIC-30, calc #71) | three | Se queda en 0.170 (opción D) |
 
@@ -96,7 +96,7 @@ Propuestas para decidir en el PR de esta retrospectiva:
 | Tema | Propuesta | Decisión |
 | --- | --- | --- |
 | Bloque 4 | Se cierra | |
-| `mutaciones` requerido | Condición de entrada del bloque 5: primero VIC-45 y después marcarlo como requerido. La alarma tiene hoy el hueco que cierra VIC-45 | |
+| `mutaciones` requerido | Condición de entrada del bloque 5: primero VIC-45 y después marcarlo como requerido. La alarma tiene hoy el hueco que cierra VIC-45. De las dos condiciones de la G4 del #64, la de `nproc` está cumplida a medias, y el baseline deja en tus manos si basta | |
 | VIC-47 | Dentro del bloque 5, antes de que el agente fusione sin la persona (antes de ajustar el ruleset), no como condición de entrada | |
 | VIC-48, métricas por revisor | Primera issue del bloque 5, para que sus entregas ya queden medidas. La escalera de confianza (M24) pide no tener defectos escapados en las entregas medidas, y el bloque 7 necesita el coste de cada revisor | |
 | VIC-23 | Sigue en el bloque 5, sin bloquear la entrada | |

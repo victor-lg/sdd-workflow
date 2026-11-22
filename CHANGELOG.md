@@ -6,7 +6,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 - **Retrospectiva del bloque 4 en `historial/retrospectiva-bloque-4.md` (VIC-49).** El «Hecho cuando» se cumple: calculadora-discos #74 pasó por la reconciliación nueva y fue la primera CI real de `hallazgos` y `cambios`.
   - **Lecciones:** lo que la plantilla trae y este repo no ejecuta se prueba primero en la calculadora, y las evaluaciones forman parte del verde. El #55 se fusionó antes de ellas, y la orden sobre `origin/<rama>` falla tras el squash.
-  - **Las cinco reglas de entrega, en su primer bloque:** se cumplieron la 1, la 3 y la 5; la 2 y la 4, a medias.
+  - **Las cinco reglas de entrega, en su primer bloque:** se cumplieron la 1 y la 5; la 2, la 3 y la 4, a medias.
   - **`AGENTS.md` de la plantilla:** de ~1417 a ~1494 tokens desde la poda de VIC-37.
   - **Decisiones:** las ya tomadas por Víctor (revisor de código R1 y 3 ejecuciones por caso, M34 al bloque 7, three en 0.170) se copian tal cual. Lo demás va como propuesta, en una tabla que Víctor rellena en el PR.
   - **`docs/plan-v1.1.md`:** el bloque 4, cerrado, y las condiciones de entrada del bloque 5 con el estado de VIC-29, 44, 45, 32, 47, 23 y 48. `mutaciones` aún no es check requerido en la calculadora; `duplicados`, sí.

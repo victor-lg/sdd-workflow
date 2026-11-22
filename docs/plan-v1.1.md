@@ -101,7 +101,7 @@ Estado el 2026-11-22 (retrospectiva del bloque 4):
 | --- | --- | --- |
 | VIC-29, mutantes por tiempo | Hecha (calc #64): la CI da 6 por tiempo y 92,68, como en local; `break` 92 | — |
 | VIC-44, alarma de mutantes por tiempo | Hecha (sdd #54, calc #65 y #66) | — |
-| `mutaciones` como check requerido | **No lo es** en la regla de `main` de la calculadora | Que lo marques. Se propone hacer antes VIC-45 |
+| `mutaciones` como check requerido | **No lo es** en la regla de `main` de la calculadora | Que lo marques. Se propone hacer antes VIC-45. La causa (`nproc`) está confirmada a medias: no hay medición del periodo con 2 vCPU, y el baseline deja en tus manos si basta |
 | VIC-45, la alarma dentro del paso Stryker | *Inbox*, hito del bloque 5 | Toda. Cierra el hueco G4-1-B-01 del #54 |
 | VIC-32, duplicación de los E2E | Hecha (calc #67 a #70) | — |
 | `duplicados` como check requerido | Lo es | — |
