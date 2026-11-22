@@ -88,6 +88,25 @@ def skill(nombre, **extra):
 
 
 G4 = "Métricas G4: PR #21 · ronda {r} · confirmados {c} · descartados 1 · corregidos 2"
+REVISOR = ("Métricas revisor: PR #21 · ronda {r} · revisor {l} · modelo sonnet · agente {a} · "
+           "confirmados 0/1/2 · descartados 0/0/1")
+
+
+def respuesta(mid, modelo="claude-sonnet-5-5", fecha="2026-11-06T09:00:00Z", texto="SECRETO-REVISOR",
+              entrada=2, escritura=1000, lectura=5000, salida=300):
+    """Una entrada de respuesta del transcript de un subagente (VIC-48)."""
+    return {"type": "assistant", "isSidechain": True, "timestamp": fecha, "message": {
+        "id": mid, "model": modelo, "content": [{"type": "text", "text": texto}],
+        "usage": {"input_tokens": entrada, "cache_creation_input_tokens": escritura,
+                  "cache_read_input_tokens": lectura, "output_tokens": salida}}}
+
+
+def subagente(carpeta, sesion, agente, *entradas):
+    ruta = os.path.join(carpeta, sesion, "subagents", f"agent-{agente}.jsonl")
+    os.makedirs(os.path.dirname(ruta), exist_ok=True)
+    with open(ruta, "w", encoding="utf-8") as f:
+        for e in entradas:
+            f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
 
 class Transcript(unittest.TestCase):
@@ -401,6 +420,86 @@ class Transcript(unittest.TestCase):
         e = sdd_metricas.lee_transcript(self.ruta, e)
         self.assertEqual(e["skills"]["sdd-review"], ["VIC-12", "VIC-13", "VIC-18"])
 
+    def test_lineas_de_revisor_con_su_subagente(self):
+        # Claude Code repite la misma respuesta (mismo id) en una entrada por bloque.
+        subagente(self.dir.name, "s1", "a1b2", {"type": "user", "timestamp": "2026-11-06T09:00:00Z"},
+                  respuesta("m1"), respuesta("m1"), respuesta("m2", fecha="2026-11-06T09:01:30Z"),
+                  respuesta("m3", modelo="<synthetic>", salida=0),
+                  {"type": "user", "timestamp": "2026-11-06T09:02:00Z"})
+        subagente(self.dir.name, "s1", "c3d4", respuesta("m9", modelo="claude-opus-5-5", salida=50))
+        self.escribe(gh("\n".join([G4.format(r=1, c=3), REVISOR.format(r=1, l="A", a="a1b2"),
+                                   REVISOR.format(r=1, l="B", a="c3d4")]), gitBranch="feat/vic-48-x"))
+        rev = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]
+        self.assertEqual(set(rev), {"21/1/A", "21/1/B"})
+        a = rev["21/1/A"]
+        self.assertEqual({k: a[k] for k in ("pr", "ronda", "revisor", "modelo", "agente", "issue")},
+                         {"pr": 21, "ronda": 1, "revisor": "A", "modelo": "sonnet", "agente": "a1b2",
+                          "issue": "VIC-48"})
+        self.assertEqual(a["confirmados"], {"debe": 0, "importante": 1, "menor": 2})
+        self.assertEqual(a["descartados"], {"debe": 0, "importante": 0, "menor": 1})
+        self.assertEqual(a["consumo"], {"minutos": 2.0, "tokens": {"claude-sonnet-5-5": {
+            "entrada": 4, "cache_escritura": 2000, "cache_lectura": 10000, "salida": 600}}})
+        self.assertEqual(rev["21/1/B"]["consumo"]["tokens"]["claude-opus-5-5"]["salida"], 50)
+        self.assertEqual(rev["21/1/B"]["consumo"]["minutos"], 0)
+
+    def test_subagente_en_otra_sesion_o_sin_transcript(self):
+        # Al reanudar, el revisor pudo lanzarse desde la sesión anterior.
+        subagente(self.dir.name, "s0", "e5", respuesta("m1"))
+        self.escribe(gh(REVISOR.format(r=1, l="A", a="e5") + "\n" + REVISOR.format(r=2, l="A", a="ff")))
+        rev = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]
+        self.assertEqual(rev["21/1/A"]["consumo"]["tokens"]["claude-sonnet-5-5"]["salida"], 300)
+        self.assertIsNone(rev["21/2/A"]["consumo"])  # la línea cuenta, sin tokens
+
+    def test_linea_de_revisor_sin_agente(self):
+        # G4-1-A-01: sin agentId quedan los hallazgos, sin tokens.
+        self.escribe(gh(REVISOR.format(r=1, l="A", a="x").replace("agente x · ", "")))
+        r = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]["21/1/A"]
+        self.assertIsNone(r["agente"])
+        self.assertEqual(r["confirmados"], {"debe": 0, "importante": 1, "menor": 2})
+        self.assertIsNone(r["consumo"])
+
+    def test_varias_copias_del_subagente_la_mas_larga(self):
+        # G4-1-A-04: al reanudar puede haber copias; una a medio escribir es más corta.
+        subagente(self.dir.name, "s0", "e5", respuesta("m1"))
+        subagente(self.dir.name, "s2", "e5", respuesta("m1"), respuesta("m2"))
+        subagente(self.dir.name, "s3", "e5")
+        self.escribe(gh(REVISOR.format(r=1, l="A", a="e5")))
+        r = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]["21/1/A"]
+        self.assertEqual(r["consumo"]["tokens"]["claude-sonnet-5-5"]["salida"], 600)
+
+    def test_fechas_con_y_sin_zona(self):
+        subagente(self.dir.name, "s1", "z1", respuesta("m1", fecha="2026-11-06T09:00:00Z"),
+                  respuesta("m2", fecha="2026-11-06T09:01:00"))
+        self.escribe(gh(REVISOR.format(r=1, l="A", a="z1")))
+        consumo = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]["21/1/A"]["consumo"]
+        self.assertIsNone(consumo["minutos"])
+        self.assertEqual(consumo["tokens"]["claude-sonnet-5-5"]["salida"], 600)
+
+    def test_lineas_de_revisor_que_no_cuentan(self):
+        subagente(self.dir.name, "s1", "a1", respuesta("m1"))
+        buena = REVISOR.format(r=1, l="A", a="a1")
+        casos = {
+            "texto del asistente": [asistente(buena)],
+            "orden fallida": gh(buena, resultado="error"),
+            "sin resultado aún": gh(buena, resultado=None),
+            "en un bloque de código": gh("```\n" + buena + "\n```"),
+            "agente con ruta": gh(REVISOR.format(r=1, l="A", a="../s1/subagents/agent-a1")),
+            "letra minúscula": gh(REVISOR.format(r=1, l="a", a="a1")),
+            "sin gravedades": gh(buena.replace("confirmados 0/1/2", "confirmados 3")),
+        }
+        for caso, entradas in casos.items():
+            with self.subTest(caso=caso):
+                open(self.ruta, "w").close()
+                self.escribe(*entradas)
+                self.assertEqual(sdd_metricas.lee_transcript(self.ruta, {})["revisores"], {})
+
+    def test_revisor_repetido_manda_el_ultimo(self):
+        self.escribe(gh(REVISOR.format(r=1, l="A", a="x1")),
+                     gh(REVISOR.format(r=1, l="A", a="x1").replace("0/1/2", "1/1/2"),
+                        fecha="2026-11-06T12:00:00Z"))
+        rev = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]
+        self.assertEqual(rev["21/1/A"]["confirmados"]["debe"], 1)
+
     def test_lineas_basura(self):
         self.escribe(cola="no es json\n[1, 2]\n")
         self.escribe(humano("uno"))
@@ -433,8 +532,10 @@ class Main(unittest.TestCase):
         with open(self.transcript, "w", encoding="utf-8") as f:
             for e in (humano("SECRETO-PERSONA"), asistente("SECRETO-ASISTENTE"),
                       *gh("SECRETO-COMENTARIO\n" + G4.format(r=1, c=2)), skill("sdd:sdd-review"),
-                      *gh("Métricas mutación: detectados 4 de 6")):
+                      *gh("Métricas mutación: detectados 4 de 6"),
+                      *gh(REVISOR.format(r=1, l="A", a="a9"))):
                 f.write(json.dumps(e) + "\n")
+        subagente(self.dir.name, "abc", "a9", respuesta("m1"))
         entrada = {"session_id": "abc", "transcript_path": self.transcript,
                    "model": {"display_name": "Opus"}, "cost": {"total_cost_usd": 1.5}}
         self.assertIn("Opus · $1.50", self.ejecuta(entrada))
@@ -443,6 +544,7 @@ class Main(unittest.TestCase):
         self.assertEqual(d["intervenciones"], 1)
         self.assertEqual(d["g4"]["21/1"]["confirmados"], 2)
         self.assertEqual(d["mutacion"]["detectados"], 4)
+        self.assertEqual(d["revisores"]["21/1/A"]["consumo"]["tokens"]["claude-sonnet-5-5"]["salida"], 300)
         self.assertEqual(d["skills"], {"sdd-review": [None]})
         self.assertEqual(d["transcript"], "abc.jsonl")
         self.assertNotIn("SECRETO", texto)

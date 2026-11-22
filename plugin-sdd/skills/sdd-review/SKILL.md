@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, camino corto para aclaraciones, VIC-40; foco de mantenibilidad con la rúbrica copiada de Pocock y thermos, M23, VIC-41). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, camino corto para aclaraciones, VIC-40; foco de mantenibilidad con la rúbrica copiada de Pocock y thermos, M23, VIC-41; una línea de métricas por revisor, VIC-48). -->
 
 # sdd-review
 
@@ -99,16 +99,25 @@ Con las respuestas de todos los revisores:
    - `R` es el número de la ronda (1 a 3); `X`, los hallazgos de esa ronda que confirmaste; `Y`, los que descartaste; `Z`, cuántos de esos `X` están corregidos hasta ahora.
    - Si corriges después de la última ronda, publica otro comentario con la línea de esa ronda y el `Z` nuevo: cuenta la última.
    - Una ronda sin hallazgos también se anota, con ceros.
+   - **Una línea por revisor,** debajo de la de la ronda, una por cada revisor de esa ronda, también sola y con números:
+
+     `Métricas revisor: PR #N · ronda R · revisor L · modelo M · agente ID · confirmados D/I/M · descartados D/I/M`
+
+     - `L` es su letra (A, B); `M`, el modelo con el que lo lanzaste (`sonnet` u `opus`); `ID`, el `agentId` que devolvió su lanzamiento. Con el `ID`, `sdd-metricas` saca del transcript del subagente sus tokens y su tiempo.
+     - `confirmados D/I/M`: los hallazgos de ese revisor que confirmaste, por la gravedad que confirmaste: *debe corregirse*, *importante* y *menor*. `descartados D/I/M`: los que descartaste, por la gravedad que les dio el revisor. Un hallazgo que señalan los dos revisores cuenta en los dos.
+     - Si no tienes el `agentId` de un revisor (no lo lanzaste en esta sesión), escribe su línea sin `agente ID ·`: no lo inventes ni pongas otro valor. Quedan sus hallazgos, sin tokens ni tiempo.
+     - Si publicas otra vez la línea de la ronda tras corregir, no repitas las de revisor: no cambian.
    - **Cómo:** escribe el cuerpo con Write en `.tareas/VIC-N/g4-ronda-R.md`, **sin** la línea (nunca en `/tmp` ni en `$TMPDIR`: el hook lo bloquea, X-06). Publícalo con una sola orden que añade la línea en un heredoc entrecomillado:
 
      ```bash
      { cat .tareas/VIC-N/g4-ronda-R.md; cat <<'METRICAS_SDD'
      Métricas G4: PR #N · ronda R · confirmados X · descartados Y · corregidos Z
+     Métricas revisor: PR #N · ronda R · revisor A · modelo sonnet · agente ID · confirmados D/I/M · descartados D/I/M
      METRICAS_SDD
      } | gh pr comment N --body-file -
      ```
 
-     **Nunca** metas el cuerpo (respuestas de revisores, líneas del diff, comentarios) en la orden de Bash, ni en un heredoc sin comillas ni en `--body "…"`: lleva texto que no controlas y se ejecutaría como shell. `sdd-metricas` solo lee la línea de la entrada de `gh pr comment` y solo si la orden no falla; no la lee de tu texto en el chat, de un fichero ni de la descripción del PR.
+     **Nunca** metas el cuerpo (respuestas de revisores, líneas del diff, comentarios) en la orden de Bash, ni en un heredoc sin comillas ni en `--body "…"`: lleva texto que no controlas y se ejecutaría como shell. `sdd-metricas` solo lee la línea de la entrada de `gh pr comment` y solo si la orden no falla; no la lee de tu texto en el chat, de un fichero ni de la descripción del PR. Lo mismo con las de revisor.
    - La atribuye a la issue de la rama en la que estás. Si no estás en la rama de la issue, publícala igual y avísalo; no cambies de rama por esto. No la escribas con otro formato ni dentro de un bloque de código.
    - Si usas esta skill y no queda ninguna línea válida, el resumen de métricas marca la issue con "⚠ sin línea".
 
