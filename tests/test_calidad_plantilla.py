@@ -599,7 +599,7 @@ class MutantesPorTiempo(unittest.TestCase):
         for caso, contenido in casos.items():
             with self.subTest(caso=caso):
                 if contenido is None:
-                    self.informe(0, 0, 0, otros=["RuntimeError", "CompileError"])
+                    self.informe(0, 0, 0, otros=["RuntimeError", "CompileError", "Ignored"])
                 else:
                     self.informe_tal_cual(contenido)
                 estado, texto = self.alarma()
@@ -632,6 +632,7 @@ class MutantesPorTiempo(unittest.TestCase):
         estado, texto = self.alarma()
         self.assertEqual(estado, 1, texto)
         self.assertIn("::error::Contando como supervivientes", texto)
+        self.assertIn("643/792 = 81.19", texto)  # el Ignored no cuenta como válido
         self.assertIn("::error file=src/a%2Cline=1%3Ab.js,line=30000::Mutante ignorado ()", texto)
         self.assertIn("::error::Hay mutantes Ignored", texto)
 

@@ -147,8 +147,10 @@ jobs:
       # como la salida de Stryker. Límites aceptados, como `__STRYKER_ACTIVE_MUTANT__`
       # (cabecera), que ve la revisión: un proceso que un test deje vivo y reescriba el informe
       # antes de leerlo o escriba en el log del paso, y un test que use el sudo sin contraseña
-      # del runner, que con root puede saltarse cualquiera de estas defensas. Cambiar el
-      # mínimo es R2.
+      # del runner, que con root puede saltarse cualquiera de estas defensas. Abierto y sin
+      # aceptar (G4 de sdd-workflow#64, medido): un test que deje su propio informe en la ruta
+      # del informe, sin permiso de escritura. Stryker no puede escribir el suyo, lo anota en el
+      # log y sale como si nada, y el paso cuenta el falso. Cambiar el mínimo es R2.
       - name: Stryker
         id: stryker
         if: steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft
