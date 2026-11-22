@@ -41,14 +41,27 @@ def script(paso):
     return textwrap.dedent(bloque)
 
 
-def ejecutar(paso, carpeta, temporal, base="refs/remotes/origin/main", **extra):
+def env_del_paso(paso):
+    """El `env:` del paso con ese nombre en cualquier job (los valores son literales)."""
+    pasos = [p for job in yaml.safe_load(CALIDAD)["jobs"].values() for p in job["steps"] if p.get("name") == paso]
+    return dict(pasos[0].get("env") or {}) if pasos else {}
+
+
+def ejecutar(paso, carpeta, temporal, base="refs/remotes/origin/main", desde_fichero=False, **extra):
+    """El script del paso con `bash -e`, como el runner con la shell por defecto, y su `env:`. Con
+    `desde_fichero`, desde un fichero de $RUNNER_TEMP, como lo deja el runner."""
     salida = pathlib.Path(temporal) / "salida"
     salida.write_text("")
     entorno = dict(os.environ, BASE=base, RUNNER_TEMP=str(temporal), GITHUB_OUTPUT=str(salida),
                    GIT_NO_REPLACE_OBJECTS="1", npm_config_cache=str(pathlib.Path(temporal) / "npm"))
+    entorno.update(env_del_paso(paso))
     entorno.update(extra)
-    r = subprocess.run(["bash", "-e", "-c", script(paso)], cwd=carpeta, env=entorno,
-                       capture_output=True, text=True, timeout=600)
+    orden = ["bash", "-e", "-c", script(paso)]
+    if desde_fichero:
+        fichero = pathlib.Path(temporal) / "paso.sh"
+        fichero.write_text(script(paso))
+        orden = ["bash", "-e", str(fichero)]
+    r = subprocess.run(orden, cwd=carpeta, env=entorno, capture_output=True, text=True, timeout=600)
     return r.returncode, r.stdout + r.stderr, salida.read_text()
 
 
@@ -134,7 +147,7 @@ class Borrador(unittest.TestCase):
         self.assertEqual(nodo["if"], fuera)
         self.assertEqual(self.paso("Stryker")["if"], fuera)
         self.assertEqual(self.paso("CPU del runner")["if"], fuera)
-        self.assertEqual(self.paso("Mutantes por tiempo")["if"], "${{ !cancelled() && " + fuera + " }}")
+        self.assertNotIn("Mutantes por tiempo", [p.get("name") for p in self.PASOS])  # VIC-45: va en Stryker
         self.assertNotIn("gh api", CALIDAD)
         # La configuración se valida también en borrador: es barato y avisa antes.
         self.assertNotIn("if", self.paso("Configuración de Stryker de main"))
@@ -414,12 +427,12 @@ class StrykerEnLaCi(unittest.TestCase):
         self.assertIn("Force mode is activated", texto)
 
     def test_la_alarma_lee_el_informe_de_stryker(self):
-        """VIC-44: el paso «Mutantes por tiempo» sobre el informe que deja el paso Stryker."""
-        self.assertEqual(self.stryker()[0], 0)
-        estado, texto, _ = ejecutar("Mutantes por tiempo", self.proyecto, self.temporal,
-                                    PUNTUACION_MINIMA_SIN_TIEMPO="90", RESULTADO_STRYKER="success")
+        """VIC-44 y VIC-45: la alarma, dentro del paso Stryker, sobre el informe que acaba de dejar. El
+        `break` del fixture es 80: el mínimo es el menor de los dos."""
+        estado, texto, _ = self.stryker()
         self.assertEqual(estado, 0, texto)
-        self.assertIn("Puntuación contándolos como supervivientes: 7/7 = 100.00 (mínimo 90)", texto)
+        self.assertIn("Mínimo de la alarma de mutantes por tiempo: 80 (el menor de 90 y thresholds.break).", texto)
+        self.assertIn("Puntuación contándolos como supervivientes: 7/7 = 100.00 (mínimo 80)", texto)
 
 
 def mutante(estado, linea=1):
@@ -427,37 +440,79 @@ def mutante(estado, linea=1):
             "location": {"start": {"line": linea, "column": 1}, "end": {"line": linea, "column": 5}}}
 
 
+STRYKER_FALSO = """#!/bin/bash
+# Stryker falso: deja el informe preparado donde diga el test, ejecuta lo que haría el código de
+# la rama (los tests) y sale con el estado que diga el test.
+touch "$FALSO/ha-corrido"
+cat "$FALSO/salida.txt"
+if [ -f "$FALSO/informe.json" ]; then
+  ruta=$(cat "$FALSO/ruta")
+  mkdir -p "$(dirname "$ruta")"
+  cp "$FALSO/informe.json" "$ruta"
+fi
+[ ! -f "$FALSO/rama.sh" ] || bash "$FALSO/rama.sh"
+exit "$(cat "$FALSO/estado")"
+"""
+
+
 class MutantesPorTiempo(unittest.TestCase):
     """VIC-44: con 2 vCPU los mutantes por tiempo suben a decenas y Stryker los cuenta como detectados.
-    La alarma cuenta los Timeout como supervivientes y falla si la puntuación baja del mínimo. Las cifras
-    son las de la calculadora (calculadora-discos#65): 728 muertos de 792 válidos con 4 CPU."""
-    PASO = "Mutantes por tiempo"
+    La alarma cuenta los Timeout como supervivientes y falla si la puntuación baja del mínimo. Desde
+    VIC-45 va dentro del paso Stryker, que aquí corre con un `npm` y un Stryker falsos. Las cifras son
+    las de la calculadora (calculadora-discos#65): 728 muertos de 792 válidos con 4 CPU, y su `break`, 92."""
+    PASO = "Stryker"
     PASOS = Borrador.PASOS
 
     def setUp(self):
         self.temporal = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.temporal)
         self.proyecto = self.temporal / "proyecto"
-        self.proyecto.mkdir()
-        self.config({})
+        self.falso = self.temporal / "falso"
+        self.bin = self.temporal / "bin"
+        # Una carpeta del PATH en la que se puede escribir, como la de Node en el runner.
+        self.escribible = self.temporal / "node-bin"
+        for carpeta in (self.proyecto / "node_modules" / ".bin", self.falso, self.bin, self.escribible):
+            carpeta.mkdir(parents=True)
+        stryker = self.proyecto / "node_modules" / ".bin" / "stryker"
+        stryker.write_text(STRYKER_FALSO)
+        stryker.chmod(0o755)
+        (self.bin / "npm").write_text("#!/bin/sh\nexit 0\n")
+        (self.bin / "npm").chmod(0o755)
+        (self.falso / "salida.txt").write_text("")
+        self.stryker_sale_con(0)
+        self.config({"thresholds": {"break": 92}})
 
     def config(self, config):
         (self.temporal / "stryker.config.json").write_text(json.dumps(dict(CONFIG, **config)))
 
-    def informe(self, muertos, por_tiempo, supervivientes, otros=(), ruta="reports/mutation/mutation.json"):
+    def stryker_sale_con(self, estado):
+        (self.falso / "estado").write_text(str(estado))
+
+    def rama(self, codigo):
+        """Lo que hacen los tests de la rama mientras corre Stryker."""
+        (self.falso / "rama.sh").write_text(codigo)
+
+    def informe(self, muertos, por_tiempo, supervivientes, otros=(), ruta="reports/mutation/mutation.json",
+                fichero="src/a.js"):
         mutantes = ([mutante("Killed", i) for i in range(muertos)]
                     + [mutante("Timeout", 10000 + i) for i in range(por_tiempo)]
                     + [mutante("Survived", 20000 + i) for i in range(supervivientes)]
                     + [mutante(e, 30000 + i) for i, e in enumerate(otros)])
-        fichero = self.proyecto / ruta
-        fichero.parent.mkdir(parents=True, exist_ok=True)
-        fichero.write_text(json.dumps({"schemaVersion": "2", "files": {"src/a.js": {"mutants": mutantes}}}))
+        self.informe_tal_cual(json.dumps({"schemaVersion": "2", "files": {fichero: {"mutants": mutantes}}}), ruta)
 
-    def alarma(self, minimo=None, resultado="success"):
-        if minimo is None:
-            minimo = self.paso(self.PASO)["env"]["PUNTUACION_MINIMA_SIN_TIEMPO"]
-        return ejecutar(self.PASO, self.proyecto, self.temporal,
-                        PUNTUACION_MINIMA_SIN_TIEMPO=minimo, RESULTADO_STRYKER=resultado)[:2]
+    def informe_tal_cual(self, contenido, ruta="reports/mutation/mutation.json"):
+        (self.falso / "informe.json").write_text(contenido)
+        (self.falso / "ruta").write_text(ruta)
+
+    def alarma(self, minimo=None, **extra):
+        if minimo is not None:
+            extra["PUNTUACION_MINIMA_SIN_TIEMPO"] = minimo
+        for fichero in ("GITHUB_ENV", "GITHUB_PATH"):
+            (self.temporal / fichero).write_text("")
+        return ejecutar(self.PASO, self.proyecto, self.temporal, FALSO=str(self.falso),
+                        PATH=f"{self.bin}:{self.escribible}:{os.environ['PATH']}",
+                        GITHUB_ENV=str(self.temporal / "GITHUB_ENV"),
+                        GITHUB_PATH=str(self.temporal / "GITHUB_PATH"), **extra)[:2]
 
     def paso(self, nombre):
         return next(p for p in self.PASOS if p.get("name") == nombre)
@@ -465,19 +520,19 @@ class MutantesPorTiempo(unittest.TestCase):
     def test_pasos_y_minimo(self):
         nombres = [p.get("name") for p in self.PASOS]
         self.assertLess(nombres.index("CPU del runner"), nombres.index("Stryker"))
-        self.assertLess(nombres.index("Stryker"), nombres.index(self.PASO))
         self.assertEqual(self.paso("CPU del runner")["run"], "nproc")
         self.assertEqual(self.paso("Stryker")["id"], "stryker")
-        self.assertEqual(self.paso(self.PASO)["env"],
-                         {"PUNTUACION_MINIMA_SIN_TIEMPO": "90", "RESULTADO_STRYKER": "${{ steps.stryker.outcome }}"})
+        self.assertEqual(self.paso("Stryker")["env"], {"PUNTUACION_MINIMA_SIN_TIEMPO": "90"})
 
     def test_con_4_cpu_pasa(self):
         self.informe(728, 6, 58, otros=["RuntimeError"] * 50)
         estado, texto = self.alarma()
         self.assertEqual(estado, 0, texto)
+        self.assertIn("Mínimo de la alarma de mutantes por tiempo: 90 (el menor de 90 y thresholds.break).", texto)
         self.assertIn("Mutantes por tiempo: 6", texto)
         self.assertIn("728/792 = 91.92 (mínimo 90)", texto)
         self.assertIn("src/a.js:10000 EqualityOperator: 'a <= b'", texto)
+        self.assertIn("dentro del mínimo", texto)
 
     def test_el_limite(self):
         """713/792 = 90,03 pasa; 712/792 = 89,90 falla. Los NoCoverage cuentan como válidos."""
@@ -486,68 +541,107 @@ class MutantesPorTiempo(unittest.TestCase):
                 self.informe(muertos, 792 - muertos - 50, 40, otros=["NoCoverage"] * 10)
                 estado, texto = self.alarma()
                 self.assertEqual(estado, esperado, texto)
-        self.assertIn("::error::Contando como supervivientes los mutantes por tiempo, la puntuación baja de 90", texto)
+        self.assertIn("::error::Contando como supervivientes los mutantes por tiempo, la puntuación baja del mínimo", texto)
         self.assertIn("docs/herramientas.md del workflow, sección Stryker", texto)
 
     def test_con_2_cpu_falla(self):
-        """643 muertos y 85 por tiempo: Stryker daría 91,92 y la alarma, 81,19."""
+        """643 muertos y 91 por tiempo: Stryker daría 91,92 y la alarma, 81,19."""
         self.informe(643, 91, 58)
         estado, texto = self.alarma()
         self.assertEqual(estado, 1, texto)
         self.assertIn("643/792 = 81.19", texto)
+
+    def test_con_stryker_en_rojo_tambien_cuenta(self):
+        self.informe(643, 91, 58)
+        self.stryker_sale_con(1)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::Contando como supervivientes", texto)
 
     def test_el_minimo_se_aplica(self):
         self.informe(728, 6, 58)
         self.assertEqual(self.alarma(minimo="92")[0], 1)
         self.assertEqual(self.alarma(minimo="91.9")[0], 0)
 
-    def test_un_minimo_invalido_falla(self):
+    def test_con_un_break_menor_manda_el_break(self):
+        """Hecho cuando (VIC-45): con `break` 80 y sin mutantes por tiempo, 85 de 100 no falla (con el
+        mínimo de 90 fallaba). Con mutantes por tiempo, la alarma sigue mirando contra el `break`."""
+        self.config({"thresholds": {"break": 80}})
+        self.informe(85, 0, 15)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("85/100 = 85.00 (mínimo 80)", texto)
+        self.informe(78, 7, 15)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("78/100 = 78.00 (mínimo 80)", texto)
+        self.config({"thresholds": {"break": 92.5}})
+        self.informe(91, 0, 9)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 0, texto)
+        self.assertIn("(mínimo 90)", texto)
+
+    def test_un_minimo_o_un_break_invalido_falla_antes_de_stryker(self):
         self.informe(10, 0, 0)
-        for minimo in ("", "0", "-5", "100.5", "NaN", "Infinity", "noventa"):
-            with self.subTest(minimo=minimo):
-                estado, texto = self.alarma(minimo=minimo)
+        casos = [({"minimo": m}, None) for m in ("", "0", "-5", "100.5", "NaN", "Infinity", "noventa")]
+        casos += [({}, {"break": b}) for b in (0, -1, 100.5, "90", True, None)]
+        for minimo, umbral in casos:
+            with self.subTest(minimo=minimo, umbral=umbral):
+                (self.falso / "ha-corrido").unlink(missing_ok=True)
+                self.config({"thresholds": umbral if umbral is not None else {"break": 92}})
+                estado, texto = self.alarma(**minimo)
                 self.assertEqual(estado, 1, texto)
-                self.assertIn("::error::No se ha podido leer el informe JSON de Stryker o el mínimo", texto)
+                self.assertIn("::error::No se ha podido calcular el mínimo de la alarma de mutantes por tiempo", texto)
+                self.assertFalse((self.falso / "ha-corrido").exists())
 
     def test_un_informe_roto_o_sin_mutantes_validos_falla(self):
-        fichero = self.proyecto / "reports" / "mutation" / "mutation.json"
         casos = {"no es JSON": "{", "sin files": "{}", "sin válidos": None}
         for caso, contenido in casos.items():
             with self.subTest(caso=caso):
                 if contenido is None:
                     self.informe(0, 0, 0, otros=["RuntimeError", "CompileError", "Ignored"])
                 else:
-                    fichero.parent.mkdir(parents=True, exist_ok=True)
-                    fichero.write_text(contenido)
+                    self.informe_tal_cual(contenido)
                 estado, texto = self.alarma()
                 self.assertEqual(estado, 1, texto)
-                self.assertIn("::error::No se ha podido leer el informe JSON de Stryker", texto)
+                self.assertIn("::error::No se ha podido leer el informe JSON de Stryker (salida 1): la alarma", texto)
 
     def test_sin_informe(self):
-        """Con Stryker en verde, falla; con Stryker en rojo, el job ya está en rojo y el paso no añade nada."""
-        for resultado, esperado in (("success", 1), ("failure", 0), ("skipped", 0)):
-            with self.subTest(resultado=resultado):
-                estado, texto = self.alarma(resultado=resultado)
+        """Con Stryker en verde, falla; en rojo, sale con su estado."""
+        for salida, esperado in ((0, 1), (1, 1), (2, 2)):
+            with self.subTest(salida=salida):
+                self.stryker_sale_con(salida)
+                estado, texto = self.alarma()
                 self.assertEqual(estado, esperado, texto)
-        self.assertIn("Sin informe JSON en reports/mutation/mutation.json", texto)
+                mensaje = "::error::Stryker no ha dejado el informe JSON en reports/mutation/mutation.json"
+                (self.assertIn if salida == 0 else self.assertNotIn)(mensaje, texto)
 
     def test_la_ruta_del_informe_sale_de_la_configuracion(self):
-        self.config({"jsonReporter": {"fileName": "otro/informe.json"}})
+        self.config({"thresholds": {"break": 92}, "jsonReporter": {"fileName": "otro/informe.json"}})
         self.informe(728, 6, 58)
         estado, texto = self.alarma()
         self.assertEqual(estado, 1, texto)
-        self.assertIn("no hay informe JSON en otro/informe.json", texto)
+        self.assertIn("no ha dejado el informe JSON en otro/informe.json", texto)
         self.informe(728, 6, 58, ruta="otro/informe.json")
         self.assertEqual(self.alarma()[0], 0)
 
+    def test_la_alarma_y_los_ignorados_salen_los_dos(self):
+        """Con la alarma en rojo se comprueban también los Ignored; `file=` escapa `,` y `:` (G4 de
+        sdd-workflow#44, cerrado en VIC-45)."""
+        self.informe(643, 91, 58, otros=["Ignored"], fichero="src/a,line=1:b.js")
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::Contando como supervivientes", texto)
+        self.assertIn("643/792 = 81.19", texto)  # el Ignored no cuenta como válido
+        self.assertIn("::error file=src/a%2Cline=1%3Ab.js,line=30000::Mutante ignorado ()", texto)
+        self.assertIn("::error::Hay mutantes Ignored", texto)
+
     def test_lo_de_la_rama_va_entre_stop_commands(self):
         """El fichero y la sustitución salen del código de la rama: no pueden inyectar anotaciones."""
-        self.informe(1, 0, 0)
-        fichero = self.proyecto / "reports" / "mutation" / "mutation.json"
-        datos = json.loads(fichero.read_text())
-        datos["files"]["\n::error::inyectada\n::stop-commands::otro\n"] = {"mutants": [mutante("Timeout", 2)]}
-        datos["files"]["::error::fichero"] = {"mutants": [dict(mutante("Timeout", 3), replacement="\n::error::sustitución\n")]}
-        fichero.write_text(json.dumps(datos))
+        datos = {"files": {"\n::error::inyectada\n::stop-commands::otro\n": {"mutants": [mutante("Timeout", 2)]},
+                           "::error::fichero": {"mutants": [dict(mutante("Timeout", 3), replacement="\n::error::sustitución\n")]},
+                           "src/a.js": {"mutants": [mutante("Killed", 1)]}}}
+        self.informe_tal_cual(json.dumps(datos))
         estado, texto = self.alarma()
         self.assertEqual(estado, 1, texto)
         lineas = texto.splitlines()
@@ -560,6 +654,55 @@ class MutantesPorTiempo(unittest.TestCase):
         self.assertLess(lineas.index("::error::inyectada"), seguir)
         self.assertFalse([l for l in lineas[seguir + 1:] if "inyectada" in l or "::error::fichero" in l])
         self.assertTrue(lineas[seguir + 1].startswith("::error::Contando como supervivientes"))
+
+    def test_lo_que_escribe_la_rama_no_cambia_la_alarma(self):
+        """Hecho cuando (VIC-45): un test de la rama escribe en $GITHUB_PATH y $GITHUB_ENV, deja un
+        `python3` y un `grep` falsos en una carpeta del PATH y reescribe la configuración de
+        $RUNNER_TEMP. La alarma da lo mismo: los dos ficheros solo cambian los pasos siguientes, y
+        después del paso Stryker no corre ninguno fuera del borrador; los ejecutables van con ruta
+        absoluta, y el mínimo y la ruta del informe se leen antes."""
+        fuera = [p.get("name") for p in self.PASOS[self.PASOS.index(self.paso("Stryker")) + 1:]
+                 if "!github.event.pull_request.draft" in p.get("if", "!github.event.pull_request.draft")]
+        self.assertEqual(fuera, [])
+        falso = textwrap.dedent(f"""\
+            cat > "{self.escribible}/python3" <<'EOF'
+            #!/bin/sh
+            echo "Puntuación contándolos como supervivientes: dentro del mínimo"
+            exit 0
+            EOF
+            printf '#!/bin/sh\\nexit 1\\n' > "{self.escribible}/grep"
+            chmod +x "{self.escribible}/python3" "{self.escribible}/grep"
+            echo "{self.escribible}" >> "$GITHUB_PATH"
+            echo "BASH_ENV={self.escribible}/entorno.sh" >> "$GITHUB_ENV"
+            echo '{{"thresholds": {{"break": 1}}, "jsonReporter": {{"fileName": "otro.json"}}}}' > "$RUNNER_TEMP/stryker.config.json"
+            """)
+        self.rama(falso)
+        self.informe(643, 91, 58)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("643/792 = 81.19 (mínimo 90)", texto)
+        self.assertIn(str(self.escribible), (self.temporal / "GITHUB_PATH").read_text())  # el test sí escribió
+        # El grep falso tampoco esconde un NaN.
+        (self.falso / "salida.txt").write_text("Final mutation score of NaN\n")
+        self.informe(728, 6, 58)
+        estado, texto = self.alarma()
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::Stryker no ha probado ningún mutante", texto)
+
+    def test_reescribir_el_script_no_cambia_la_alarma(self):
+        """El runner ejecuta el script desde un fichero de $RUNNER_TEMP, que un test puede reescribir
+        mientras corre: entre llaves, bash ya lo ha leído entero."""
+        self.rama('for f in "$RUNNER_TEMP"/*.sh; do\n'
+                  '  { head -c "$(wc -c < "$f")" /dev/zero | tr "\\0" "\\n"; echo "echo REESCRITO; exit 0"; } > "$f.nuevo"\n'
+                  '  cat "$f.nuevo" > "$f"\n'
+                  'done\n')
+        self.informe(643, 91, 58)
+        estado, texto, _ = ejecutar(self.PASO, self.proyecto, self.temporal, desde_fichero=True, FALSO=str(self.falso),
+                                    PATH=f"{self.bin}:{os.environ['PATH']}")
+        self.assertNotIn("REESCRITO", texto)
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("643/792 = 81.19", texto)
+        self.assertIn("REESCRITO", (self.temporal / "paso.sh").read_text())  # el test sí lo reescribió
 
 
 class BaseSinAmbiguedad(unittest.TestCase):
