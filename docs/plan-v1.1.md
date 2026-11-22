@@ -87,13 +87,29 @@
 | **M23** (rúbrica) | Un revisor con foco de mantenibilidad: los olores de Fowler (Pocock) y la rúbrica de calidad de thermos (sin leer la discusión del PR ni sus flujos de fusión), con la regla de no exagerar la gravedad |
 | Coste | Se mide cuánto cuesta cada revisión y se decide si el revisor de código R1 sigue aportando con los controles del bloque 3 (mejora #2 del primer recorrido) |
 
-**Hecho cuando:** un PR de la calculadora pasa por la reconciliación nueva, y la métrica de hallazgos confirmados queda registrada. El revisor de la CI (M34) pasó al bloque 7 el 2026-11-21 (VIC-43, `historial/coste-revision-bloque-4.md`).
+**Hecho cuando:** un PR de la calculadora pasa por la reconciliación nueva, y la métrica de hallazgos confirmados queda registrada. El revisor de la CI (M34) pasó al bloque 7 el 2026-11-21 (VIC-43, `historial/coste-revision-bloque-4.md`). ✔ Hecho el 2026-11-22 (`historial/retrospectiva-bloque-4.md`): calculadora-discos #74 pasó por la reconciliación nueva y fue la primera CI real de los checks `hallazgos` y `cambios`; la métrica está en `historial/coste-revision-bloque-4.md`.
 
 ## Bloque 5 — Tu papel, la autonomía del agente y dejar este chat
 
 **Por qué ahora:** es lo que más cambia tu día a día. Depende de los controles (bloques 2–3) y de la revisión fiable (bloque 4).
 
 **Condición de entrada:** VIC-29 y VIC-32 cerradas, con `mutaciones` y `duplicados` como checks requeridos en la calculadora. Sin ellos, los controles fijos que permiten fusionar sin ti no están completos (retrospectiva del bloque 3, decisión de Víctor del 2026-11-19).
+
+Estado el 2026-11-22 (retrospectiva del bloque 4):
+
+| Issue | Estado | Qué falta |
+| --- | --- | --- |
+| VIC-29, mutantes por tiempo | Hecha (calc #64): la CI da 6 por tiempo y 92,68, como en local; `break` 92 | — |
+| VIC-44, alarma de mutantes por tiempo | Hecha (sdd #54, calc #65 y #66) | — |
+| `mutaciones` como check requerido | **No lo es** en la regla de `main` de la calculadora | Que lo marques. Se propone hacer antes VIC-45 |
+| VIC-45, la alarma dentro del paso Stryker | *Inbox*, hito del bloque 5 | Toda. Cierra el hueco G4-1-B-01 del #54 |
+| VIC-32, duplicación de los E2E | Hecha (calc #67 a #70) | — |
+| `duplicados` como check requerido | Lo es | — |
+| VIC-47, respuestas de G4 que la cuenta del agente puede anular | *Inbox*, hito del bloque 5 | Toda. Se propone antes de que el agente fusione sin ti, no como condición de entrada |
+| VIC-23, repos anidados | *Inbox*, hito del bloque 5 | Toda. No bloquea la entrada |
+| VIC-48, métricas por revisor | *Inbox*, sin hito | Se propone como primera issue del bloque 5 |
+
+Las propuestas de esta tabla las decide Víctor en el PR de la retrospectiva del bloque 4.
 
 **ADR-0009 del workflow (modifica P03, G6, N4 y ADR-0006):**
 - **Tu papel:**
@@ -164,7 +180,7 @@ Se deciden con datos del próximo proyecto, no antes:
 
 - **M3:** tests primero, visibles en el historial.
 - **Las estimaciones de tamaño.**
-- **Del primer recorrido:** N6 con una inyección inocua (#8) y los hallazgos V1–V7 de la revisión independiente. Se revisan al cerrar el bloque 4.
+- **Del primer recorrido:** N6 con una inyección inocua (#8) y los hallazgos V1–V7 de la revisión independiente. Se revisan al cerrar el bloque 4; la retrospectiva del bloque 4 propone una issue aparte para comprobar el estado de cada uno.
 
 ## Cómo se trabaja cada bloque
 
