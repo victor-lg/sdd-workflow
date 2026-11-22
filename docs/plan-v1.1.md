@@ -101,15 +101,16 @@ Estado el 2026-11-22 (retrospectiva del bloque 4):
 | --- | --- | --- |
 | VIC-29, mutantes por tiempo | Hecha (calc #64): la CI da 6 por tiempo y 92,68, como en local; `break` 92 | — |
 | VIC-44, alarma de mutantes por tiempo | Hecha (sdd #54, calc #65 y #66) | — |
-| `mutaciones` como check requerido | **No lo es** en la regla de `main` de la calculadora | Que lo marques. Se propone hacer antes VIC-45. La causa (`nproc`) está confirmada a medias: no hay medición del periodo con 2 vCPU, y el baseline deja en tus manos si basta |
+| `mutaciones` como check requerido | **No lo es** en la regla de `main` de la calculadora | Primero VIC-45; después lo marcas tú. La causa confirmada a medias (`nproc`, sin medición del periodo con 2 vCPU) basta, porque la alarma avisa si vuelve |
 | VIC-45, la alarma dentro del paso Stryker | *Inbox*, hito del bloque 5 | Toda. Cierra el hueco G4-1-B-01 del #54 |
 | VIC-32, duplicación de los E2E | Hecha (calc #67 a #70) | — |
 | `duplicados` como check requerido | Lo es | — |
-| VIC-47, respuestas de G4 que la cuenta del agente puede anular | *Inbox*, hito del bloque 5 | Toda. Se propone antes de que el agente fusione sin ti, no como condición de entrada |
+| VIC-47, respuestas de G4 que la cuenta del agente puede anular | *Inbox*, hito del bloque 5 | Toda. En el bloque 5, antes de tocar el ruleset; no es condición de entrada |
 | VIC-23, repos anidados | *Inbox*, hito del bloque 5 | Toda. No bloquea la entrada |
-| VIC-48, métricas por revisor | *Inbox*, sin hito | Se propone como primera issue del bloque 5 |
+| VIC-48, métricas por revisor | *Inbox*, hito del bloque 5 | Toda. Es la primera issue del bloque 5 |
+| VIC-36 | *Ready* (R0) | Toda. Se hace antes de entrar en el bloque 5 |
 
-Las propuestas de esta tabla las decide Víctor en el PR de la retrospectiva del bloque 4.
+Decisiones de Víctor del 2026-11-22, en el PR de la retrospectiva del bloque 4 (#62). Además, VIC-51 (las evaluaciones, condición para quitar el borrador en los PR de skills) va en el bloque 5, y VIC-50 (la evaluación semanal en rojo y los evaluadores que fallan una de cada tres, empezando por el rojo) va antes del bloque 6.
 
 **ADR-0009 del workflow (modifica P03, G6, N4 y ADR-0006):**
 - **Tu papel:**
@@ -180,7 +181,7 @@ Se deciden con datos del próximo proyecto, no antes:
 
 - **M3:** tests primero, visibles en el historial.
 - **Las estimaciones de tamaño.**
-- **Del primer recorrido:** N6 con una inyección inocua (#8) y los hallazgos V1–V7 de la revisión independiente. Se revisan al cerrar el bloque 4; la retrospectiva del bloque 4 propone una issue aparte para comprobar el estado de cada uno.
+- **Del primer recorrido:** N6 con una inyección inocua (#8) y los hallazgos V1–V7 de la revisión independiente. Se revisan al cerrar el bloque 4: comprobar el estado de cada uno es VIC-52, sin prisa (decisión de Víctor, 2026-11-22).
 
 ## Cómo se trabaja cada bloque
 
@@ -195,11 +196,11 @@ Se deciden con datos del próximo proyecto, no antes:
 Aceptadas por Víctor el 2026-11-19, tras la retrospectiva del bloque 3, donde las entregas crecieron dentro de su issue (VIC-31: 9 PR y tres ADR):
 
 1. **Una issue por decisión de fondo.** Si una entrega necesita un ADR que no estaba en su contrato, el ADR va en una issue nueva, y la entrega espera.
-2. **Primero el corte más pequeño en la calculadora.** Antes de generalizar en la plantilla, una prueba mínima en el proyecto real (un job, un test, una ruta), para que las sorpresas lleguen pronto.
+2. **Primero el corte más pequeño en la calculadora.** Antes de generalizar en la plantilla, una prueba mínima en el proyecto real (un job, un test, una ruta), para que las sorpresas lleguen pronto. Un check o un workflow de la plantilla que este repo no ejecuta se prueba en la calculadora en el primer PR (añadido por Víctor el 2026-11-22, retrospectiva del bloque 4).
 3. **Unas 400 líneas por PR como tope,** sin contar capturas ni lockfiles. Tres rondas de G4 son señal de partir el PR, no la norma.
 4. **Coste en el contrato:** el "Hecho cuando" incluye el tiempo de espera de la CI por push si la entrega añade un job, y el tiempo del trozo más lento si toca los E2E.
 5. **Varias issues por bloque desde el principio,** cada una con su "Hecho cuando":
    - **Bloque 4:** formato de hallazgos y su check (reconciliación), diff calculado por la CI (M8), encargos del revisor (M13, M15, M1), revisor de mantenibilidad (M23) y la medición del coste. El revisor en la CI (M34, R2 con su ADR) pasó al bloque 7.
-   - **Bloque 5:** el ADR-0009 del workflow solo, en su PR (con una línea "No confundir con el ADR-0009 de la calculadora"); después, ruleset y CODEOWNERS, M28 en la plantilla de issue y M4/M20, por separado.
+   - **Bloque 5:** VIC-48 primero, para que las entregas queden medidas; el ADR-0009 del workflow solo, en su PR (con una línea "No confundir con el ADR-0009 de la calculadora"); después, ruleset y CODEOWNERS, M28 en la plantilla de issue y M4/M20, por separado.
    - **Bloque 6:** una skill por issue.
    - **Bloque 7:** el ADR-0010 primero; la tabla de modelos, el piloto de OpenCode y el revisor en la CI (M34), aparte.

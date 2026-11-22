@@ -39,7 +39,7 @@ Tiempo de espera de la CI por push, la regla 4 de las entregas: `checks-sdd` en 
   - **Evaluadores de poco peso que fallan una de cada tres veces** sin que cambie nada: g4-mantenibilidad, g4-descarta-solo-con-prueba y g4-lecturas-distintas, y antes anuncia-aclaracion y no-exagera (comentario de VIC-28, 2026-11-21). Lo importante pasa siempre, pero el ruido obliga a leer cada salida.
 - **El tamaño de la descripción.** Con tres rondas de dos revisores, la del #52 llegó a 79 735 caracteres, y GitHub admite 65 536. Las respuestas pasaron a comentarios (#53), y eso abrió el hueco de VIC-47: la cuenta del agente puede editar o borrar esos comentarios sin que lo note ningún check.
 - **Los checks de la plantilla se probaron tarde en una CI real.** `hallazgos` y `cambios` se escribieron y revisaron en cuatro PR (#52, #53, #55 y #56) solo con tests locales, porque este repo no corre los workflows de la plantilla. En la calculadora (#74) aparecieron los dos límites de VIC-47 y un caso que no se puede provocar.
-- **La calculadora sigue pasando por el chat.** Los ficheros de `.github/` de la calculadora (#65, #72 y #73) los subió Víctor por la web, y los revisó Claude en el chat, no un subagente. El #65 entró sin otra ronda por decisión de Víctor. Es lo que quiere quitar el bloque 5.
+- **La calculadora sigue pasando por el chat.** Los ficheros de `.github/` de la calculadora (#65, #72 y #73) los subió Claude por la web desde la sesión de Víctor, comprobando el SHA-256, y los revisó Claude en el chat, no un subagente. El #65 entró sin otra ronda por decisión de Víctor. Es lo que quiere quitar el bloque 5.
 - **Métricas que no cuadran:** la línea `Métricas G4` de #53 no coincide con su reconciliación, la de #59 se repite, y ninguna guarda revisor, gravedad, tokens ni tiempo (VIC-48).
 - **`AGENTS.md` de la plantilla vuelve a crecer.** La poda de VIC-37 (#51) lo dejó en ~1417 tokens (de ~1548). Los checks `hallazgos` y `cambios` lo suben a ~1494 (+77, a ~4 caracteres por token y sin comentarios HTML): se ha perdido el 59 % de lo ganado con la poda. Todo el aumento está en la línea que nombra los checks de `checks-sdd`.
 
@@ -91,28 +91,28 @@ Víctor, antes de esta retrospectiva:
 
 ## Decisiones para Víctor
 
-Propuestas para decidir en el PR de esta retrospectiva:
+Propuestas decididas por Víctor en el PR de esta retrospectiva (#62), el 2026-11-22:
 
 | Tema | Propuesta | Decisión |
 | --- | --- | --- |
-| Bloque 4 | Se cierra | |
-| `mutaciones` requerido | Condición de entrada del bloque 5: primero VIC-45 y después marcarlo como requerido. La alarma tiene hoy el hueco que cierra VIC-45. De las dos condiciones de la G4 del #64, la de `nproc` está cumplida a medias, y el baseline deja en tus manos si basta | |
-| VIC-47 | Dentro del bloque 5, antes de que el agente fusione sin la persona (antes de ajustar el ruleset), no como condición de entrada | |
-| VIC-48, métricas por revisor | Primera issue del bloque 5, para que sus entregas ya queden medidas. La escalera de confianza (M24) pide no tener defectos escapados en las entregas medidas, y el bloque 7 necesita el coste de cada revisor | |
-| VIC-23 | Sigue en el bloque 5, sin bloquear la entrada | |
-| Evaluaciones en los PR de skills | Una issue: condición para quitar el borrador, resultado anotado en el PR y la orden sobre `refs/pull/<N>/head` | |
-| Evaluadores que fallan una de cada tres | Sacar el punto de VIC-28 a su propia issue, antes del bloque 6, que añade skills con evaluaciones | |
-| Evaluación semanal en rojo (15-11 y 22-11) | Una issue para ver por qué falla | |
-| Regla 2 de las entregas | Añadir: un check o workflow de la plantilla que este repo no ejecuta se prueba en la calculadora en el primer PR | |
-| Poda de `AGENTS.md` | Medir al cerrar el bloque 5, con ~1548 tokens como tope | |
-| V1–V7 y #8 del primer recorrido | El plan dice que se revisan al cerrar el bloque 4. Propuesta: una issue que compruebe el estado de cada uno, fuera de este PR | |
-| VIC-36 (R0, en *Ready* desde el 2026-11-19) | Hacerla antes de entrar en el bloque 5 | |
+| Bloque 4 | Se cierra | Se cierra |
+| `mutaciones` requerido | Condición de entrada del bloque 5: primero VIC-45 y después marcarlo como requerido. La alarma tiene hoy el hueco que cierra VIC-45. De las dos condiciones de la G4 del #64, la de `nproc` está cumplida a medias, y el baseline deja en tus manos si basta | Primero VIC-45; después lo marca Víctor. La causa confirmada a medias (`nproc`) basta, porque la alarma avisa si vuelve |
+| VIC-47 | Dentro del bloque 5, antes de que el agente fusione sin la persona (antes de ajustar el ruleset), no como condición de entrada | En el bloque 5, antes de tocar el ruleset. No es condición de entrada |
+| VIC-48, métricas por revisor | Primera issue del bloque 5, para que sus entregas ya queden medidas. La escalera de confianza (M24) pide no tener defectos escapados en las entregas medidas, y el bloque 7 necesita el coste de cada revisor | Primera issue del bloque 5 (ya está en su hito) |
+| VIC-23 | Sigue en el bloque 5, sin bloquear la entrada | Sigue en el bloque 5, sin bloquear la entrada |
+| Evaluaciones en los PR de skills | Una issue: condición para quitar el borrador, resultado anotado en el PR y la orden sobre `refs/pull/<N>/head` | Aceptado: VIC-51 |
+| Evaluadores que fallan una de cada tres | Sacar el punto de VIC-28 a su propia issue, antes del bloque 6, que añade skills con evaluaciones | Una sola issue con la fila siguiente: VIC-50, antes del bloque 6 |
+| Evaluación semanal en rojo (15-11 y 22-11) | Una issue para ver por qué falla | En VIC-50, que empieza por el rojo semanal |
+| Regla 2 de las entregas | Añadir: un check o workflow de la plantilla que este repo no ejecuta se prueba en la calculadora en el primer PR | Aceptado el añadido; escrito en las reglas de entrega del plan |
+| Poda de `AGENTS.md` | Medir al cerrar el bloque 5, con ~1548 tokens como tope | Medir al cerrar el bloque 5, con ~1548 tokens como tope |
+| V1–V7 y #8 del primer recorrido | El plan dice que se revisan al cerrar el bloque 4. Propuesta: una issue que compruebe el estado de cada uno, fuera de este PR | Aceptado: VIC-52, sin prisa |
+| VIC-36 (R0, en *Ready* desde el 2026-11-19) | Hacerla antes de entrar en el bloque 5 | Se hace antes de entrar en el bloque 5 |
 
 ## Pendientes que salen de aquí
 
 - **En Linear:**
-  - VIC-30 sigue en *In Progress*, aunque el #71 la daba por cerrada con la opción D.
-  - VIC-48 no tiene hito.
-  - Las issues que salgan de la tabla de decisiones.
+  - VIC-30 está cancelada, con la nota de la opción D.
+  - VIC-48 ya está en el hito del bloque 5.
+  - De la tabla de decisiones salen VIC-50 (evaluaciones: la semanal en rojo y los evaluadores inestables, antes del bloque 6), VIC-51 (evaluaciones en los PR de skills) y VIC-52 (V1–V7 y #8, sin prisa).
 - **En el plan:** este mismo PR da por cerrado el bloque 4 y pone al día las condiciones de entrada del bloque 5.
 - **Etiqueta v1.1.0:** cuando Víctor lo decida; esta retrospectiva no la crea.
