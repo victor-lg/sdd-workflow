@@ -102,7 +102,7 @@ Estado el 2026-11-22 (retrospectiva del bloque 4):
 | VIC-29, mutantes por tiempo | Hecha (calc #64): la CI da 6 por tiempo y 92,68, como en local; `break` 92 | — |
 | VIC-44, alarma de mutantes por tiempo | Hecha (sdd #54, calc #65 y #66) | — |
 | `mutaciones` como check requerido | **No lo es** en la regla de `main` de la calculadora | Primero VIC-45; después lo marcas tú. La causa confirmada a medias (`nproc`, sin medición del periodo con 2 vCPU) basta, porque la alarma avisa si vuelve |
-| VIC-45, la alarma dentro del paso Stryker | *Inbox*, hito del bloque 5 | Toda. Cierra el hueco G4-1-B-01 del #54 |
+| VIC-45, la alarma dentro del paso Stryker | En curso: calculadora hecha (calc #76, 2026-11-22: 23 por tiempo y 90,40 con 4 vCPU); la plantilla, en su PR | La plantilla. La variación de los `Timeout` con 4 vCPU (6 en VIC-29, 23 en el #76), sin medir: deja sin confirmar la causa de VIC-29 |
 | VIC-32, duplicación de los E2E | Hecha (calc #67 a #70) | — |
 | `duplicados` como check requerido | Lo es | — |
 | VIC-47, respuestas de G4 que la cuenta del agente puede anular | *Inbox*, hito del bloque 5 | Toda. En el bloque 5, antes de tocar el ruleset; no es condición de entrada |

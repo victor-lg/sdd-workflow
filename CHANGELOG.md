@@ -4,6 +4,13 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **La alarma de mutantes por tiempo, dentro del paso Stryker de la plantilla (VIC-45).** `plantilla-proyecto/.github/workflows/calidad.yml` recibe el paso Stryker de calculadora-discos#76 (commit 92dcd4e), salvo dos comentarios y la documentación a la que remite el error; desaparece el paso «Mutantes por tiempo».
+  - **Cierra G4-1-B-01 de #54:** lo que un test escriba en `$GITHUB_PATH` o `$GITHUB_ENV` ya no alcanza la alarma. Va en el mismo paso, con `/usr/bin/python3 -I` y `/usr/bin/grep`, el mínimo y la ruta del informe leídos antes de Stryker y el script entre llaves.
+  - **El mínimo es el menor de `PUNTUACION_MINIMA_SIN_TIEMPO` (90) y `thresholds.break`:** con `break` 80 y sin mutantes por tiempo, la alarma ya no falla.
+  - **Las anotaciones de los `Ignored` escapan `,` y `:` en `file=`** (G4 de #44); la alarma y los `Ignored` se comprueban los dos antes de salir.
+  - **Tests:** `MutantesPorTiempo` ejecuta el paso Stryker con un `npm` y un Stryker falsos.
+  - **`docs/herramientas.md` y `docs/plan-v1.1.md`:** el resultado real del #76 (4 vCPU, 23 mutantes por tiempo, 716/792 = 90,40 con mínimo 90, 10 min 34 s el job). No coincide con los 6 y 91,92 de VIC-29, y la causa de los 2 vCPU queda sin confirmar. El mínimo no cambia.
+
 - **Límites aceptados de VIC-28 y medición de la CI en borrador (VIC-36).** `docs/herramientas.md`, sin tocar código ni workflows, como decidió Víctor en la retrospectiva del bloque 3:
   - `rev-parse` frente a `show-ref` para la rama base en `seguridad.yml`, `calidad.yml` y `sdd.yml`: límite aceptado, porque la etiqueta que ganaría a la rama no se da con `fetch-depth: 0` (G4 de VIC-26).
   - La versión de osv-scanner, escrita en `seguridad.yml` y en `osv-mensual.yml`: límite aceptado, porque cada binario sigue comprobado por su suma.
