@@ -71,7 +71,7 @@ def coste_de(tokens):
 
 def miles(n, decimales=0):
     """196 k, 8,1 k o 1,5 M, como en las tablas del historial."""
-    if n >= 10 ** 6:
+    if round(n / 1000, decimales) >= 1000:  # 999 600 es 1,0 M, no 1000 k
         return f"{n / 1e6:.1f} M".replace(".", ",")
     return f"{n / 1000:.{decimales}f} k".replace(".", ",")
 
@@ -92,12 +92,14 @@ def tabla_revisores(revisores):
     for (clave, pr, ronda, letra), r in sorted(revisores.items(), key=lambda x: tuple(map(str, x[0]))):
         consumo = r.get("consumo") if isinstance(r.get("consumo"), dict) else None
         tokens = consumo.get("tokens") or {} if consumo else {}
+        # El modelo del transcript (claude-sonnet-5-5); el alias de la línea (sonnet), solo sin él.
         modelos = ", ".join(tokens) or r.get("modelo") or "—"
         conf = [int((r.get("confirmados") or {}).get(g) or 0) for g in GRAVEDADES]
         desc = sum(int((r.get("descartados") or {}).get(g) or 0) for g in GRAVEDADES)
         t = por_issue[(clave, letra)]
         t["rondas"] += 1
-        t["modelos"] = list(dict.fromkeys(t["modelos"] + modelos.split(", ")))
+        t["modelos"] = list(dict.fromkeys(t["modelos"] + list(tokens)))
+        t["alias"] = list(dict.fromkeys(t.get("alias", []) + [r.get("modelo") or "—"]))
         if consumo:
             n = sum(sum(x.values()) for x in tokens.values())
             salida = sum(x.get("salida", 0) for x in tokens.values())
@@ -130,7 +132,8 @@ def tabla_revisores(revisores):
           "Confirmados (deb. / imp. / men.) | Descartados |")
     print("| --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: |")
     for (clave, letra), t in sorted(por_issue.items()):
-        print(f"| {clave} | {celda(letra)} | {celda(', '.join(t['modelos']))} | {t['rondas']} | {miles(t['tokens'])} | "
+        modelos = ", ".join(t["modelos"] or t["alias"])
+        print(f"| {clave} | {celda(letra)} | {celda(modelos)} | {t['rondas']} | {miles(t['tokens'])} | "
               f"{coma(t['min'], 1)} | {coma(t['coste'], 2)} $ | {' / '.join(map(str, t['conf']))} | {t['desc']} |")
 
 

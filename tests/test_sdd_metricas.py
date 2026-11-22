@@ -450,6 +450,31 @@ class Transcript(unittest.TestCase):
         self.assertEqual(rev["21/1/A"]["consumo"]["tokens"]["claude-sonnet-5-5"]["salida"], 300)
         self.assertIsNone(rev["21/2/A"]["consumo"])  # la línea cuenta, sin tokens
 
+    def test_linea_de_revisor_sin_agente(self):
+        # G4-1-A-01: sin agentId quedan los hallazgos, sin tokens.
+        self.escribe(gh(REVISOR.format(r=1, l="A", a="x").replace("agente x · ", "")))
+        r = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]["21/1/A"]
+        self.assertIsNone(r["agente"])
+        self.assertEqual(r["confirmados"], {"debe": 0, "importante": 1, "menor": 2})
+        self.assertIsNone(r["consumo"])
+
+    def test_varias_copias_del_subagente_la_mas_larga(self):
+        # G4-1-A-04: al reanudar puede haber copias; una a medio escribir es más corta.
+        subagente(self.dir.name, "s0", "e5", respuesta("m1"))
+        subagente(self.dir.name, "s2", "e5", respuesta("m1"), respuesta("m2"))
+        subagente(self.dir.name, "s3", "e5")
+        self.escribe(gh(REVISOR.format(r=1, l="A", a="e5")))
+        r = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]["21/1/A"]
+        self.assertEqual(r["consumo"]["tokens"]["claude-sonnet-5-5"]["salida"], 600)
+
+    def test_fechas_con_y_sin_zona(self):
+        subagente(self.dir.name, "s1", "z1", respuesta("m1", fecha="2026-11-06T09:00:00Z"),
+                  respuesta("m2", fecha="2026-11-06T09:01:00"))
+        self.escribe(gh(REVISOR.format(r=1, l="A", a="z1")))
+        consumo = sdd_metricas.lee_transcript(self.ruta, {})["revisores"]["21/1/A"]["consumo"]
+        self.assertIsNone(consumo["minutos"])
+        self.assertEqual(consumo["tokens"]["claude-sonnet-5-5"]["salida"], 600)
+
     def test_lineas_de_revisor_que_no_cuentan(self):
         subagente(self.dir.name, "s1", "a1", respuesta("m1"))
         buena = REVISOR.format(r=1, l="A", a="a1")

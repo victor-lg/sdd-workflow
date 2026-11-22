@@ -105,7 +105,7 @@ Con las respuestas de todos los revisores:
 
      - `L` es su letra (A, B); `M`, el modelo con el que lo lanzaste (`sonnet` u `opus`); `ID`, el `agentId` que devolvió su lanzamiento. Con el `ID`, `sdd-metricas` saca del transcript del subagente sus tokens y su tiempo.
      - `confirmados D/I/M`: los hallazgos de ese revisor que confirmaste, por la gravedad que confirmaste: *debe corregirse*, *importante* y *menor*. `descartados D/I/M`: los que descartaste, por la gravedad que les dio el revisor. Un hallazgo que señalan los dos revisores cuenta en los dos.
-     - Si no tienes el `agentId` de un revisor (no lo lanzaste en esta sesión), no escribas su línea: no la inventes ni pongas otro valor.
+     - Si no tienes el `agentId` de un revisor (no lo lanzaste en esta sesión), escribe su línea sin `agente ID ·`: no lo inventes ni pongas otro valor. Quedan sus hallazgos, sin tokens ni tiempo.
      - Si publicas otra vez la línea de la ronda tras corregir, no repitas las de revisor: no cambian.
    - **Cómo:** escribe el cuerpo con Write en `.tareas/VIC-N/g4-ronda-R.md`, **sin** la línea (nunca en `/tmp` ni en `$TMPDIR`: el hook lo bloquea, X-06). Publícalo con una sola orden que añade la línea en un heredoc entrecomillado:
 

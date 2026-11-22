@@ -296,6 +296,21 @@ class Revisores(unittest.TestCase):
         self.assertEqual(filas, [["VIC-48", "A", "claude-sonnet-5-5", "2", "396 k", "2,0", "0,30 $", "0 / 2 / 4", "2"],
                                  ["VIC-7", "A", "claude-sonnet-5-5", "1", "198 k", "1,0", "0,15 $", "0 / 1 / 2", "1"]])
 
+    def test_millones(self):
+        # G4-1-A-03: 999 600 redondea a 1,0 M, no a «1000 k».
+        self.assertEqual([resumen.miles(n) for n in (196400, 999400, 999600, 1500000)],
+                         ["196 k", "999 k", "1,0 M", "1,5 M"])
+        self.assertEqual(resumen.miles(8149, 1), "8,1 k")
+
+    def test_modelo_del_transcript_y_alias_no_se_mezclan(self):
+        # G4-1-A-02: una ronda con transcript y otra sin él: un solo modelo en la tabla por issue.
+        self.guarda("s1", {**revisor(52, 1, "A", "2026-11-22T10:00"),
+                           **revisor(52, 2, "A", "2026-11-22T12:00", tokens=False)})
+        filas = self.filas(self.ejecuta(), "| Issue | Revisor | Modelo | Rondas")
+        self.assertEqual(filas[0][2], "claude-sonnet-5-5")
+        self.guarda("s1", revisor(52, 2, "A", "2026-11-22T12:00", tokens=False))
+        self.assertEqual(self.filas(self.ejecuta(), "| Issue | Revisor | Modelo | Rondas")[0][2], "sonnet")
+
     def test_sin_transcript_ni_precio(self):
         self.guarda("s1", {**revisor(52, 1, "A", "2026-11-22T10:00", tokens=False),
                            **revisor(52, 1, "B", "2026-11-22T10:00",

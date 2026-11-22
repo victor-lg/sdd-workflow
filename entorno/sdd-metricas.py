@@ -26,7 +26,7 @@ de la rama. Del transcript de la sesión guarda solo recuentos:
 - revisores de G4 (VIC-48): las líneas "Métricas revisor: PR #N · ronda R · revisor
   L · modelo M · agente ID · confirmados D/I/M · descartados D/I/M" del mismo
   comentario, una por revisor y ronda, con los hallazgos por gravedad (debe
-  corregirse / importante / menor). Con el ID del agente, del transcript de ese
+  corregirse / importante / menor). "agente ID" puede faltar. Con él, del transcript de ese
   subagente (<sesión>/subagents/agent-ID.jsonl) guarda sus tokens por modelo
   (entrada, escritura y lectura de caché y salida) y sus minutos, del primer al
   último mensaje; si no lo encuentra, sin ellos;
@@ -77,11 +77,11 @@ ISSUE = re.compile(r"^(?:[a-z]+/)?vic-(\d+)\b", re.I)
 N = r"(\d{1,6})"
 LINEA_G4 = re.compile(rf"^[ \t]*Métricas G4: PR #{N} · ronda {N} · confirmados {N} · "
                       rf"descartados {N} · corregidos {N}[ \t\r]*$", re.M)
-# Una línea por revisor: letra, modelo, ID del subagente y hallazgos por gravedad
-# (debe corregirse / importante / menor). El ID solo lleva letras y cifras: con él se
-# forma la ruta del transcript del subagente.
+# Una línea por revisor: letra, modelo, ID del subagente (opcional) y hallazgos por
+# gravedad (debe corregirse / importante / menor). El ID solo lleva letras y cifras:
+# con él se forma la ruta del transcript del subagente.
 LINEA_REVISOR = re.compile(rf"^[ \t]*Métricas revisor: PR #{N} · ronda {N} · revisor ([A-Z]) · "
-                           rf"modelo ([\w.:-]{{1,60}}) · agente ([A-Za-z0-9]{{1,64}}) · "
+                           rf"modelo ([\w.:-]{{1,60}}) · (?:agente ([A-Za-z0-9]{{1,64}}) · )?"
                            rf"confirmados {N}/{N}/{N} · descartados {N}/{N}/{N}[ \t\r]*$", re.M)
 # Lo que se lee del transcript de un subagente, de una vez.
 MAX_SUBAGENTE = 64 * 1024 * 1024
@@ -173,7 +173,8 @@ def lineas_de(orden, fecha, issue):
     revisores = {}
     for m in LINEA_REVISOR.finditer(texto):
         pr, ronda, letra, modelo, agente = int(m.group(1)), int(m.group(2)), m.group(3), m.group(4), m.group(5)
-        conf, desc = (dict(zip(GRAVEDADES, (int(x) for x in m.groups()[i:i + 3]))) for i in (5, 8))
+        conf = dict(zip(GRAVEDADES, (int(x) for x in m.group(6, 7, 8))))
+        desc = dict(zip(GRAVEDADES, (int(x) for x in m.group(9, 10, 11))))
         revisores[f"{pr}/{ronda}/{letra}"] = {"pr": pr, "ronda": ronda, "revisor": letra, "modelo": modelo,
                                              "agente": agente, "confirmados": conf, "descartados": desc,
                                              "fecha": fecha, "issue": issue}
@@ -192,7 +193,8 @@ def transcript_de_agente(ruta, agente):
     if os.path.isfile(propio):
         return propio
     otros = glob.glob(os.path.join(glob.escape(os.path.dirname(ruta)), "*", "subagents", nombre))
-    return otros[0] if otros else None
+    # Si hay varias copias (al reanudar), la más larga: una copia a medio escribir es más corta.
+    return max(otros, key=lambda x: (os.path.getsize(x), x)) if otros else None
 
 
 def consumo_de(ruta):
@@ -231,7 +233,7 @@ def consumo_de(ruta):
     try:
         inicio, fin = (datetime.fromisoformat(x.replace("Z", "+00:00")) for x in (min(fechas), max(fechas)))
         minutos = round((fin - inicio).total_seconds() / 60, 2)
-    except ValueError:
+    except (ValueError, TypeError):  # sin fechas, o unas con zona y otras sin ella
         minutos = None
     return {"tokens": tokens, "minutos": minutos}
 
@@ -336,8 +338,9 @@ def lee_transcript(ruta, antes):
                         if isinstance(lineas, dict) and b.get("is_error") is not True:
                             estado["g4"].update(dic(lineas.get("g4")))
                             for clave, r in dic(lineas.get("revisores")).items():
-                                if isinstance(r, dict) and isinstance(r.get("agente"), str):
-                                    sub = transcript_de_agente(ruta, r["agente"])
+                                if isinstance(r, dict):
+                                    sub = transcript_de_agente(ruta, r["agente"]) \
+                                        if isinstance(r.get("agente"), str) else None
                                     estado["revisores"][clave] = {**r, "consumo": consumo_de(sub) if sub else None}
                             if isinstance(lineas.get("mutacion"), dict):
                                 estado["mutacion"] = lineas["mutacion"]

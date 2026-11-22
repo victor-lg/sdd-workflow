@@ -5,7 +5,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 ## v1.1 — en curso
 
 - **Métricas por revisor de G4 (VIC-48). Plugin `sdd` 1.16.0.** El coste de cada ronda ya no se saca a mano de los transcripts (VIC-43, `historial/coste-revision-bloque-4.md`, §7).
-  - **`sdd-review`:** en el comentario de reconciliación, debajo de `Métricas G4`, una línea por revisor: `Métricas revisor: PR #N · ronda R · revisor L · modelo M · agente ID · confirmados D/I/M · descartados D/I/M` (debe corregirse / importante / menor). Sin el `agentId`, no se escribe.
+  - **`sdd-review`:** en el comentario de reconciliación, debajo de `Métricas G4`, una línea por revisor: `Métricas revisor: PR #N · ronda R · revisor L · modelo M · agente ID · confirmados D/I/M · descartados D/I/M` (debe corregirse / importante / menor). Sin el `agentId`, va sin `agente ID ·` y queda sin tokens ni tiempo.
   - **`sdd-metricas.py`:** lee esas líneas con las mismas reglas que `Métricas G4` (entrada de un `gh pr comment` que no falla) y, del transcript del subagente, sus tokens por modelo (una vez por respuesta) y sus minutos, del primer al último mensaje. Del subagente solo guarda recuentos.
   - **`resumen-metricas.py`:** una tabla por PR, ronda y revisor con el formato de la §2 (tokens, salida, minutos, coste estimado, confirmados por gravedad y descartados, con total) y otra por issue y revisor. Los precios son los de la §1.
   - **Comprobado** con los transcripts reales de los revisores de #57, #58, #59 (ronda 2) y #60: salen las mismas cifras que la §2.
