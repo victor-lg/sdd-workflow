@@ -14,7 +14,7 @@ modifica:
   - "docs/linea-base-v1.md §8, modelo de identidades y reglas de main: el agente puede fusionar con auto-merge; 0 aprobaciones generales; CODEOWNERS en la lista de §3.3, que incluye toda la de controles de checks.py; README.md se queda hasta que las rutas sensibles del proyecto pasen a un fichero propio. Se mantienen los checks requeridos sobre el commit exacto y que cada push invalide las aprobaciones anteriores"
   - "ADR-0001, M2: el merge humano en rama protegida deja de ser el único mecanismo de aprobación, y las escrituras del agente en Linear dejan de estar deshabilitadas, con la aprobación de §3.6"
   - "ADR-0003 §3 y §6: el agente escribe en Linear (crea, comenta y empieza issues); Ready deja de moverlo la persona"
-  - "ADR-0005 §1, §3 y §5: «sin permiso para fusionar», «PR obligatorio con una aprobación» y la validación N4"
+  - "ADR-0005 §1, §3, §4 y §5: «sin permiso para fusionar», «PR obligatorio con una aprobación», el riesgo de un token filtrado («escritura, pero no merge») y la validación N4"
   - "ADR-0006 §2.6 y §2.10: Ready deja de ser un gate por issue; el MCP de Linear deja de ser de solo lectura"
 referencias:
   - "VIC-55"
@@ -104,14 +104,19 @@ resto sigue vigente y no se edita.
 
   Y un control que la línea base asigna a la persona en cada PR: leer todo cambio en un test existente (lista de cinco minutos, punto 1), la defensa contra un test debilitado para pasar la CI. En lo que el agente fusiona solo lo sustituyen el check `mutaciones`, que falla si los tests dejan de matar mutantes, y la pregunta expresa de G4 por los tests debilitados; ninguno lee la intención del cambio.
 
+  Y la lectura de los cambios que entran después de la última ronda de G4: el check `cambios` los lista en el resumen de `checks-sdd`, pero no falla por ellos. Sin la persona, nadie los lee antes de fusionar.
+
   La segunda mirada (§3.10) recupera parte, después y no antes de fusionar.
 - **Costes:** la persona aplica el ruleset y CODEOWNERS y sube a mano lo de `.github/` con el script; Claude dedica un repaso semanal.
 - **Riesgos y mitigaciones:**
   - **El nivel de riesgo lo declara el agente.** La CI solo lo sube (M3): `checks.py` marca R2 lo que toca sus listas (entre ellas, las rutas sensibles que el proyecto declara en su README), y CODEOWNERS bloquea las de §3.3. No son el mismo conjunto: un PR que toca una ruta del README del proyecto es R2 por la CI y no entra en el primer escalón, pero solo CODEOWNERS lo detiene si la ruta está también en §3.3. Un PR que el agente declare R1 y sea R2 en el fondo, sin tocar rutas sensibles, se fusiona solo. Lo mitigan G4 y la segunda mirada.
   - **Un R2 que no toca rutas de CODEOWNERS:** el ruleset de §3.5 (0 aprobaciones y CODEOWNERS por ruta) no lo detiene por sí mismo, y sin otro control la decisión 4 quedaría en una regla del agente (P04). La issue del ruleset pone el control que lo haga cumplir, y §5 lo valida.
-  - **G4 depende del agente** (ADR-0006 §2.6): el rastro en el PR y el check `hallazgos` lo hacen comprobable, con el límite de VIC-47 (§3.9).
+  - **G4 depende del agente** (ADR-0006 §2.6): el rastro en el PR y el check `hallazgos` lo hacen comprobable, con el límite de VIC-47 (§3.9). Pero hoy ningún check falla si un PR no tiene G4 (`hallazgos` no falla sin IDs de hallazgo), ni si quedan hallazgos que esperan a la persona (es un aviso). Los comprobaba la persona al fusionar. Sin otro control, la condición «G4 en verde» de §3.1 y las preguntas a la persona quedarían en reglas del agente (P04). La issue del ruleset pone el control, y §5 lo valida.
+  - **Cambios tras la última ronda de G4:** la issue del ruleset decide qué control impide que se fusionen solos sin que nadie los lea.
+  - **Un token filtrado de la cuenta de máquina** ya no da solo escritura (ADR-0005 §4): en la calculadora permite fusionar en `main` un PR R0 o R1 que no toque rutas sensibles y pase la CI y G4. Se mitiga como hasta ahora (colaboración solo donde hace falta, caducidad de 90 días y revocación inmediata) y con la segunda mirada.
+  - **Una issue fuera de la lista aprobada:** el agente crea y empieza issues por MCP, y nada liga una issue a la lista que aprobó la persona (§3.6). Es el límite de ADR-0006 §2.6, que se mantiene, y con el auto-merge llega más lejos: una issue así puede acabar en un PR R1 que se fusiona solo. Lo acotan la trazabilidad a una spec de `main` y la segunda mirada.
   - **Escrituras del agente en Linear:** la regla de datos de ADR-0003 (en proyectos `confidencial`, solo títulos y enlaces) sigue en vigor y se aplica también a lo que escriba el agente.
-- **Impacto:** el ruleset y CODEOWNERS de la calculadora; el MCP de Linear y `guarda-linear.py`; `sdd-plan`, `sdd-spec`, `sdd-implement` y `sdd-review`; la plantilla de issue y la de PR; la guía de instalación. `sdd-workflow` no cambia de reglas (§3.2).
+- **Impacto:** el ruleset y CODEOWNERS de la calculadora; el MCP de Linear y `guarda-linear.py`; `sdd-plan`, `sdd-spec`, `sdd-implement` y `sdd-review`; `AGENTS.md` de la plantilla (hoy dice que el agente no fusiona y que en Linear solo comenta); la plantilla de issue y la de PR; la guía de instalación. `sdd-workflow` no cambia de reglas (§3.2).
 
 ## 5. Validación
 
@@ -119,6 +124,7 @@ resto sigue vigente y no se edita.
   - el agente no puede fusionar, ni con auto-merge ni a mano, un PR que toque una ruta sensible sin la aprobación de CODEOWNERS;
   - un push del agente después de esa aprobación la invalida, y el PR no se fusiona hasta que la persona apruebe de nuevo;
   - no puede fusionar solo un PR R2, aunque no toque rutas de CODEOWNERS (§3.4);
+  - no puede fusionar solo un PR sin G4 que no sea un R0 comprobado por `checks.py`, ni uno con hallazgos que esperan a la persona;
   - no puede saltarse el ruleset: ni push directo a `main`, ni fusionar con un check requerido en rojo, pendiente o cancelado, ni cambiar el ruleset o CODEOWNERS;
   - no puede modificar `.github/workflows/` (su token sigue sin `workflow`: N5, sin cambios).
 
