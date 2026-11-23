@@ -30,6 +30,8 @@ Comprueba:
                 línea en la reconciliación del PR, con gravedad, prueba y resolución, y
                 descartar uno que debe corregirse o importante pide una prueba (`sdd-review`).
                 Las respuestas van en comentarios del PR: solo cuentan los de CUENTAS_G4.
+                VIC-47: falla si falta un comentario que «Revisión IA» enlaza (borrado) o si uno
+                de G4 se editó sin la línea `Comentario editado: <enlace> · <motivo>`.
   cambios       M8 (VIC-39): publica los commits que entraron tras la última ronda de G4, desde el
                 que vio cada revisor (`Commit revisado:` en su comentario), y falla si falta o si la
                 descripción trae esa lista escrita a mano.
@@ -42,7 +44,8 @@ Uso local:
     python3 .github/sdd/checks.py --base refs/remotes/origin/main
 Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta. PR_COMENTARIOS es la ruta
 de los comentarios del PR (`gh api --paginate …/issues/N/comments`); sin ella, el
-check de hallazgos solo lee la descripción.
+check de hallazgos solo lee la descripción. Los enlaces de «Revisión IA» a comentarios borrados
+solo se comprueban con GITHUB_SERVER_URL, GITHUB_REPOSITORY y GITHUB_REF (`refs/pull/N/merge`), como en la CI.
 
 Como hook `commit-msg` de lefthook, solo el formato del mensaje:
   python3 -I .github/sdd/checks.py --mensaje .git/COMMIT_EDITMSG
@@ -954,6 +957,13 @@ def gravedades_de_los_revisores(lineas: list[tuple[str, bool]],
 def comentarios_de_g4(ruta: str) -> list[tuple[str, str]] | None:
     """El enlace y el cuerpo de los comentarios del PR que escribieron las cuentas de CUENTAS_G4, de
     la salida de `gh api --paginate`: una lista por página, una detrás de otra. None si no se puede leer."""
+    leidos = comentarios_de_cuentas(ruta)
+    return None if leidos is None else [(c["html_url"], c["body"]) for c in leidos]
+
+
+def comentarios_de_cuentas(ruta: str) -> list[dict] | None:
+    """Los comentarios de CUENTAS_G4 tal como los da la API, con `html_url` como texto. None si no se
+    puede leer."""
     lector, paginas, i = json.JSONDecoder(), [], 0
     try:
         texto = Path(ruta).read_text(encoding="utf-8")
@@ -971,7 +981,7 @@ def comentarios_de_g4(ruta: str) -> list[tuple[str, str]] | None:
         # Sin usuario (una cuenta borrada) no es de CUENTAS_G4: se ignora, no se falla por él.
         usuario = c.get("user") if isinstance(c.get("user"), dict) else {}
         if usuario.get("login") in CUENTAS_G4 and isinstance(c.get("body"), str):
-            comentarios.append((str(c.get("html_url", "")), c["body"]))
+            comentarios.append({**c, "html_url": str(c.get("html_url", ""))})
     return comentarios
 
 
@@ -1039,6 +1049,54 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, s
         inf.error("hallazgos", f"los revisores dieron {', '.join(f'`{h}`' for h in faltan)} y la reconciliación no tiene su línea.")
     if preguntas:
         inf.aviso("hallazgos", f"hallazgos pendientes de la persona: {', '.join(f'`{h}`' for h in preguntas)}. Respóndelos antes de aprobar.")
+
+
+# --- Respuestas borradas o editadas (VIC-47) ------------------------------
+
+# Las respuestas las publica la misma cuenta que usa el agente: borrar o editar una saca sus hallazgos
+# del check sin que se note. Un comentario de G4 es uno de CUENTAS_G4 que la descripción enlaza en
+# «Revisión IA» o que trae un ID de revisor (`G4-1-A`, también en «Commit revisado») o «Métricas G4».
+RE_ENLACE_COMENTARIO = re.compile(r"#issuecomment-([1-9]\d*)\b")
+RE_ES_DE_G4 = re.compile(r"\bG4-[1-9]\d*-[A-Z]\b|^Métricas G4:", re.M)
+# La justificación de una edición, en «Revisión IA»: `Comentario editado: <enlace> · <motivo>`.
+RE_EDICION_JUSTIFICADA = re.compile(r"^\s*(?:[-*+]\s+)?Comentario editado:")
+
+
+def url_del_pr() -> str | None:
+    """La URL del PR en la CI, de las variables de GitHub (`refs/pull/N/merge` en un pull_request)."""
+    m = re.fullmatch(r"refs/pull/([1-9]\d*)/merge", os.environ.get("GITHUB_REF", ""))
+    servidor, repo = os.environ.get("GITHUB_SERVER_URL", ""), os.environ.get("GITHUB_REPOSITORY", "")
+    return f"{servidor}/{repo}/pull/{m.group(1)}" if m and servidor and repo else None
+
+
+def check_respuestas(inf: Informe, cuerpo_pr: str, comentarios: list[dict], url_pr: str | None) -> None:
+    lineas = [l for l, _ in lineas_visibles(seccion(cuerpo_pr, "Revisión IA"))[0]]
+    del_pr = re.compile(re.escape(url_pr) + RE_ENLACE_COMENTARIO.pattern) if url_pr else None
+    enlazados = {m.group(1) for l in lineas for m in (del_pr.finditer(l) if del_pr else ())}
+    por_id = {RE_ENLACE_COMENTARIO.search(c["html_url"]).group(1): c for c in comentarios
+              if RE_ENLACE_COMENTARIO.search(c["html_url"])}
+    for cid in sorted(enlazados - set(por_id), key=int):
+        inf.error("hallazgos", f"«Revisión IA» enlaza el comentario {url_pr}#issuecomment-{cid} y no está entre los de "
+                               f"{', '.join(CUENTAS_G4)}: ¿se borró? Una respuesta de G4 no se borra ni se edita; si hay que "
+                               "corregir algo, publica otro comentario (`sdd-review`).")
+    justificados = set()
+    for linea in lineas:
+        m = RE_EDICION_JUSTIFICADA.match(linea)
+        enlace, _, motivo = linea[m.end():].partition("·") if m else ("", "", "")
+        if motivo.strip() and (cid := RE_ENLACE_COMENTARIO.search(enlace)):
+            justificados.add(cid.group(1))
+    for cid, c in sorted(por_id.items(), key=lambda par: int(par[0])):
+        if cid not in enlazados and not RE_ES_DE_G4.search(c["body"]):
+            continue
+        # Sin fechas no se sabe si se editó: cuenta como editado.
+        creado, editado = c.get("created_at"), c.get("updated_at")
+        if isinstance(creado, str) and creado and creado == editado or cid in justificados:
+            continue
+        cuando = f"el {editado}" if isinstance(editado, str) and editado else "sin fechas en la API"
+        inf.error("hallazgos", f"el comentario de G4 {c['html_url']} se editó después de publicarse ({cuando}). Una respuesta "
+                               "de G4 no se edita: publica otro comentario. Si la edición es legítima (por ejemplo, solo el SHA "
+                               "de «Commit revisado»), justifícala en «Revisión IA» con la línea "
+                               "`Comentario editado: <enlace> · <motivo>`.")
 
 
 # --- Cambios tras la última ronda (M8, VIC-39) ----------------------------
@@ -1200,10 +1258,13 @@ def main() -> int:
     en_base = git("ls-tree", "--name-only", args.base, "--", LEFTHOOK_CONFIG)
     check_lefthook(inf, versionados, texto_lefthook, None if en_base is None else bool(en_base.strip()))
     ruta_comentarios = os.environ.get("PR_COMENTARIOS")
-    comentarios = comentarios_de_g4(ruta_comentarios) if ruta_comentarios else []
+    leidos = comentarios_de_cuentas(ruta_comentarios) if ruta_comentarios else []
+    comentarios = None if leidos is None else [(c["html_url"], c["body"]) for c in leidos]
     if comentarios is None:
         inf.error("hallazgos", "no he podido leer los comentarios del PR (PR_COMENTARIOS): sin ellos no se comprueban las respuestas de los revisores.")
     check_hallazgos(inf, cuerpo_pr, comentarios or [])
+    if leidos is not None:
+        check_respuestas(inf, cuerpo_pr, leidos, url_del_pr())
     check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr)
 
     partes = ["## Checks SDD", ""]
