@@ -113,27 +113,27 @@ Estado el 2026-11-22 (retrospectiva del bloque 4):
 
 Decisiones de Víctor del 2026-11-22, en el PR de la retrospectiva del bloque 4 (#62). Además, VIC-51 (las evaluaciones, condición para quitar el borrador en los PR de skills) va en el bloque 5, y VIC-50 (la evaluación semanal en rojo y los evaluadores que fallan una de cada tres, empezando por el rojo) va antes del bloque 6.
 
-**ADR-0009 del workflow (modifica P03, G6, N4 y ADR-0006):**
-- **Tu papel:**
-  - la entrevista y la spec (G1);
-  - las decisiones de producto y las lecturas de la spec (M15);
-  - la prueba final del producto donde hace falta una persona;
-  - publicar.
-- **El agente:**
-  - crea issues, planifica, implementa, revisa y reconcilia;
-  - **fusiona lo que no es sensible** (M24) cuando la CI y G4 están en verde.
-  - Tú apruebas solo specs, ADR, dependencias, CI, configuración del agente y rutas sensibles, con CODEOWNERS limitado a esas rutas y 0 aprobaciones generales en el ruleset.
-- **Escalera de confianza (M24):**
-  1. Primero, R0 y R1 que no toquen lo sensible.
-  2. Después, R2 que no toque rutas sensibles, si en las entregas medidas no se escapa ningún defecto.
-- **Dejar el chat:** el agente de WSL es el único sitio de trabajo.
-  - **Linear:** escritura por MCP, salvo *Ready* y *Done*, si así lo decides.
-  - **GitHub:** con `gh`, como ahora.
-  - **Fuente de verdad:** el repo, no el Project.
-  - **La app:** queda para el diseño visual y la exploración.
-- **M18:** lo que puede hacer Claude con el navegador, si se sigue usando, queda recogido en el mismo ADR.
-- **M4 y M20:** "Refs" por defecto con prueba manual; una sesión por PR también en entregas partidas, con el estado en `.tareas/`. Los subagentes se lanzan solo por un motivo explícito: explorar, verificar de forma independiente o relevar una sesión larga ("delegar por un motivo", de Gentle-AI).
-- **M28:** la plantilla de la issue de Linear lleva el contrato: alcance, fuera de alcance, cuándo está hecho, ficheros permitidos y qué hacer si se bloquea.
+**ADR-0009 del workflow** (`docs/adr/0009-papel-de-la-persona-y-autonomia-del-agente.md`, VIC-55): recoge las diez decisiones de Víctor del 2026-11-23 y lo ya aceptado aquí (tu papel, M4, M20 y M28). Modifica P03, G2, G6 y N4, la §8 de la línea base, ADR-0001 (M2), ADR-0003, ADR-0005 y ADR-0006. En corto:
+- **El agente fusiona** con auto-merge los PR R0 y R1 que no tocan rutas sensibles, con la CI y G4 en verde; solo en la calculadora. En `sdd-workflow` sigues aprobando tú.
+- **Tú apruebas** las rutas sensibles (specs, ADR, dependencias, `.github/`, `.claude/`, `AGENTS.md`, `CLAUDE.md` y los ficheros que gobiernan los controles), con CODEOWNERS en ellas y 0 aprobaciones generales. `README.md` deja de ser sensible.
+- **R2 no sensible:** ahora no; lo decides tras diez PR fusionados por el agente sin defectos escapados.
+- **Linear:** el agente crea, comenta y empieza issues; tú das un único visto bueno al diseño y a su lista de issues, y ya no mueves cada issue a *Ready*. Sustituye a «salvo *Ready* y *Done*».
+- **`.github/`** lo subes tú, con un script desde el clon limpio que comprueba el SHA-256. Las evaluaciones del plugin siguen siendo tuyas.
+- **Revisores desde otra cuenta:** en el bloque 7 (M34); el límite de VIC-47 queda aceptado hasta entonces.
+- **Segunda mirada (M18):** Claude, desde la app, repasa cada semana lo que el agente fusionó solo.
+- **El ADR no cambia ningún permiso por sí mismo:** hasta que se aplique cada issue de abajo, sigue en vigor lo de hoy.
+
+**Issues que salen del ADR-0009** (propuesta de VIC-55; las aprueba Víctor y se crean después, cada una con su contrato):
+
+| Issue | Qué hace | Riesgo | Quién la aplica |
+| --- | --- | --- | --- |
+| Ruleset y CODEOWNERS de la calculadora | 0 aprobaciones generales, CODEOWNERS en las rutas sensibles, auto-merge activado; el control que impide que un R2 no sensible se fusione solo; la validación que sustituye a N4 y N5 (ADR-0009 §5) | R2 | La persona (ruleset y `.github/`); el agente prepara y prueba |
+| Linear por MCP | Endpoint con escritura, `guarda-linear.py` y las skills: crear, comentar y empezar issues; el visto bueno único de G2 y el acto que lo aprueba (P03) | R2 | El agente; la persona cambia el MCP |
+| Script de `.github/` | La persona sube `.github/` desde el clon limpio, con el SHA-256 comprobado antes de empujar | R2 | El agente lo escribe; la persona lo usa |
+| M28 en la plantilla de issue | `docs/plantilla-issue-linear.md` con el contrato y la plantilla de Linear al día | R1 | El agente; la persona, en Linear |
+| M4 y M20 | «Refs» por defecto con prueba manual; una sesión por PR con el estado en `.tareas/`; subagentes solo por un motivo explícito, en las skills y `AGENTS.md` | R2 (plugin) | El agente |
+| Segunda mirada (M18) | Cómo repasa Claude, desde la app, cada semana lo que el agente fusionó solo, y cómo avisa a la persona | R1 | La persona la programa en la app; el agente escribe el encargo |
+| Entrega de prueba sin el chat | Una entrega completa de la calculadora sin copiar nada desde este chat, con el agente fusionando si es R0 o R1 no sensible | Según la entrega | El agente |
 
 **Hecho cuando:** el ADR-0009 está aceptado, el ruleset y CODEOWNERS de la calculadora están ajustados (eso lo haces tú) y una entrega completa pasa sin copiar nada desde este chat.
 
@@ -202,6 +202,6 @@ Aceptadas por Víctor el 2026-11-19, tras la retrospectiva del bloque 3, donde l
 4. **Coste en el contrato:** el "Hecho cuando" incluye el tiempo de espera de la CI por push si la entrega añade un job, y el tiempo del trozo más lento si toca los E2E.
 5. **Varias issues por bloque desde el principio,** cada una con su "Hecho cuando":
    - **Bloque 4:** formato de hallazgos y su check (reconciliación), diff calculado por la CI (M8), encargos del revisor (M13, M15, M1), revisor de mantenibilidad (M23) y la medición del coste. El revisor en la CI (M34, R2 con su ADR) pasó al bloque 7.
-   - **Bloque 5:** VIC-48 primero, para que las entregas queden medidas; el ADR-0009 del workflow solo, en su PR (con una línea "No confundir con el ADR-0009 de la calculadora"); después, ruleset y CODEOWNERS, M28 en la plantilla de issue y M4/M20, por separado.
+   - **Bloque 5:** VIC-48 primero, para que las entregas queden medidas; el ADR-0009 del workflow solo, en su PR (con una línea "No confundir con el ADR-0009 de la calculadora"; VIC-55); después, ruleset y CODEOWNERS, M28 en la plantilla de issue y M4/M20, por separado.
    - **Bloque 6:** una skill por issue.
    - **Bloque 7:** el ADR-0010 primero; la tabla de modelos, el piloto de OpenCode y el revisor en la CI (M34), aparte.
