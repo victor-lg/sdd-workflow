@@ -11,7 +11,7 @@ modifica:
   - "docs/linea-base-v1.md, G6: merge humano solo en las rutas sensibles, en R2 y en el repo del workflow (§3.1 a §3.4)"
   - "docs/linea-base-v1.md, N4: lo sustituye la validación de §5 cuando el agente pueda pedir el auto-merge; N5 se mantiene"
   - "docs/linea-base-v1.md, H02: el merge que pide el agente con auto-merge no lleva una identidad distinta de la suya; la aprobación es la de las reglas (§3.5)"
-  - "docs/linea-base-v1.md §8, modelo de identidades y reglas de main: el agente puede fusionar con auto-merge; 0 aprobaciones generales; CODEOWNERS en la lista de §3.3, sin README.md. Se mantienen los checks requeridos sobre el commit exacto y que cada push invalide las aprobaciones anteriores"
+  - "docs/linea-base-v1.md §8, modelo de identidades y reglas de main: el agente puede fusionar con auto-merge; 0 aprobaciones generales; CODEOWNERS en la lista de §3.3, que incluye toda la de controles de checks.py; README.md se queda hasta que las rutas sensibles del proyecto pasen a un fichero propio. Se mantienen los checks requeridos sobre el commit exacto y que cada push invalide las aprobaciones anteriores"
   - "ADR-0001, M2: el merge humano en rama protegida deja de ser el único mecanismo de aprobación, y las escrituras del agente en Linear dejan de estar deshabilitadas, con la aprobación de §3.6"
   - "ADR-0003 §3 y §6: el agente escribe en Linear (crea, comenta y empieza issues); Ready deja de moverlo la persona"
   - "ADR-0005 §1, §3 y §5: «sin permiso para fusionar», «PR obligatorio con una aprobación» y la validación N4"
@@ -66,7 +66,7 @@ resto sigue vigente y no se edita.
 
 1. **El agente fusiona sin la persona los PR R0 y R1 que no tocan rutas sensibles,** con la CI y G4 en verde (primer escalón de M24).
 2. **Empieza solo en la calculadora.** En `sdd-workflow` sigue aprobando la persona.
-3. **Rutas sensibles, que siempre aprueba la persona:** specs, ADR, dependencias, `.github/`, la configuración del agente (`.claude/`, `AGENTS.md`, `CLAUDE.md`) y los ficheros que gobiernan los controles (`stryker.config.json`, `knip.json`, `.jscpd.json`, `osv-scanner.toml`, `lefthook.json`). `README.md` sale de la lista de la línea base §8.
+3. **Rutas sensibles, que siempre aprueba la persona:** specs, ADR, dependencias, `.github/`, la configuración del agente (`.claude/`, `AGENTS.md`, `CLAUDE.md`) y los ficheros que gobiernan los controles (`stryker.config.json`, `knip.json`, `.jscpd.json`, `osv-scanner.toml`, `lefthook.json`).
 4. **Segundo escalón (R2 no sensible): ahora no.** Lo decide la persona tras diez PR fusionados por el agente sin ningún defecto escapado, con los datos de `sdd-metricas`.
 5. **Cómo fusiona:** con el auto-merge de GitHub, que solo fusiona si se cumplen las reglas. Ruleset con 0 aprobaciones generales y CODEOWNERS obligatorio en las rutas sensibles.
 6. **Linear:** el agente crea y comenta issues y las empieza él. La persona da un único visto bueno, al diseño (la spec) y a la lista de issues que sale de él; ya no mueve cada issue a *Ready*. Cambia lo que decía el plan («salvo *Ready* y *Done*»).
@@ -74,6 +74,13 @@ resto sigue vigente y no se edita.
 8. **Las evaluaciones del plugin siguen siendo de la persona** (`docs/convenciones.md` §5.1).
 9. **Revisores desde otra cuenta: ahora no.** Se resuelve en el bloque 7 con el revisor en la CI (M34), que publica con una identidad que el agente no puede editar. El límite de VIC-47 queda aceptado hasta entonces.
 10. **Segunda mirada (M18):** Claude, desde la app, repasa una vez por semana lo que el agente fusionó solo y avisa a la persona de lo que merezca su atención. En los PR sensibles, la persona puede pedirla cuando quiera.
+
+**Aclaraciones de Víctor del 2026-11-23, en la G4 del PR de este ADR:**
+
+- **Decisión 3, los ficheros de control:** los cinco nombrados son ejemplos, no una lista cerrada. CODEOWNERS cubre toda la lista de controles de `checks.py` (`R2_CONTROLES`), capturas de referencia incluidas. Hay una sola lista, la de `checks.py`.
+- **Decisión 3, `README.md`:** se queda en CODEOWNERS por ahora, porque en los proyectos es donde se declaran las rutas sensibles que `checks.py` sube a R2. Sale cuando esa declaración pase a un fichero propio que esté en CODEOWNERS.
+- **Decisión 1, R0:** un R0 se fusiona con la CI en verde y sin G4 solo si `checks.py` puede comprobar que es R0 (solo documentación). Si el R0 lo declara el agente y nada lo verifica, cuenta como R1 y lleva G4. **Hoy es el segundo caso:** `checks.py` no comprueba que un R0 sea solo documentación. Si un PR marcado R0 toca código, da un aviso, no un fallo (`check_riesgo`).
+- **La segunda mirada (decisión 10)** la monta Claude desde la app cuando el agente empiece a fusionar, sin issue propia.
 
 **Lo ya aceptado en el plan, que este ADR recoge sin decidir nada nuevo:**
 
