@@ -309,6 +309,7 @@ GH_FALSO = """#!/bin/bash
 # `gh api .../pulls/N --jq .head.sha` devuelve la siguiente cabeza de $CABEZAS_PR (la última se repite).
 echo "$*" >> "$LLAMADAS"
 if [ "$1" = api ] && [[ "$2" == */pulls/* ]]; then
+  [ -z "${PR_FALLA:-}" ] || { echo "HTTP 502" >&2; exit 1; }
   read -ra cabezas <<< "$CABEZAS_PR"
   k=$(cat "$RESPUESTAS/k" 2>/dev/null || echo 0); echo $((k + 1)) > "$RESPUESTAS/k"
   [ "$k" -lt "${#cabezas[@]}" ] || k=$((${#cabezas[@]} - 1))
@@ -422,10 +423,11 @@ class Relanzar(unittest.TestCase):
         self.assertEqual(self.relanzadas(llamadas), [])
 
     def test_si_no_puede_leer_la_cabeza_del_pr_falla(self):
-        for cabeza in ("''", "null", "$(id)"):
-            with self.subTest(cabeza=cabeza):
+        """También si la API falla (G4-5-A-01, G4-5-B-01): con el mensaje que pide relanzar a mano."""
+        for cabeza, falla in (("''", ""), ("null", ""), ("$(id)", ""), (CABEZA, "1")):
+            with self.subTest(cabeza=cabeza, falla=falla):
                 (self.respuestas / "k").unlink(missing_ok=True)
-                codigo, salida, llamadas = self.ejecutar([run(12)], CABEZAS_PR=cabeza)
+                codigo, salida, llamadas = self.ejecutar([run(12)], CABEZAS_PR=cabeza, PR_FALLA=falla)
                 self.assertEqual(codigo, 1, salida)
                 self.assertIn("::error::No pude leer la cabeza actual del PR", salida)
                 self.assertEqual(self.relanzadas(llamadas), [])

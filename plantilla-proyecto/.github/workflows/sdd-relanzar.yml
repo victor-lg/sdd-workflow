@@ -53,8 +53,9 @@ jobs:
       # última ejecución de `pull_request` del PR; si aún no hay ninguna de esa cabeza, la lista no se ha puesto
       # al día y espera. Si sigue en curso, espera a que termine: relanzarla antes podría dejar una que leyó las
       # reviews antes de esta. Luego la relanza siempre, aunque haya terminado después de la review: no se sabe
-      # cuándo las leyó. El relanzamiento no cancela ninguna ejecución en curso (`concurrency` de sdd.yml): si
-      # aun así relanza una que no es la más nueva, eso no cambia lo que toma el ruleset. Si GitHub rechaza el
+      # cuándo las leyó. El relanzamiento no cancela la ejecución en curso (`concurrency` de sdd.yml), aunque sí
+      # sustituye a la que espere en el grupo: si aun así relanza una que no es la más nueva, eso no cambia lo
+      # que toma el ruleset. Si GitHub rechaza el
       # relanzamiento (por ejemplo, porque otro acaba de pedirlo y la API aún no lo muestra en curso), vuelve a
       # buscar y lo reintenta hasta tres veces.
       - name: Volver a lanzar checks-sdd
@@ -82,7 +83,7 @@ jobs:
           limite=$((SECONDS + LIMITE))
           rechazos=0
           while :; do
-            cabeza_pr=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)
+            cabeza_pr=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha) || cabeza_pr=""
             if ! [[ "$cabeza_pr" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::No pude leer la cabeza actual del PR. $a_mano"; exit 1; fi
             if [ "$cabeza_pr" != "$PR_HEAD_SHA" ]; then
               echo "La cabeza del PR es ahora ${cabeza_pr:0:12}, no ${PR_HEAD_SHA:0:12}: hubo un push después de esta review y su ejecución ya lee las reviews. No relanzo nada."

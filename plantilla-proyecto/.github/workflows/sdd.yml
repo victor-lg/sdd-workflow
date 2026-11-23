@@ -31,8 +31,10 @@ permissions:
 # siguientes, de sdd-relanzar.yml o a mano) no cancela la que está en curso: espera a que termine (VIC-56).
 # Si cancelara, el relanzamiento de una ejecución vieja (sdd-relanzar todavía no veía la nueva) tumbaría la
 # más nueva, que es la que toma el ruleset, y el PR quedaría bloqueado con un checks-sdd cancelado
-# (calculadora-discos#87, casos 7 y 10). Un relanzamiento en espera sí lo sustituye cualquier ejecución que
-# entre después en el grupo: GitHub deja una sola en espera.
+# (calculadora-discos#87, casos 7 y 10). GitHub deja una sola en espera por grupo: la que entra en espera
+# cancela a la que ya esperaba, sea un relanzamiento o una ejecución nueva. Una ejecución nueva solo espera
+# mientras termina de cancelarse la que estaba en curso; si en ese momento entra un relanzamiento, la cancela
+# y el PR queda bloqueado (nunca abierto) hasta el siguiente evento.
 concurrency:
   group: sdd-${{ github.event.pull_request.number }}
   cancel-in-progress: ${{ github.run_attempt == 1 }}
