@@ -954,16 +954,10 @@ def gravedades_de_los_revisores(lineas: list[tuple[str, bool]],
     return gravedades
 
 
-def comentarios_de_g4(ruta: str) -> list[tuple[str, str]] | None:
-    """El enlace y el cuerpo de los comentarios del PR que escribieron las cuentas de CUENTAS_G4, de
-    la salida de `gh api --paginate`: una lista por página, una detrás de otra. None si no se puede leer."""
-    leidos = comentarios_de_cuentas(ruta)
-    return None if leidos is None else [(c["html_url"], c["body"]) for c in leidos]
-
-
 def comentarios_de_cuentas(ruta: str) -> list[dict] | None:
-    """Los comentarios de CUENTAS_G4 tal como los da la API, con `html_url` como texto. None si no se
-    puede leer."""
+    """Los comentarios del PR que escribieron las cuentas de CUENTAS_G4, tal como los da la API y con
+    `html_url` como texto, de la salida de `gh api --paginate`: una lista por página, una detrás de
+    otra. None si no se puede leer."""
     lector, paginas, i = json.JSONDecoder(), [], 0
     try:
         texto = Path(ruta).read_text(encoding="utf-8")
@@ -998,6 +992,10 @@ def campos_de_hallazgo(campos: str) -> tuple[str, str, str] | None:
     if "·" in gravedad:
         return None
     return gravedad, resto[prueba.end():resoluciones[-1].start()], resto[resoluciones[-1].end():]
+
+
+def enlaces_y_cuerpos(comentarios: list[dict]) -> list[tuple[str, str]]:
+    return [(c["html_url"], c["body"]) for c in comentarios]
 
 
 def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, str]] = ()) -> None:
@@ -1061,7 +1059,7 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, s
 # desde otra cuenta: es decisión del ADR-0009 del workflow (bloque 5).
 RE_ENLACE_COMENTARIO = re.compile(r"#issuecomment-([1-9]\d*)\b")
 RE_ES_DE_G4 = re.compile(r"\bG4-[1-9]\d*-[A-Z]\b|^Métricas G4:", re.M)
-# La justificación de una edición, en «Revisión IA»: `Comentario editado: <enlace> · <motivo>`.
+# La justificación de una edición, en «Revisión IA» y fuera de <details>: `Comentario editado: <enlace> · <motivo>`.
 RE_EDICION_JUSTIFICADA = re.compile(r"^\s*(?:[-*+]\s+)?Comentario editado:")
 
 
@@ -1073,18 +1071,19 @@ def url_del_pr() -> str | None:
 
 
 def check_respuestas(inf: Informe, cuerpo_pr: str, comentarios: list[dict], url_pr: str | None) -> None:
-    lineas = [l for l, _ in lineas_visibles(seccion(cuerpo_pr, "Revisión IA"))[0]]
+    lineas, _ = lineas_visibles(seccion(cuerpo_pr, "Revisión IA"))
     del_pr = re.compile(re.escape(url_pr) + RE_ENLACE_COMENTARIO.pattern) if url_pr else None
-    enlazados = {m.group(1) for l in lineas for m in (del_pr.finditer(l) if del_pr else ())}
+    enlazados = {m.group(1) for l, _ in lineas for m in (del_pr.finditer(l) if del_pr else ())}
     por_id = {RE_ENLACE_COMENTARIO.search(c["html_url"]).group(1): c for c in comentarios
               if RE_ENLACE_COMENTARIO.search(c["html_url"])}
     for cid in sorted(enlazados - set(por_id), key=int):
         inf.error("hallazgos", f"«Revisión IA» enlaza el comentario {url_pr}#issuecomment-{cid} y no está entre los de "
                                f"{', '.join(CUENTAS_G4)}: ¿se borró? Una respuesta de G4 no se borra ni se edita; si hay que "
                                "corregir algo, publica otro comentario (`sdd-review`).")
+    # La justificación se ve sin desplegar nada, como las líneas de la reconciliación.
     justificados = set()
-    for linea in lineas:
-        m = RE_EDICION_JUSTIFICADA.match(linea)
+    for linea, plegada in lineas:
+        m = None if plegada else RE_EDICION_JUSTIFICADA.match(linea)
         enlace, _, motivo = linea[m.end():].partition("·") if m else ("", "", "")
         if motivo.strip() and (cid := RE_ENLACE_COMENTARIO.search(enlace)):
             justificados.add(cid.group(1))
@@ -1262,7 +1261,7 @@ def main() -> int:
     check_lefthook(inf, versionados, texto_lefthook, None if en_base is None else bool(en_base.strip()))
     ruta_comentarios = os.environ.get("PR_COMENTARIOS")
     leidos = comentarios_de_cuentas(ruta_comentarios) if ruta_comentarios else []
-    comentarios = None if leidos is None else [(c["html_url"], c["body"]) for c in leidos]
+    comentarios = None if leidos is None else enlaces_y_cuerpos(leidos)
     if comentarios is None:
         inf.error("hallazgos", "no he podido leer los comentarios del PR (PR_COMENTARIOS): sin ellos no se comprueban las respuestas de los revisores.")
     check_hallazgos(inf, cuerpo_pr, comentarios or [])

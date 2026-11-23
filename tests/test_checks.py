@@ -1034,7 +1034,8 @@ class TestHallazgosEnComentarios(unittest.TestCase):
         # Como `gh api --paginate`: una lista por página, una detrás de otra.
         texto = contenido if isinstance(contenido, str) else "\n".join(json.dumps(p) for p in contenido)
         ruta.write_text(texto, encoding="utf-8")
-        return checks.comentarios_de_g4(str(ruta))
+        leidos = checks.comentarios_de_cuentas(str(ruta))
+        return None if leidos is None else checks.enlaces_y_cuerpos(leidos)
 
     def test_respuesta_en_comentario_exige_su_linea(self):
         for respuesta in ("### G4-1-A-01 · importante\n\n- **Dónde:** x", "- **G4-1-A-01** · importante",
@@ -1091,13 +1092,17 @@ class TestHallazgosEnComentarios(unittest.TestCase):
         for contenido in ("", " \n", "{", "{}", "[]{}", "[] x", "[1]", '[["x"]]'):
             with self.subTest(contenido=contenido):
                 self.assertIsNone(self.leer(contenido))
-        self.assertIsNone(checks.comentarios_de_g4(str(pathlib.Path(self.tmp.name) / "no-existe.json")))
+        self.assertIsNone(checks.comentarios_de_cuentas(str(pathlib.Path(self.tmp.name) / "no-existe.json")))
 
 class TestRespuestasBorradasOEditadas(unittest.TestCase):
     """VIC-47: la cuenta del agente no puede anular una respuesta de G4 borrándola ni editándola."""
 
     URL = "https://github.com/o/r/pull/1"
     RESPUESTA = "### G4-1-A-01 · importante\n\nCommit revisado: G4-1-A · " + "a" * 40
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
 
     def comprobar(self, comentarios, *lineas, url=URL):
         return ejecutar(checks.check_respuestas, reconciliacion(*lineas), comentarios, url)
@@ -1116,8 +1121,13 @@ class TestRespuestasBorradasOEditadas(unittest.TestCase):
         self.assertIn(f"enlaza el comentario {self.URL}#issuecomment-2 y no está", inf.errores[0])
 
     def test_enlace_a_comentario_de_otra_cuenta_falla(self):
-        """Solo se leen los de CUENTAS_G4: uno de otra cuenta enlazado cuenta como borrado."""
-        self.assertEqual(len(self.comprobar([], self.enlace()).errores), 2)
+        """Solo se leen los de CUENTAS_G4: uno de otra cuenta enlazado cuenta como borrado (G4-1-B-03)."""
+        ruta = pathlib.Path(self.tmp.name) / "comentarios.json"
+        ruta.write_text(json.dumps([comentario(self.RESPUESTA), comentario("Reconciliación", login="intruso", n=2)]),
+                        encoding="utf-8")
+        inf = self.comprobar(checks.comentarios_de_cuentas(str(ruta)), self.enlace())
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn(f"enlaza el comentario {self.URL}#issuecomment-2 y no está", inf.errores[0])
 
     def test_enlaces_de_otro_pr_o_escondidos_no_cuentan(self):
         """Una aclaración puede enlazar la respuesta de la persona en otro PR; lo que no se ve no es enlace."""
@@ -1164,6 +1174,16 @@ class TestRespuestasBorradasOEditadas(unittest.TestCase):
                       f"Comentario editado: {self.URL}#issuecomment-3 · x"):
             with self.subTest(linea=linea):
                 errores = self.comprobar([c], linea).errores
+                self.assertEqual(sum("issuecomment-1 se editó" in e for e in errores), 1, errores)
+
+    def test_justificacion_plegada_no_vale(self):
+        """G4-1-B-01: plegada, la persona no la ve al aprobar."""
+        c = comentario(self.RESPUESTA, editado="2026-11-20T11:00:00Z")
+        linea = f"Comentario editado: {self.URL}#issuecomment-1 · x"
+        for envoltura in (f"<details><summary>x</summary>\n\n{linea}\n\n</details>",
+                          f"<details>\n<summary>x</summary>\n<details>\n\n{linea}\n\n</details>\n</details>"):
+            with self.subTest(envoltura=envoltura):
+                errores = self.comprobar([c], envoltura).errores
                 self.assertEqual(sum("issuecomment-1 se editó" in e for e in errores), 1, errores)
 
     def test_justificacion_fuera_de_revision_ia_no_vale(self):
