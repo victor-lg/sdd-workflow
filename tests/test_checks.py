@@ -1075,6 +1075,8 @@ class TestAprobacionR2(unittest.TestCase):
     def test_cuenta_la_ultima_decisiva(self):
         casos = (([review("APPROVED", CABEZA, n=1), review("CHANGES_REQUESTED", CABEZA, n=2)], "pide cambios"),
                  ([review("APPROVED", CABEZA, n=1), review("DISMISSED", CABEZA, n=2)], "se retiró"),
+                 # Retirar un «changes requested» no recupera una aprobación anterior: falla cerrado.
+                 ([review("APPROVED", CABEZA, n=1), review("DISMISSED", CABEZA, n=2)], "se retiró (dismiss)"),
                  # Por id y no por el orden de la lista.
                  ([review("APPROVED", CABEZA, n=5), review("CHANGES_REQUESTED", CABEZA, n=3)], None),
                  ([review("CHANGES_REQUESTED", CABEZA, n=1), review("APPROVED", CABEZA, n=2)], None))

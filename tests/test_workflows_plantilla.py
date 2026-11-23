@@ -212,6 +212,16 @@ class BaseConEtiqueta(unittest.TestCase):
         self.assertEqual(codigo, 0, salida)
         self.assertEqual((self.temporal / "sdd" / "checks.py").read_text(), "# main\n")
 
+    def test_sdd_falla_si_la_base_no_es_main(self):
+        """VIC-56, G4-1-B-01: pull_request_review no admite `branches`; una review en un PR contra otra rama
+        no puede dejar un `checks-sdd` en verde con el checks.py de esa rama."""
+        self.git("branch", "tmp")
+        self.git("update-ref", "refs/remotes/origin/tmp", "tmp")
+        codigo, salida = self.ejecutar("sdd.yml", "Tomar los checks de la rama base", base_ref="tmp")
+        self.assertNotEqual(codigo, 0, salida)
+        self.assertIn("::error::La base del PR es tmp, no main", salida)
+        self.assertFalse((self.temporal / "sdd" / "checks.py").exists())
+
     def test_sdd_pasa_a_checks_py_la_rama_remota(self):
         """En lugar de checks.py, uno que escribe sus argumentos: así se ve qué base le llega."""
         (self.temporal / "sdd").mkdir()

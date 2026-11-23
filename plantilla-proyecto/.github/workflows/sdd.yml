@@ -18,7 +18,10 @@ on:
     types: [opened, edited, synchronize, reopened, ready_for_review]
   # Aprobar o retirar una aprobación vuelve a lanzar los checks: en R2, `checks-sdd` solo pasa con
   # la aprobación de la persona sobre el último commit (VIC-56, ADR-0009 §3.4). Sin `branches`:
-  # pull_request_review no lo admite; la base se comprueba en el paso que toma checks.py.
+  # pull_request_review no lo admite. Por eso el paso que toma checks.py falla si la base no es
+  # `main`: si no, una review en un PR contra otra rama correría con el checks.py de esa rama y
+  # dejaría un `checks-sdd` en verde sobre el mismo commit. No con un `if:` en el job: un job
+  # saltado cuenta como superado en el check requerido.
   pull_request_review:
     types: [submitted, dismissed]
 
@@ -52,10 +55,12 @@ jobs:
 
       # Los checks se ejecutan con la versión de `main`, no con la del PR:
       # así un PR no puede debilitar sus propios checks.
-      # Fuera de un pull_request no hay github.base_ref y BASE se queda en "refs/remotes/origin/".
+      # Fuera de un PR, la base del evento está vacía y BASE se queda en "refs/remotes/origin/".
+      # La rama protegida es `main`: con otra base (una review en un PR contra otra rama) falla.
       - name: Tomar los checks de la rama base
         run: |
           if [ -z "${BASE#refs/remotes/origin/}" ]; then echo "::error::Sin rama base: sdd.yml solo corre en pull_request y pull_request_review"; exit 1; fi
+          if [ "$BASE" != "refs/remotes/origin/main" ]; then echo "::error::La base del PR es ${BASE#refs/remotes/origin/}, no main: checks-sdd solo vale en los PR contra main"; exit 1; fi
           git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           mkdir -p "$RUNNER_TEMP/sdd"
           git show "$BASE:.github/sdd/checks.py" > "$RUNNER_TEMP/sdd/checks.py"

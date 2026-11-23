@@ -1233,7 +1233,7 @@ def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
     ultima = max(suyas, key=lambda r: r["id"])
     if ultima["state"] != "APPROVED":
         return False, {"CHANGES_REQUESTED": "la última review de la persona pide cambios",
-                       "DISMISSED": "la última aprobación de la persona se retiró"}[ultima["state"]]
+                       "DISMISSED": "la última review de la persona se retiró (dismiss)"}[ultima["state"]]
     if ultima.get("commit_id") != cabeza:
         return False, f"la persona aprobó `{str(ultima.get('commit_id'))[:12]}` y la cabeza es `{cabeza[:12]}`"
     return True, f"aprobado por {ultima['user']['login']} en `{cabeza[:12]}`"
