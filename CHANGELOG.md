@@ -8,7 +8,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - **Informe de solo lectura** (G4-1-B-01 de #64): el paso falla si el informe no se puede escribir.
   - **Medida:** «CPU del runner» imprime también el modelo de CPU; el paso Stryker deja, después del token, un aviso `MEDIDA` con `nproc`, los mutantes por tiempo y la puntuación contándolos como supervivientes.
   - **Informe falso escribible con Stryker sin descriptores** (sospecha del revisor B del #77, confirmada con `prlimit`): el paso falla si la salida de Stryker trae un error del reporter json.
-  - **El log, por descriptor:** tee escribe en `/dev/fd/5` y los grep leen de ahí, así que un `stryker.log` limpio en la ruta no esconde el error. Matar a tee ya hacía fallar el paso (medido): sin defensa nueva.
+  - **El log, por descriptor:** tee escribe en `/dev/fd/5` y los grep leen de ahí, así que un `stryker.log` limpio en la ruta no esconde el error; si grep no puede leerlo, el paso falla (G4 de #66). Matar a tee ya hacía fallar el paso (medido): sin defensa nueva.
   - **Límites aceptados:** un proceso vivo, el `sudo` del runner y cualquier otra forma de engañar al paso desde el mismo usuario, junto a `__STRYKER_ACTIVE_MUTANT__`.
   - **Tests** en `tests/test_calidad_plantilla.py`, con Stryker real y con un Stryker falso. La calculadora queda distinta hasta el siguiente PR de VIC-53 allí.
 

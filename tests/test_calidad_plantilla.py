@@ -312,7 +312,8 @@ import { spawnSync } from "node:child_process";
 // Un test de la rama que ataca el paso Stryker (VIC-53). Con el mutante activo, deja un informe falso
 // con 7 Killed y hace los ataques de ATAQUES: nofile (baja con prlimit el límite de ficheros abiertos
 // del proceso principal de Stryker, que se llama `stryker`), log (cambia $RUNNER_TEMP/stryker.log por
-// uno vacío) y tee (mata al tee del paso). Apunta en MARCAS lo que ha hecho.
+// uno vacío), chmod (le quita todos los permisos al log, el mismo fichero que el descriptor 5) y tee
+// (mata al tee del paso). Apunta en MARCAS lo que ha hecho.
 const padre = (pid) => Number(fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /, "").split(" ")[1]);
 const marca = (texto) => fs.appendFileSync(process.env.MARCAS, `${texto}\n`);
 
@@ -340,6 +341,10 @@ test("ataca el paso", () => {
     fs.unlinkSync(log);
     fs.writeFileSync(log, "");
     marca("log");
+  }
+  if (ataques.includes("chmod")) {
+    fs.chmodSync(path.join(process.env.RUNNER_TEMP, "stryker.log"), 0);
+    marca("chmod");
   }
   if (ataques.includes("tee")) {
     for (const otro of fs.readdirSync("/proc").filter((d) => /^\d+$/.test(d))) {
@@ -523,6 +528,7 @@ class StrykerEnLaCi(unittest.TestCase):
         self.assertIn("Final mutation score of 100.00 is greater than or equal to break threshold 80", texto)
         self.assertRegex(texto, r"An error occurred during 'wrapUp' on reporter 'json'\. Error: EMFILE")
         self.assertIn("::error::Stryker no ha podido escribir el informe JSON (el error del reporter json", texto)
+        self.assertNotIn("Puntuación contándolos como supervivientes", texto)  # el falso ni se cuenta
         self.assertNotIn("MEDIDA", texto)
 
     @unittest.skipUnless(shutil.which("prlimit"), "sin prlimit en el PATH")
@@ -537,12 +543,25 @@ class StrykerEnLaCi(unittest.TestCase):
         self.assertIn("::error::Stryker no ha podido escribir el informe JSON (el error del reporter json", texto)
 
     @unittest.skipUnless(shutil.which("prlimit"), "sin prlimit en el PATH")
+    def test_un_log_que_no_se_puede_leer_hace_fallar_el_paso(self):
+        """G4-1-B-01 de sdd-workflow#66: el mismo ataque, y además el test le quita los permisos a
+        $RUNNER_TEMP/stryker.log, el mismo fichero que el descriptor 5. grep no puede leerlo y sale con 2;
+        si eso contara como «sin el error», el paso saldría con 0 (medido). Falla cerrado."""
+        estado, texto, hecho = self.tapar_y_dejar_informe_falso(ataques=("nofile", "chmod"))
+        self.assertEqual(hecho, {"informe", "nofile", "chmod"})
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::No se ha podido leer el log de Stryker", texto)
+        self.assertNotIn("Puntuación contándolos como supervivientes", texto)  # el falso ni se cuenta
+        self.assertNotIn("MEDIDA", texto)
+
+    @unittest.skipUnless(shutil.which("prlimit"), "sin prlimit en el PATH")
     def test_matar_a_tee_hace_fallar_el_paso(self):
         """VIC-53, descartado sin defensa nueva: si un test mata a tee, el estado de la tubería es el de
         tee (137) y `bash -e`, la shell por defecto del runner, corta el paso. Stryker sale con 1 (EPIPE)."""
         estado, texto, hecho = self.tapar_y_dejar_informe_falso(ataques=("nofile", "tee"))
         self.assertEqual(hecho, {"informe", "nofile", "tee"})
         self.assertEqual(estado, 137, texto)
+        self.assertRegex(texto, r"Exit 1\s+node_modules/\.bin/stryker run")  # el aviso de bash sobre la tubería
         self.assertNotIn("MEDIDA", texto)
 
     def test_la_alarma_lee_el_informe_de_stryker(self):

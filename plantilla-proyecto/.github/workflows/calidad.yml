@@ -156,7 +156,8 @@ jobs:
       #   dejar un informe falso que sí se puede escribir; Stryker anota EMFILE y sale con 0;
       # - el log de Stryker se abre en el descriptor 5 antes de lanzarlo (Stryker no lo
       #   hereda: `5>&-`); tee escribe en /dev/fd/5 y los grep leen de ahí, no de la ruta: un
-      #   test puede borrar $RUNNER_TEMP/stryker.log y dejar otro sin el error (VIC-53).
+      #   test puede borrar $RUNNER_TEMP/stryker.log y dejar otro sin el error (VIC-53). Si
+      #   grep no puede leerlo (un test le quita los permisos), falla (G4 de sdd-workflow#66).
       #   Un test que mate a tee ya hace fallar el paso: sin pipefail, la tubería sale con el
       #   estado de tee y `bash -e` corta (medido en VIC-53).
       # Ficheros y sustituciones salen del código de la rama: se imprimen entre stop-commands,
@@ -204,16 +205,22 @@ jobs:
           exec 5> "$RUNNER_TEMP/stryker.log"
           node_modules/.bin/stryker run "$RUNNER_TEMP/stryker.config.json" --force --reporters clear-text,json 5>&- 2>&1 | tee /dev/fd/5
           estado=${PIPESTATUS[0]}
+          # grep sale con 0 si encuentra la línea, con 1 si no y con 2 si no puede leer el log (un
+          # test puede quitarle los permisos): solo el 1 deja seguir (falla cerrado, G4 de #66).
+          error_json=0
+          /usr/bin/grep -Eq "An error occurred during '[^']+' on reporter 'json'" /dev/fd/5 || error_json=$?
+          nan=0
+          /usr/bin/grep -q "Final mutation score of NaN" /dev/fd/5 || nan=$?
           alarma=0
           medida=
           solo_lectura=0
-          error_json=0
           if [ -f "$informe" ] && [ ! -w "$informe" ]; then
             # Stryker no ha podido escribir encima: el informe que hay no es el suyo.
             solo_lectura=1
-          elif /usr/bin/grep -Eq "An error occurred during '[^']+' on reporter 'json'" /dev/fd/5; then
-            # Stryker no ha podido escribir el informe y sale como si nada: el que haya no es el suyo.
-            error_json=1
+          elif [ "$error_json" -ne 1 ]; then
+            # Stryker no ha podido escribir el informe y sale como si nada (o el log no se puede
+            # leer): el que haya no es el suyo.
+            :
           elif [ -f "$informe" ]; then
             { medida=$(/usr/bin/python3 -I -c '
           import json, os, sys
@@ -248,14 +255,17 @@ jobs:
           if [ "$solo_lectura" -eq 1 ]; then
             echo "::error::El informe JSON de Stryker ($informe) no se puede escribir: Stryker no ha podido dejar el suyo, así que el que hay lo ha dejado otro proceso (un test, por ejemplo) y no se cuenta"; exit 1
           fi
-          if [ "$error_json" -eq 1 ]; then
+          if [ "$error_json" -gt 1 ] || [ "$nan" -gt 1 ]; then
+            echo "::error::No se ha podido leer el log de Stryker ($RUNNER_TEMP/stryker.log; grep salió con $error_json y $nan): sin él no se sabe si Stryker ha escrito el informe, y no se cuenta"; exit 1
+          fi
+          if [ "$error_json" -eq 0 ]; then
             echo "::error::Stryker no ha podido escribir el informe JSON (el error del reporter json, en su salida, arriba) y no falla por eso: el que haya en $informe no es el suyo y no se cuenta"; exit 1
           fi
           # Números que calcula este paso, no texto de la rama (VIC-53).
           if [[ "$cpus" =~ ^[0-9]+$ && "$medida" =~ ^([0-9]+)\ ([0-9]+)\ ([0-9]+)\ ([0-9]+\.[0-9]{2})$ ]]; then
             echo "::notice title=MEDIDA::nproc $cpus, mutantes por tiempo ${BASH_REMATCH[1]}, puntuación contándolos como supervivientes ${BASH_REMATCH[2]}/${BASH_REMATCH[3]} = ${BASH_REMATCH[4]}"
           fi
-          if /usr/bin/grep -q "Final mutation score of NaN" /dev/fd/5; then
+          if [ "$nan" -eq 0 ]; then
             echo "::error::Stryker no ha probado ningún mutante: revisa mutate en stryker.config.json"; exit 1
           fi
           if [ ! -f "$informe" ]; then
