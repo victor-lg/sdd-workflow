@@ -1329,6 +1329,12 @@ def main() -> int:
     check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr)
     ruta_reviews = os.environ.get("PR_REVIEWS")
     cabeza = os.environ.get("PR_HEAD_SHA") or (git("rev-parse", "HEAD") or "").strip()
+    # En `pull_request_review`, el merge que prueba GitHub (HEAD) puede ser anterior a un push reciente:
+    # los checks verían el contenido viejo y la aprobación se compararía con la cabeza nueva. Sin la
+    # cabeza en la historia de HEAD, nada de lo de arriba es fiable.
+    if os.environ.get("PR_HEAD_SHA") and git("merge-base", "--is-ancestor", cabeza, "HEAD") is None:
+        inf.error("aprobacion", f"la cabeza del PR (`{cabeza[:12]}`) no está en la historia del commit que se prueba: "
+                                "GitHub aún no ha recalculado el merge tras el último push. Vuelve a lanzar `checks-sdd`.")
     check_aprobacion(inf, nivel, leer_paginas(ruta_reviews) if ruta_reviews else None, cabeza)
 
     partes = ["## Checks SDD", ""]

@@ -1074,9 +1074,11 @@ class TestAprobacionR2(unittest.TestCase):
 
     def test_cuenta_la_ultima_decisiva(self):
         casos = (([review("APPROVED", CABEZA, n=1), review("CHANGES_REQUESTED", CABEZA, n=2)], "pide cambios"),
-                 ([review("APPROVED", CABEZA, n=1), review("DISMISSED", CABEZA, n=2)], "se retiró"),
-                 # Retirar un «changes requested» no recupera una aprobación anterior: falla cerrado.
+                 # Retirar la aprobación o un «changes requested» posterior: la API deja esa review como
+                 # DISMISSED con el mismo id, y no se recupera la aprobación anterior (falla cerrado).
                  ([review("APPROVED", CABEZA, n=1), review("DISMISSED", CABEZA, n=2)], "se retiró (dismiss)"),
+                 ([review("APPROVED", CABEZA, n=1), review("DISMISSED", CABEZA, n=2),
+                   review("COMMENTED", CABEZA, n=3)], "se retiró (dismiss)"),
                  # Por id y no por el orden de la lista.
                  ([review("APPROVED", CABEZA, n=5), review("CHANGES_REQUESTED", CABEZA, n=3)], None),
                  ([review("CHANGES_REQUESTED", CABEZA, n=1), review("APPROVED", CABEZA, n=2)], None))
@@ -1685,6 +1687,13 @@ class TestPuntaAPunta(unittest.TestCase):
         r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]')
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("`vendor/lib` (submódulo", r.stdout)
+
+    def test_cabeza_fuera_de_la_historia_falla(self):
+        """VIC-56 (sospecha de G4-2-B): en pull_request_review el merge que se prueba puede ser anterior al
+        último push; si la cabeza del PR no está en su historia, los checks verían el contenido viejo."""
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', PR_HEAD_SHA="f" * 40)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("no está en la historia del commit que se prueba", r.stdout)
 
     def test_pr_de_dependabot(self):
         """Ni convenciones, ni formato de los commits, ni AC; el riesgo, R2 aunque no lo marque, y por eso

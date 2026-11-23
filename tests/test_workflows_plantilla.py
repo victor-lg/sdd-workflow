@@ -62,6 +62,14 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         self.assertIn("  BASE: refs/remotes/origin/${{ github.event.pull_request.base.ref }}\n", texto)
         self.assertIn("PR_BRANCH: ${{ github.event.pull_request.head.ref }}", texto)
 
+    def test_sdd_una_ejecucion_por_pr(self):
+        """VIC-56, G4-2-B-01: con dos eventos sobre el mismo commit, una ejecución vieja en verde no tapa una
+        nueva en rojo porque comparten grupo por número de PR (no por evento) y la nueva cancela la vieja."""
+        texto = leer("sdd.yml")
+        self.assertIn("concurrency:\n  group: sdd-${{ github.event.pull_request.number }}\n"
+                      "  cancel-in-progress: true\n", texto)
+        self.assertNotIn("event_name", texto)
+
     def test_sdd_pasa_las_reviews_a_checks_py(self):
         """VIC-56: todas las páginas, en el fichero que lee checks.py para el check `aprobacion`."""
         texto = leer("sdd.yml")
