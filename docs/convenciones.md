@@ -126,7 +126,7 @@ Solo en el repo del workflow. Un PR que toca `plugin-sdd/skills/`, `plugin-sdd/a
     ```
 
     Lanzada fuera del clon, falla en el primer paso: `git fetch` no encuentra el repo (`fatal: not a git repository`) y no se evalúa nada. Por eso la orden empieza ahora por `cd`.
-  - `--no-publish` deja los informes en local (`results/` del worktree, que Git ignora). `--trust-plugin` va siempre en las órdenes locales.
+  - `--no-publish` deja los informes en local, en `plugin-sdd/evals/results/` del worktree, que Git ignora (es donde están los de ejecuciones anteriores en el clon). `--trust-plugin` va siempre en las órdenes locales.
   - Al terminar, desde el clon: `git worktree remove ../sdd-pr-<N>`. Los informes se borran con él, así que el resultado se anota antes. Si hay que repetirlas, primero se quita el worktree, o `worktree add` falla.
 - **El resultado va en el PR** antes de `gh pr ready`, en «Validación»: la versión del plugin, el commit evaluado y una línea por caso, que pasa o falla, con una nota si falla o si el evaluador da ruido. El commit evaluado tiene que ser el último del PR: si después entra otro que toca esas rutas, se repiten.
 - **Quién las lanza:** la persona, mientras el sandbox del agente no llegue a la API. El agente deja la orden y no quita el borrador hasta que el resultado esté anotado. Un caso que falla cuenta como una CI en rojo: se corrige o se explica, y decide la persona.
