@@ -52,23 +52,23 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
 
     def test_sdd_solo_en_un_pr(self):
         """Fuera de un PR, la base está vacía: el paso que toma checks.py falla (BaseConEtiqueta). VIC-56:
-        también al aprobar o retirar una aprobación."""
+        no con `pull_request_review`; al aprobar, sdd-relanzar.yml vuelve a lanzar la de `pull_request`
+        (con dos eventos, el ruleset exige en verde la última de cada uno y la de `pull_request` bloqueaba)."""
         texto = leer("sdd.yml")
-        self.assertEqual(disparadores(texto), {"pull_request", "pull_request_review"})
-        self.assertIn("  pull_request_review:\n    types: [submitted, dismissed]\n", texto)
-        # En pull_request_review, github.base_ref y github.head_ref están vacíos: se leen del evento.
+        self.assertEqual(disparadores(texto), {"pull_request"})
+        self.assertIn("  pull_request:\n    branches: [main]\n", texto)
+        # La base y la rama, del evento: es lo que se repite al volver a lanzar una ejecución.
         self.assertNotIn("${{ github.base_ref }}", texto)
         self.assertNotIn("${{ github.head_ref }}", texto)
         self.assertIn("  BASE: refs/remotes/origin/${{ github.event.pull_request.base.ref }}\n", texto)
         self.assertIn("PR_BRANCH: ${{ github.event.pull_request.head.ref }}", texto)
 
     def test_sdd_una_ejecucion_por_pr(self):
-        """VIC-56, G4-2-B-01 y G4-3-B-01: los dos eventos comparten grupo por número de PR (no por evento),
-        así que una ejecución nueva cancela la que siga en curso, y nunca hay dos a la vez con datos distintos.
-        Esto no basta para que una ejecución vieja ya terminada en verde no tape una nueva en rojo: eso
-        depende de que el ruleset tome la ejecución más reciente de `checks-sdd` sobre el commit, y de que
-        cada ejecución lea las reviews en el momento (no del evento). Lo primero se comprueba en la
-        calculadora (#72), no aquí."""
+        """VIC-56, G4-2-B-01 y G4-3-B-01: un grupo por número de PR, así que una ejecución nueva (o una vuelta
+        a lanzar) cancela la que siga en curso, y nunca hay dos a la vez con datos distintos. Que una verde
+        vieja no tape una roja nueva depende de que el ruleset tome la última ejecución de `pull_request`
+        (comprobado en la calculadora, sdd-workflow#72) y de que cada ejecución lea las reviews en el
+        momento, no del evento."""
         texto = leer("sdd.yml")
         self.assertIn("concurrency:\n  group: sdd-${{ github.event.pull_request.number }}\n"
                       "  cancel-in-progress: true\n", texto)
@@ -225,8 +225,8 @@ class BaseConEtiqueta(unittest.TestCase):
         self.assertEqual((self.temporal / "sdd" / "checks.py").read_text(), "# main\n")
 
     def test_sdd_falla_si_la_base_no_es_main(self):
-        """VIC-56, G4-1-B-01: pull_request_review no admite `branches`; una review en un PR contra otra rama
-        no puede dejar un `checks-sdd` en verde con el checks.py de esa rama."""
+        """VIC-56, G4-1-B-01: un PR contra otra rama no puede dejar un `checks-sdd` en verde con el checks.py
+        de esa rama. `branches: [main]` ya lo evita; esta es la segunda barrera."""
         self.git("branch", "tmp")
         self.git("update-ref", "refs/remotes/origin/tmp", "tmp")
         codigo, salida = self.ejecutar("sdd.yml", "Tomar los checks de la rama base", base_ref="tmp")

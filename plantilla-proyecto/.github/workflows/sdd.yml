@@ -16,14 +16,11 @@ on:
     # "edited" vuelve a lanzar los checks cuando cambia el título o la
     # descripción del PR (nivel de riesgo, AC cubiertos o `Fixes`).
     types: [opened, edited, synchronize, reopened, ready_for_review]
-  # Aprobar o retirar una aprobación vuelve a lanzar los checks: en R2, `checks-sdd` solo pasa con
-  # la aprobación de la persona sobre el último commit (VIC-56, ADR-0009 §3.4). Sin `branches`:
-  # pull_request_review no lo admite. Por eso el paso que toma checks.py falla si la base no es
-  # `main`: si no, una review en un PR contra otra rama correría con el checks.py de esa rama y
-  # dejaría un `checks-sdd` en verde sobre el mismo commit. No con un `if:` en el job: un job
-  # saltado cuenta como superado en el check requerido.
-  pull_request_review:
-    types: [submitted, dismissed]
+  # Aprobar o retirar una aprobación no lanza este workflow: lo hace sdd-relanzar.yml, que vuelve a
+  # lanzar la última ejecución de `pull_request` de la cabeza (VIC-56, ADR-0009 §3.4). El ruleset
+  # exige en verde la última ejecución de `checks-sdd` de cada evento: con una ejecución propia de
+  # `pull_request_review`, la de `pull_request` se quedaba en rojo tras aprobar y bloqueaba el PR
+  # (prueba en la calculadora, sdd-workflow#72). Así decide un solo evento.
 
 permissions:
   contents: read
@@ -37,7 +34,7 @@ concurrency:
 env:
   # checks.py sale de aquí y compara con esto. Con la ref completa: `origin/main` resolvería
   # antes una etiqueta llamada así (refs/tags/origin/main), que puede empujar la rama.
-  # Del evento y no de github.base_ref, que en pull_request_review está vacío.
+  # Del evento: al volver a lanzar una ejecución (sdd-relanzar.yml), es el mismo que la primera vez.
   BASE: refs/remotes/origin/${{ github.event.pull_request.base.ref }}
   # Git no sustituye objetos con refs/replace al leer la historia.
   GIT_NO_REPLACE_OBJECTS: "1"
@@ -56,10 +53,11 @@ jobs:
       # Los checks se ejecutan con la versión de `main`, no con la del PR:
       # así un PR no puede debilitar sus propios checks.
       # Fuera de un PR, la base del evento está vacía y BASE se queda en "refs/remotes/origin/".
-      # La rama protegida es `main`: con otra base (una review en un PR contra otra rama) falla.
+      # La rama protegida es `main`: con otra base falla. `branches: [main]` ya lo evita; esto es una
+      # segunda barrera por si el disparador cambia.
       - name: Tomar los checks de la rama base
         run: |
-          if [ -z "${BASE#refs/remotes/origin/}" ]; then echo "::error::Sin rama base: sdd.yml solo corre en pull_request y pull_request_review"; exit 1; fi
+          if [ -z "${BASE#refs/remotes/origin/}" ]; then echo "::error::Sin rama base: sdd.yml solo corre en pull_request"; exit 1; fi
           if [ "$BASE" != "refs/remotes/origin/main" ]; then echo "::error::La base del PR es ${BASE#refs/remotes/origin/}, no main: checks-sdd solo vale en los PR contra main"; exit 1; fi
           git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           mkdir -p "$RUNNER_TEMP/sdd"
@@ -76,6 +74,7 @@ jobs:
         run: gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" > "$RUNNER_TEMP/sdd/comentarios.json"
 
       # Las reviews del PR: en R2, checks.py busca la aprobación de la persona sobre la cabeza (VIC-56).
+      # Se leen en cada ejecución, no del evento: por eso basta con volver a lanzarla (sdd-relanzar.yml).
       - name: Reviews del PR
         env:
           GH_TOKEN: ${{ github.token }}

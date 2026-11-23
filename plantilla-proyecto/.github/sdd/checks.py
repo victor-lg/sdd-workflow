@@ -38,8 +38,8 @@ Comprueba:
   aprobacion    VIC-56 (ADR-0009 §3.4): un PR R2 (el mayor entre el nivel marcado y el que exige lo
                 tocado) falla salvo que la última review de PERSONAS sea una aprobación del commit de
                 la cabeza. Las reviews llegan en PR_REVIEWS (`gh api --paginate …/pulls/N/reviews`).
-  cabeza        VIC-56: falla si PR_HEAD_SHA no está en la historia del commit que se prueba (en
-                `pull_request_review`, el merge de GitHub puede ser anterior a un push reciente).
+  cabeza        VIC-56: falla si PR_HEAD_SHA no está en la historia del commit que se prueba (el merge
+                de GitHub puede ser anterior a un push reciente).
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -1223,7 +1223,8 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
 # ADR-0009 §3.4 y §5: el agente no fusiona solo un PR R2, toque o no rutas de CODEOWNERS. `checks-sdd`
 # falla en todo R2 hasta que la persona lo aprueba en GitHub, sobre el commit de la cabeza: un push
 # posterior la deja sin valor. Solo cuenta la review de estas cuentas, nunca la del agente (CUENTAS_G4
-# incluye la suya). `sdd.yml` se lanza también con `pull_request_review` y pasa las reviews en PR_REVIEWS.
+# incluye la suya). `sdd.yml` pasa las reviews en PR_REVIEWS, leídas en cada ejecución; al aprobar o retirar
+# una aprobación, `sdd-relanzar.yml` vuelve a lanzar su última ejecución de `pull_request`.
 # Por `user.id` y no por login: si la cuenta cambiara de nombre, otra podría registrar el libre, y en un
 # repo público cualquiera envía reviews. El login solo sirve para los mensajes.
 # Id de una cuenta: `gh api users/<login> --jq .id`.
@@ -1252,12 +1253,14 @@ def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
 
 
 def check_cabeza(inf: Informe, cabeza: str) -> None:
-    """En `pull_request_review`, el merge que prueba GitHub (HEAD) puede ser anterior a un push reciente:
-    los checks verían el contenido viejo y la aprobación se compararía con la cabeza nueva. Sin la cabeza
-    del PR en la historia de HEAD, ningún check es fiable, sea cual sea el nivel."""
+    """El merge que prueba GitHub (HEAD) puede ser anterior a un push reciente, por ejemplo en un `edited`
+    lanzado justo después: los checks verían el contenido viejo y la aprobación se compararía con la
+    cabeza nueva. Sin la cabeza del PR en la historia de HEAD, ningún check es fiable, sea cual sea el
+    nivel. Volver a lanzar la ejecución no lo arregla: repite el mismo merge (sdd-relanzar.yml también)."""
     if git("merge-base", "--is-ancestor", cabeza, "HEAD") is None:
         inf.error("cabeza", f"la cabeza del PR (`{cabeza[:12]}`) no está en la historia del commit que se prueba: "
-                            "GitHub aún no ha recalculado el merge tras el último push. Vuelve a lanzar `checks-sdd`.")
+                            "GitHub no había recalculado el merge tras el último push. Volver a lanzar esta ejecución "
+                            "prueba el mismo merge: edita la descripción del PR para que se lance una nueva.")
 
 
 def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str | None) -> None:
@@ -1272,7 +1275,7 @@ def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str
     if not aprobado:
         inf.error("aprobacion", f"PR R2: {motivo}. Un R2 solo se fusiona con la aprobación de "
                                 f"{', '.join(f'`{p}`' for p in PERSONAS.values())} sobre el último commit (ADR-0009 §3.4); "
-                                "al aprobar, este check se vuelve a lanzar solo.")
+                                "al aprobar, este check se vuelve a lanzar solo (en un PR de un fork, a mano).")
 
 
 # --- Programa -------------------------------------------------------------
