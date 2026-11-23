@@ -96,7 +96,7 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
                       "  cancel-in-progress: false\n", texto)
         script, _ = paso(texto, "Volver a lanzar checks-sdd", "main")
         self.assertNotIn("${{", script)
-        self.assertIn('actions/workflows/sdd.yml/runs?event=pull_request&head_sha=$PR_HEAD_SHA', script)
+        self.assertIn('actions/workflows/sdd.yml/runs?event=pull_request&per_page=100', script)
 
     def test_la_tarea_mensual_no_se_llama_como_un_check_requerido(self):
         texto = leer("osv-mensual.yml")
@@ -301,8 +301,6 @@ class SinOrigenAbreviado(unittest.TestCase):
                         self.assertNotRegex(linea, r"(?<!refs/remotes/)origin/")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 GH_FALSO = """#!/bin/bash
@@ -313,7 +311,9 @@ if [ "$1" = api ]; then
   if [ -e "$RESPUESTAS/$((n + 1))" ]; then n=$((n + 1)); echo $n > "$RESPUESTAS/n"; fi
   cat "$RESPUESTAS/$n"
 elif [ "$1 $2" = "run rerun" ]; then
-  exit "${RERUN_FALLA:-0}"
+  # Falla las primeras $RERUN_FALLA veces.
+  f=$(cat "$RESPUESTAS/fallos" 2>/dev/null || echo 0); echo $((f + 1)) > "$RESPUESTAS/fallos"
+  [ "$f" -ge "${RERUN_FALLA:-0}" ]
 fi
 """
 
@@ -354,14 +354,27 @@ class Relanzar(unittest.TestCase):
     def relanzadas(self, llamadas):
         return [l for l in llamadas if l.startswith("run rerun")]
 
-    def test_relanza_la_ultima_del_pr_y_la_cabeza(self):
-        """Ni la de otro PR, ni la de otra cabeza, ni la de otro evento, aunque sean más nuevas."""
-        codigo, salida, llamadas = self.ejecutar([run(10), run(12), run(20, pr=8), run(21, cabeza="b" * 40),
-                                                  run(22, evento="pull_request_review"), run(11)])
+    def test_relanza_la_ultima_del_pr(self):
+        """Ni la de otro PR ni la de otro evento, aunque sean más nuevas."""
+        codigo, salida, llamadas = self.ejecutar([run(10), run(12), run(20, pr=8), run(22, evento="pull_request_review"),
+                                                  run(21, pr=None), run(11)])
         self.assertEqual(codigo, 0, salida)
         self.assertEqual(self.relanzadas(llamadas), ["run rerun 12 --repo victor-lg/proyecto"])
-        self.assertIn(f"repos/victor-lg/proyecto/actions/workflows/sdd.yml/runs?event=pull_request&head_sha={CABEZA}",
+        self.assertIn("api repos/victor-lg/proyecto/actions/workflows/sdd.yml/runs?event=pull_request&per_page=100",
                       llamadas[0])
+
+    def test_si_la_ultima_es_de_otra_cabeza_no_relanza(self):
+        """G4-4-B-02: hubo un push tras la review. Relanzar la ejecución vieja cancelaría la de la cabeza nueva
+        (mismo grupo de `concurrency`), y esa ya lee las reviews. También si se ve mientras espera."""
+        for respuestas in ([[run(12), run(13, "in_progress", cabeza="b" * 40)]],
+                           [[run(12, "in_progress")], [run(12), run(13, "queued", cabeza="b" * 40)]]):
+            with self.subTest(respuestas=len(respuestas)):
+                (self.respuestas / "n").unlink(missing_ok=True)
+                self.llamadas.write_text("")
+                codigo, salida, llamadas = self.ejecutar(*respuestas)
+                self.assertEqual(codigo, 0, salida)
+                self.assertIn("hubo un push después de esta review", salida)
+                self.assertEqual(self.relanzadas(llamadas), [])
 
     def test_espera_a_que_termine_la_que_sigue_en_curso(self):
         """Podría haber leído las reviews antes de esta: se relanza al terminar, no antes."""
@@ -391,13 +404,23 @@ class Relanzar(unittest.TestCase):
         codigo, salida, llamadas = self.ejecutar([run(12)], PR_HEAD_REPO="otro/proyecto")
         self.assertEqual(codigo, 1, salida)
         self.assertIn("::error::El PR viene de un fork", salida)
-        self.assertIn("Relánzalo a mano", salida)
+        self.assertIn("Relánzala a mano", salida)
+        self.assertIn("checks-sdd conserva el resultado de antes de esta review", salida)
         self.assertEqual(llamadas, [])
 
     def test_si_github_no_deja_relanzar_pide_hacerlo_a_mano(self):
-        codigo, salida, llamadas = self.ejecutar([run(12)], RERUN_FALLA="1")
+        """Tras tres rechazos; y avisa de que mientras tanto vale el resultado anterior (G4-4-B-01)."""
+        codigo, salida, llamadas = self.ejecutar([run(12)], RERUN_FALLA="3")
         self.assertEqual(codigo, 1, salida)
+        self.assertEqual(len(self.relanzadas(llamadas)), 3)
         self.assertIn("::error::GitHub no me deja relanzar la ejecución 12 de checks-sdd. Relánzala a mano", salida)
+        self.assertIn("checks-sdd conserva el resultado de antes de esta review", salida)
+
+    def test_un_rechazo_se_reintenta(self):
+        """Otro relanzamiento recién pedido que la API aún no muestra en curso: se vuelve a buscar y se espera."""
+        codigo, salida, llamadas = self.ejecutar([run(12)], [run(12, "in_progress")], [run(12)], RERUN_FALLA="1")
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(self.relanzadas(llamadas), ["run rerun 12 --repo victor-lg/proyecto"] * 2)
 
     def test_con_otra_base_no_hace_nada(self):
         codigo, salida, llamadas = self.ejecutar([run(12)], PR_BASE="desarrollo")
@@ -411,3 +434,7 @@ class Relanzar(unittest.TestCase):
                 self.assertEqual(codigo, 1, salida)
                 self.assertIn("no tienen el formato esperado", salida)
                 self.assertEqual(llamadas, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
