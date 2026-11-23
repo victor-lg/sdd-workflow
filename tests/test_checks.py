@@ -739,11 +739,28 @@ class TestHallazgos(unittest.TestCase):
                     self.assertEqual(len(inf.errores), 1)
                     self.assertIn("se descarta sin prueba", inf.errores[0])
 
-    def test_pregunta_a_la_persona_pasa_y_avisa(self):
-        inf = self.comprobar("- G4-1-A-01 · debe corregirse · prueba: x · resolución: pregunta a la persona")
+    def test_pregunta_a_la_persona_falla(self):
+        """VIC-56, regla 2: un hallazgo que espera a la persona no deja fusionar el PR."""
+        for gravedad in ("debe corregirse", "importante", "menor"):
+            with self.subTest(gravedad=gravedad):
+                inf = self.comprobar(f"- G4-1-A-01 · {gravedad} · prueba: x · resolución: pregunta a la persona")
+                self.assertEqual(len(inf.errores), 1)
+                self.assertIn("pendientes de la persona: `G4-1-A-01`", inf.errores[0])
+                self.assertEqual(inf.avisos, [])
+
+    def test_pregunta_contestada_pasa(self):
+        """VIC-56, regla 2: cuando la persona contesta, la resolución cambia y el check pasa."""
+        inf = self.comprobar(
+            "- G4-1-A-01 · importante · prueba: x · resolución: corregido en 1a2b3c4",
+            "- G4-1-A-02 · importante · prueba: y · resolución: descartado: respuesta de la persona en el PR")
         self.assertEqual(inf.errores, [])
-        self.assertEqual(len(inf.avisos), 1)
-        self.assertIn("`G4-1-A-01`", inf.avisos[0])
+
+    def test_varias_preguntas_un_solo_error(self):
+        inf = self.comprobar(
+            "- G4-1-A-01 · importante · prueba: x · resolución: pregunta a la persona",
+            "- G4-1-B-01 · menor · prueba: y · resolución: pregunta a la persona")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("`G4-1-A-01`, `G4-1-B-01`", inf.errores[0])
 
     def test_formato_roto_falla(self):
         for linea in ("- G4-1-A-01 debe corregirse, corregido en 1a2b3c4",
@@ -981,10 +998,14 @@ class TestHallazgos(unittest.TestCase):
 
     def test_resolucion_sin_distinguir_mayusculas(self):
         """G4-1-A-04."""
-        for resolucion in ("Corregido en 1a2b3c4", "Descartado: x", "Pregunta a la persona"):
+        for resolucion in ("Corregido en 1a2b3c4", "Descartado: x"):
             with self.subTest(resolucion=resolucion):
                 inf = self.comprobar(f"- G4-1-A-01 · importante · prueba: x · resolución: {resolucion}")
                 self.assertEqual(inf.errores, [])
+        # Reconocida en mayúsculas: es una pregunta pendiente, no una resolución desconocida.
+        inf = self.comprobar("- G4-1-A-01 · importante · prueba: x · resolución: Pregunta a la persona")
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("pendientes de la persona", inf.errores[0])
 
     def test_bloque_de_codigo_sin_cerrar_falla(self):
         """G4-1-A-01: lo que sigue a una cerca suelta no se comprobaría."""
