@@ -4,6 +4,11 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Un PR R2 solo pasa con la aprobación de la persona sobre su último commit (VIC-56, PR 2 de 4).** ADR-0009 §3.4 y §5: el agente no fusiona solo un R2, toque o no rutas de CODEOWNERS.
+  - **`checks.py`:** check nuevo `aprobacion`. En un PR R2 (el mayor entre el nivel marcado y el que exige lo tocado: marcar R1 no lo esquiva) falla salvo que la última review decisiva de `PERSONAS` (`victor-lg`) sea *Approve* sobre el SHA de la cabeza. No cuentan la cuenta del agente, otras cuentas ni los comentarios de review. Un *changes requested* o una aprobación retirada posteriores, o un push después de aprobar, lo devuelven a rojo. Sin reviews legibles, un R2 falla.
+  - **`sdd.yml`:** se lanza también con `pull_request_review` (`submitted` y `dismissed`), descarga `pulls/N/reviews` y pasa la ruta en `PR_REVIEWS`. La base y la rama salen del evento (`github.event.pull_request.base.ref` y `head.ref`), porque `github.base_ref` y `github.head_ref` están vacíos en `pull_request_review`.
+  - En la calculadora, 29 de los últimos 40 PR fusionados eran R2: cada uno pide ahora una *Approve* formal en GitHub antes de fusionar, además del merge.
+
 - **ADR-0009 del workflow: el papel de la persona y la autonomía del agente (VIC-55).** Recoge las diez decisiones de Víctor del 2026-11-23 y lo ya aceptado en el plan (tu papel, M4, M20 y M28). No confundir con el ADR-0009 de la calculadora.
   - **El agente fusiona** con auto-merge los PR R0 y R1 de la calculadora que no tocan rutas sensibles, con la CI y G4 en verde. La persona aprueba las rutas sensibles (CODEOWNERS sobre toda la lista de controles de `checks.py` y, por ahora, `README.md`; 0 aprobaciones generales). Un R0 va sin G4 solo si `checks.py` comprueba que es solo documentación; hoy no lo hace, así que cuenta como R1. En `sdd-workflow` sigue aprobando la persona.
   - **Linear:** el agente crea, comenta y empieza issues; la persona da un único visto bueno al diseño y a su lista de issues.

@@ -1017,6 +1017,106 @@ def comentario(cuerpo: str, login: str = "victor-lg-bot", n: int = 1,
             "created_at": "2026-11-20T10:00:00Z", "updated_at": editado}
 
 
+def review(estado: str, commit: str, login: str = "victor-lg", n: int = 1) -> dict:
+    return {"id": n, "user": {"login": login}, "state": estado, "commit_id": commit}
+
+
+CABEZA = "c" * 40
+
+
+class TestAprobacionR2(unittest.TestCase):
+    """VIC-56, regla 4 (ADR-0009 §3.4): un R2 solo pasa con la aprobación de la persona sobre la cabeza."""
+
+    def comprobar(self, reviews, nivel="R2", cabeza=CABEZA):
+        inf = checks.Informe()
+        checks.check_aprobacion(inf, nivel, reviews, cabeza)
+        return inf
+
+    def test_r2_aprobado_en_la_cabeza_pasa(self):
+        inf = self.comprobar([review("APPROVED", CABEZA)])
+        self.assertEqual(inf.errores, [])
+        self.assertIn("aprobado por victor-lg", inf.secciones[0])
+
+    def test_r2_sin_reviews_falla(self):
+        inf = self.comprobar([])
+        self.assertEqual(len(inf.errores), 1)
+        self.assertIn("**aprobacion:** PR R2: no hay ninguna review de la persona", inf.errores[0])
+
+    def test_r0_y_r1_no_la_piden(self):
+        for nivel in ("R0", "R1"):
+            with self.subTest(nivel=nivel):
+                inf = self.comprobar(None, nivel=nivel)
+                self.assertEqual((inf.errores, inf.secciones), ([], []))
+
+    def test_solo_cuenta_la_persona(self):
+        """Ni la cuenta del agente ni otra cualquiera: el repo es público y aprueba cualquiera con permiso."""
+        for login in ("victor-lg-bot", "otra", "Victor-lg", ""):
+            with self.subTest(login=login):
+                inf = self.comprobar([review("APPROVED", CABEZA, login=login)])
+                self.assertIn("no hay ninguna review de la persona", inf.errores[0])
+        inf = self.comprobar([{"id": 1, "user": None, "state": "APPROVED", "commit_id": CABEZA}])
+        self.assertEqual(len(inf.errores), 1)
+
+    def test_un_comentario_de_review_no_aprueba(self):
+        for estado in ("COMMENTED", "PENDING", "approved", ""):
+            with self.subTest(estado=estado):
+                inf = self.comprobar([review(estado, CABEZA)])
+                self.assertIn("no hay ninguna review de la persona", inf.errores[0])
+
+    def test_un_comentario_despues_no_quita_la_aprobacion(self):
+        inf = self.comprobar([review("APPROVED", CABEZA, n=1), review("COMMENTED", CABEZA, n=2)])
+        self.assertEqual(inf.errores, [])
+
+    def test_aprobacion_de_un_commit_anterior_falla(self):
+        """Un push después de aprobar la deja sin valor."""
+        inf = self.comprobar([review("APPROVED", "a" * 40)])
+        self.assertIn("la persona aprobó `aaaaaaaaaaaa` y la cabeza es `cccccccccccc`", inf.errores[0])
+
+    def test_cuenta_la_ultima_decisiva(self):
+        casos = (([review("APPROVED", CABEZA, n=1), review("CHANGES_REQUESTED", CABEZA, n=2)], "pide cambios"),
+                 ([review("APPROVED", CABEZA, n=1), review("DISMISSED", CABEZA, n=2)], "se retiró"),
+                 # Por id y no por el orden de la lista.
+                 ([review("APPROVED", CABEZA, n=5), review("CHANGES_REQUESTED", CABEZA, n=3)], None),
+                 ([review("CHANGES_REQUESTED", CABEZA, n=1), review("APPROVED", CABEZA, n=2)], None))
+        for reviews, error in casos:
+            with self.subTest(reviews=reviews):
+                inf = self.comprobar(reviews)
+                if error:
+                    self.assertEqual(len(inf.errores), 1)
+                    self.assertIn(error, inf.errores[0])
+                else:
+                    self.assertEqual(inf.errores, [])
+
+    def test_sin_id_falla_cerrado(self):
+        inf = self.comprobar([{"user": {"login": "victor-lg"}, "state": "APPROVED", "commit_id": CABEZA}])
+        self.assertIn("no tiene id", inf.errores[0])
+
+    def test_sin_reviews_o_sin_cabeza_falla_en_r2(self):
+        for reviews, cabeza in ((None, CABEZA), ([review("APPROVED", CABEZA)], "")):
+            with self.subTest(reviews=reviews, cabeza=cabeza):
+                inf = self.comprobar(reviews, cabeza=cabeza)
+                self.assertIn("no he podido leer las reviews", inf.errores[0])
+
+    def test_nivel_efectivo_de_check_riesgo(self):
+        """El mayor entre el marcado y el mínimo: marcar R1 en un R2 no esquiva la aprobación."""
+        cuerpo = "## Nivel de riesgo\n\n- [x] {}\n"
+        casos = (("R1", ["src/a.js"], "R1"), ("R2", ["src/a.js"], "R2"), ("R1", ["package.json"], "R2"),
+                 (None, ["package.json"], "R2"))
+        for marcado, cambiados, nivel in casos:
+            with self.subTest(marcado=marcado, cambiados=cambiados):
+                texto = cuerpo.format(marcado) if marcado else ""
+                self.assertEqual(checks.check_riesgo(checks.Informe(), texto, cambiados, None, None, {}, {}), nivel)
+
+    def test_lee_varias_paginas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = pathlib.Path(tmp) / "reviews.json"
+            ruta.write_text(json.dumps([review("CHANGES_REQUESTED", CABEZA, n=1)]) + "\n"
+                            + json.dumps([review("APPROVED", CABEZA, n=2)]), encoding="utf-8")
+            self.assertEqual(len(checks.leer_paginas(str(ruta))), 2)
+            ruta.write_text("{}", encoding="utf-8")
+            self.assertIsNone(checks.leer_paginas(str(ruta)))
+
+
 class TestHallazgosEnComentarios(unittest.TestCase):
     """PR 2 de VIC-38: las respuestas de los revisores van en comentarios del PR, y solo cuentan los
     de las cuentas autorizadas (CUENTAS_G4)."""
@@ -1585,7 +1685,8 @@ class TestPuntaAPunta(unittest.TestCase):
         self.assertIn("`vendor/lib` (submódulo", r.stdout)
 
     def test_pr_de_dependabot(self):
-        """Ni convenciones, ni formato de los commits, ni AC; el riesgo, R2 aunque no lo marque."""
+        """Ni convenciones, ni formato de los commits, ni AC; el riesgo, R2 aunque no lo marque, y por eso
+        pide la aprobación de la persona (VIC-56)."""
         self.git("switch", "-q", "-c", "dependabot/npm_and_yarn/lodash-4.17.21", "main")
         (self.repo / "package.json").write_text('{"dependencies": {"lodash": "4.17.21"}}\n', encoding="utf-8")
         self.git("add", "package.json")
@@ -1593,7 +1694,11 @@ class TestPuntaAPunta(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-m",
                         "chore(deps): bump lodash from 4.17.15 to 4.17.21 in the npm group across 1 directory"],
                        check=True, env={**ENTORNO_GIT, **bot})
-        entorno = {**ENTORNO_GIT, "PR_BRANCH": "dependabot/npm_and_yarn/lodash-4.17.21",
+        cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                                text=True, env=ENTORNO_GIT).stdout.strip()
+        reviews = self.repo / "reviews.json"
+        reviews.write_text(json.dumps([review("APPROVED", cabeza)]), encoding="utf-8")
+        entorno = {**ENTORNO_GIT, "PR_BRANCH": "dependabot/npm_and_yarn/lodash-4.17.21", "PR_REVIEWS": str(reviews),
                    "PR_TITLE": "chore(deps): bump lodash from 4.17.15 to 4.17.21",
                    "PR_BODY": "Bumps [lodash](https://github.com/lodash/lodash) from 4.17.15 to 4.17.21.",
                    "PR_AUTHOR": "dependabot[bot]"}
@@ -1603,9 +1708,10 @@ class TestPuntaAPunta(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertIn("PR de Dependabot", r.stdout)
         self.assertIn("**R2**", r.stdout)
+        sin_aprobar = correr(PR_REVIEWS=str(self.repo / "no-existe.json"))
+        self.assertEqual(sin_aprobar.returncode, 1, sin_aprobar.stdout)
+        self.assertIn("**aprobacion:** PR R2", sin_aprobar.stdout)
         # Como en la CI: HEAD es el merge que prueba GitHub y la cabeza del PR llega aparte.
-        cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
-                                text=True, env=ENTORNO_GIT).stdout.strip()
         self.git("switch", "-q", "--detach", "main")
         self.git("merge", "-q", "--no-ff", "--no-edit", cabeza)
         r = correr(PR_HEAD_SHA=cabeza)

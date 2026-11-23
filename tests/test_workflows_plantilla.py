@@ -51,8 +51,23 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         self.assertIn("PR_COMENTARIOS: ${{ runner.temp }}/sdd/comentarios.json", texto)
 
     def test_sdd_solo_en_un_pr(self):
-        """Fuera de un PR, github.base_ref está vacío: el paso que toma checks.py falla (BaseConEtiqueta)."""
-        self.assertEqual(disparadores(leer("sdd.yml")), {"pull_request"})
+        """Fuera de un PR, la base está vacía: el paso que toma checks.py falla (BaseConEtiqueta). VIC-56:
+        también al aprobar o retirar una aprobación."""
+        texto = leer("sdd.yml")
+        self.assertEqual(disparadores(texto), {"pull_request", "pull_request_review"})
+        self.assertIn("  pull_request_review:\n    types: [submitted, dismissed]\n", texto)
+        # En pull_request_review, github.base_ref y github.head_ref están vacíos: se leen del evento.
+        self.assertNotIn("${{ github.base_ref }}", texto)
+        self.assertNotIn("${{ github.head_ref }}", texto)
+        self.assertIn("  BASE: refs/remotes/origin/${{ github.event.pull_request.base.ref }}\n", texto)
+        self.assertIn("PR_BRANCH: ${{ github.event.pull_request.head.ref }}", texto)
+
+    def test_sdd_pasa_las_reviews_a_checks_py(self):
+        """VIC-56: todas las páginas, en el fichero que lee checks.py para el check `aprobacion`."""
+        texto = leer("sdd.yml")
+        self.assertIn('gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/reviews?per_page=100" > '
+                      '"$RUNNER_TEMP/sdd/reviews.json"', texto)
+        self.assertIn("PR_REVIEWS: ${{ runner.temp }}/sdd/reviews.json", texto)
 
     def test_la_tarea_mensual_no_se_llama_como_un_check_requerido(self):
         texto = leer("osv-mensual.yml")
@@ -113,7 +128,8 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
 
 def paso(texto, nombre, base_ref):
     """El script del paso con ese nombre y su entorno (el `env:` del workflow y el del paso), con
-    `${{ github.base_ref }}` sustituido por base_ref. El resto de expresiones `${{ }}` se quedan fuera."""
+    `${{ github.base_ref }}` y `${{ github.event.pull_request.base.ref }}` sustituidos por base_ref. El resto
+    de expresiones `${{ }}` se quedan fuera."""
     bloque = re.search(rf"\n      - name: {re.escape(nombre)}\n((?:        .*\n|\n)*)", texto).group(1)
     varios = re.search(r"^        run: \|\n((?:          .*\n|\n)+)", bloque, re.M)
     script = textwrap.dedent(varios.group(1)) if varios else re.search(r"^        run: (.+)$", bloque, re.M).group(1)
@@ -123,7 +139,9 @@ def paso(texto, nombre, base_ref):
         lineas += m.group(1) if m else ""
     entorno = {}
     for clave, valor in re.findall(r"^ +([A-Z_]+): (.+)$", lineas, re.M):
-        valor = valor.replace("${{ github.base_ref }}", base_ref).strip('"')
+        for base in ("${{ github.base_ref }}", "${{ github.event.pull_request.base.ref }}"):
+            valor = valor.replace(base, base_ref)
+        valor = valor.strip('"')
         if "${{" not in valor:
             entorno[clave] = valor
     return script, entorno
@@ -208,7 +226,7 @@ class BaseConEtiqueta(unittest.TestCase):
         self.resuelve_a_main(re.search(r'add_argument\("--base", default="([^"]+)"', texto).group(1))
 
     def test_sdd_sin_rama_base_falla_con_un_error_claro(self):
-        """Fuera de pull_request no hay github.base_ref: nunca se toma checks.py de otro sitio."""
+        """Fuera de un PR no hay base: nunca se toma checks.py de otro sitio."""
         codigo, salida = self.ejecutar("sdd.yml", "Tomar los checks de la rama base", base_ref="")
         self.assertNotEqual(codigo, 0, salida)
         self.assertIn("::error::Sin rama base: sdd.yml solo corre en pull_request", salida)
