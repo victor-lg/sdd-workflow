@@ -1,7 +1,7 @@
 ---
 id: ADR-0009
 titulo: El papel de la persona y la autonomía del agente
-estado: Propuesto
+estado: Aceptado
 fecha: 2026-11-23
 sustituye: null
 sustituido_por: null
@@ -28,7 +28,9 @@ referencias:
 <!--
 Redactado por Claude (VIC-55) con las diez decisiones que Víctor tomó el 2026-11-23, recogidas
 tal cual en §3. Las partes que cambia de otros ADR y de la línea base están en `modifica`; el
-resto sigue vigente y no se edita.
+resto sigue vigente y no se edita. Revisado en G4 en el PR #70: dos revisores por ronda, tres
+rondas. Las respuestas de Víctor durante la revisión están en §3 («Aclaraciones»). Aceptado con
+el merge del PR #70.
 -->
 
 > No confundir con el ADR-0009 de la calculadora (`calculadora-discos`, «la espera antes de axe…»): cada repo numera sus ADR por separado.
@@ -58,7 +60,9 @@ resto sigue vigente y no se edita.
 
 ### Opción C: el agente fusiona todo lo que no toque rutas sensibles, R2 incluido
 
-- Inconvenientes: salta un escalón sin datos; en R2 hay dos revisores, pero no una persona.
+- Ventajas: más PR fusionados sin esperar a la persona.
+- Inconvenientes: salta un escalón sin datos.
+- Riesgos: un defecto de un R2 llega a `main` con dos revisores, pero sin una persona que lo lea.
 
 ## 3. Decisión
 
@@ -85,7 +89,7 @@ resto sigue vigente y no se edita.
 **Lo ya aceptado en el plan, que este ADR recoge sin decidir nada nuevo:**
 
 - **El papel de la persona:** la entrevista y la spec (G1); las decisiones de producto y las lecturas de la spec (M15); la prueba final del producto donde hace falta una persona; publicar.
-- **M4:** «Refs» por defecto cuando hay prueba manual; la issue la cierra la persona tras probar.
+- **M4:** «Refs» por defecto cuando hay prueba manual; la issue la cierra la persona tras probar. *Done* sigue como hoy: lo mueve la integración con «Fixes», o la persona con «Refs». La escritura del agente en Linear (§3.6) no incluye cerrar issues.
 - **M20:** una sesión por PR, también en entregas partidas, con el estado en `.tareas/`; los subagentes se lanzan solo por un motivo explícito (explorar, verificar de forma independiente o relevar una sesión larga).
 - **M28:** la plantilla de la issue de Linear lleva el contrato: alcance, fuera de alcance, cuándo está hecho, ficheros permitidos y qué hacer si se bloquea.
 - **Dejar el chat:** el agente de WSL es el único sitio de trabajo. GitHub, con `gh`, como ahora. La fuente de verdad es el repo, no el Project. La app queda para el diseño visual y la exploración (y para la segunda mirada, §3.10).
@@ -111,9 +115,9 @@ resto sigue vigente y no se edita.
 - **Riesgos y mitigaciones:**
   - **El nivel de riesgo lo declara el agente.** La CI solo lo sube (M3): `checks.py` marca R2 lo que toca sus listas (entre ellas, las rutas sensibles que el proyecto declara en su README), y CODEOWNERS bloquea las de §3.3. No son el mismo conjunto: un PR que toca una ruta del README del proyecto es R2 por la CI y no entra en el primer escalón, pero solo CODEOWNERS lo detiene si la ruta está también en §3.3. Un PR que el agente declare R1 y sea R2 en el fondo, sin tocar rutas sensibles, se fusiona solo. Lo mitigan G4 y la segunda mirada.
   - **Un R2 que no toca rutas de CODEOWNERS:** el ruleset de §3.5 (0 aprobaciones y CODEOWNERS por ruta) no lo detiene por sí mismo, y sin otro control la decisión 4 quedaría en una regla del agente (P04). La issue del ruleset pone el control que lo haga cumplir, y §5 lo valida.
-  - **G4 depende del agente** (ADR-0006 §2.6): el rastro en el PR y el check `hallazgos` lo hacen comprobable, con el límite de VIC-47 (§3.9). Pero hoy ningún check falla si un PR no tiene G4 (`hallazgos` no falla sin IDs de hallazgo), ni si quedan hallazgos que esperan a la persona (es un aviso). Los comprobaba la persona al fusionar. Sin otro control, la condición «G4 en verde» de §3.1 y las preguntas a la persona quedarían en reglas del agente (P04). La issue del ruleset pone el control, y §5 lo valida.
-  - **Cambios tras la última ronda de G4:** la issue del ruleset decide qué control impide que se fusionen solos sin que nadie los lea.
-  - **Un token filtrado de la cuenta de máquina** ya no da solo escritura (ADR-0005 §4): en la calculadora permite fusionar en `main` un PR R0 o R1 que no toque rutas sensibles y pase la CI y G4. Se mitiga como hasta ahora (colaboración solo donde hace falta, caducidad de 90 días y revocación inmediata) y con la segunda mirada.
+  - **G4 depende del agente** (ADR-0006 §2.6): el rastro en el PR y el check `hallazgos` lo hacen comprobable, con el límite de VIC-47 (§3.9). Pero hoy ningún check falla si un PR no tiene G4 (`hallazgos` no falla sin IDs de hallazgo), ni si quedan hallazgos que esperan a la persona (es un aviso). Los comprobaba la persona al fusionar. Sin otro control, la condición «G4 en verde» de §3.1 y las preguntas a la persona quedarían en reglas del agente (P04). La issue del ruleset pone el control, y §5 lo valida. Además, el verde puede no estar al día: borrar o editar un comentario no relanza `checks-sdd` (`docs/herramientas.md`, VIC-47).
+  - **Cambios tras la última ronda de G4:** un PR que pasó G4 en un commit puede recibir después código que nadie ha visto, y con la CI en verde se fusionaría solo: en la práctica, saltarse G4. La issue del ruleset pone el control que lo impida, y §5 lo valida.
+  - **Un token filtrado de la cuenta de máquina** ya no da solo escritura (ADR-0005 §4). Esa cuenta es la que publica G4 (`CUENTAS_G4`), así que para quien tenga el token G4 no es una barrera: puede escribir el encargo, las respuestas y la reconciliación, declarar el riesgo y pedir el auto-merge. En la calculadora, cualquier código que no toque rutas de CODEOWNERS y pase la CI entraría en `main` sin que lo lea una persona ni un revisor independiente. Hoy no puede, porque hace falta una aprobación humana (N4). Se mitiga como hasta ahora (colaboración solo donde hace falta, caducidad de 90 días y revocación inmediata) y con la segunda mirada.
   - **Una issue fuera de la lista aprobada:** el agente crea y empieza issues por MCP, y nada liga una issue a la lista que aprobó la persona (§3.6). Es el límite de ADR-0006 §2.6, que se mantiene, y con el auto-merge llega más lejos: una issue así puede acabar en un PR R1 que se fusiona solo. Lo acotan la trazabilidad a una spec de `main` y la segunda mirada.
   - **Escrituras del agente en Linear:** la regla de datos de ADR-0003 (en proyectos `confidencial`, solo títulos y enlaces) sigue en vigor y se aplica también a lo que escriba el agente.
 - **Impacto:** el ruleset y CODEOWNERS de la calculadora; el MCP de Linear y `guarda-linear.py`; `sdd-plan`, `sdd-spec`, `sdd-implement` y `sdd-review`; `AGENTS.md` de la plantilla (hoy dice que el agente no fusiona y que en Linear solo comenta); la plantilla de issue y la de PR; la guía de instalación. `sdd-workflow` no cambia de reglas (§3.2).
@@ -125,15 +129,17 @@ resto sigue vigente y no se edita.
   - un push del agente después de esa aprobación la invalida, y el PR no se fusiona hasta que la persona apruebe de nuevo;
   - no puede fusionar solo un PR R2, aunque no toque rutas de CODEOWNERS (§3.4);
   - no puede fusionar solo un PR sin G4 que no sea un R0 comprobado por `checks.py`, ni uno con hallazgos que esperan a la persona;
+  - no puede fusionar solo un PR con commits posteriores a la última ronda de G4 que nadie ha leído;
   - no puede saltarse el ruleset: ni push directo a `main`, ni fusionar con un check requerido en rojo, pendiente o cancelado, ni cambiar el ruleset o CODEOWNERS;
   - no puede modificar `.github/workflows/` (su token sigue sin `workflow`: N5, sin cambios).
 
   Cada caso se intenta y GitHub lo rechaza. Hacerla es de la issue del ruleset, no de este PR.
 - **Escalón 2:** diez PR fusionados por el agente sin ningún defecto escapado (`historial/defectos-escapados.csv`, `sdd-metricas`), y la persona decide.
-- **Dejar el chat:** una entrega completa de la calculadora pasa sin copiar nada desde este chat (hecho cuando del bloque 5).
+- **Dejar el chat:** una entrega completa de la calculadora pasa sin copiar nada desde este chat (el «Hecho cuando» del bloque 5).
 
 ## 6. Seguimiento
 
 - **Issues que salen de este ADR:** las propone el PR de VIC-55 y las aprueba la persona; quedan en `docs/plan-v1.1.md`, bloque 5.
 - **Dónde va la lista de issues** dentro del acto que aprueba el visto bueno de §3.6 lo fija la issue de Linear por MCP.
+- **A la issue del ruleset** van también: si un «changes requested» de la persona frena el auto-merge con 0 aprobaciones, y si el agente puede descartar una review de la persona.
 - **Revisar este ADR** si un defecto escapa en un PR que el agente fusionó solo, si la segunda mirada encuentra algo que debía haber parado la fusión, o al llegar al revisor en la CI (M34, bloque 7), que cierra el límite de §3.9.
