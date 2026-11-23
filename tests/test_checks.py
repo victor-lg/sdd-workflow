@@ -1732,7 +1732,8 @@ class TestPuntaAPunta(unittest.TestCase):
         último push; si la cabeza del PR no está en su historia, los checks verían el contenido viejo."""
         r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', PR_HEAD_SHA="f" * 40)
         self.assertEqual(r.returncode, 1, r.stdout)
-        self.assertIn("no está en la historia del commit que se prueba", r.stdout)
+        self.assertIn("**cabeza:** la cabeza del PR (`ffffffffffff`) no está en la historia del commit que se prueba",
+                      r.stdout)
 
     def test_pr_de_dependabot(self):
         """Ni convenciones, ni formato de los commits, ni AC; el riesgo, R2 aunque no lo marque, y por eso

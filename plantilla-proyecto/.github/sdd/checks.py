@@ -38,6 +38,8 @@ Comprueba:
   aprobacion    VIC-56 (ADR-0009 §3.4): un PR R2 (el mayor entre el nivel marcado y el que exige lo
                 tocado) falla salvo que la última review de PERSONAS sea una aprobación del commit de
                 la cabeza. Las reviews llegan en PR_REVIEWS (`gh api --paginate …/pulls/N/reviews`).
+  cabeza        VIC-56: falla si PR_HEAD_SHA no está en la historia del commit que se prueba (en
+                `pull_request_review`, el merge de GitHub puede ser anterior a un push reciente).
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -1249,6 +1251,15 @@ def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
     return True, f"aprobado por {PERSONAS[ultima['user']['id']]} en `{cabeza[:12]}`"
 
 
+def check_cabeza(inf: Informe, cabeza: str) -> None:
+    """En `pull_request_review`, el merge que prueba GitHub (HEAD) puede ser anterior a un push reciente:
+    los checks verían el contenido viejo y la aprobación se compararía con la cabeza nueva. Sin la cabeza
+    del PR en la historia de HEAD, ningún check es fiable, sea cual sea el nivel."""
+    if git("merge-base", "--is-ancestor", cabeza, "HEAD") is None:
+        inf.error("cabeza", f"la cabeza del PR (`{cabeza[:12]}`) no está en la historia del commit que se prueba: "
+                            "GitHub aún no ha recalculado el merge tras el último push. Vuelve a lanzar `checks-sdd`.")
+
+
 def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str | None) -> None:
     if nivel != "R2":
         return
@@ -1338,13 +1349,9 @@ def main() -> int:
         check_respuestas(inf, cuerpo_pr, leidos, url_del_pr())
     check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr)
     ruta_reviews = os.environ.get("PR_REVIEWS")
+    if os.environ.get("PR_HEAD_SHA"):
+        check_cabeza(inf, os.environ["PR_HEAD_SHA"])
     cabeza = os.environ.get("PR_HEAD_SHA") or (git("rev-parse", "HEAD") or "").strip()
-    # En `pull_request_review`, el merge que prueba GitHub (HEAD) puede ser anterior a un push reciente:
-    # los checks verían el contenido viejo y la aprobación se compararía con la cabeza nueva. Sin la
-    # cabeza en la historia de HEAD, nada de lo de arriba es fiable.
-    if os.environ.get("PR_HEAD_SHA") and git("merge-base", "--is-ancestor", cabeza, "HEAD") is None:
-        inf.error("aprobacion", f"la cabeza del PR (`{cabeza[:12]}`) no está en la historia del commit que se prueba: "
-                                "GitHub aún no ha recalculado el merge tras el último push. Vuelve a lanzar `checks-sdd`.")
     check_aprobacion(inf, nivel, leer_paginas(ruta_reviews) if ruta_reviews else None, cabeza)
 
     partes = ["## Checks SDD", ""]

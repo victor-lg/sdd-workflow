@@ -63,8 +63,12 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         self.assertIn("PR_BRANCH: ${{ github.event.pull_request.head.ref }}", texto)
 
     def test_sdd_una_ejecucion_por_pr(self):
-        """VIC-56, G4-2-B-01: con dos eventos sobre el mismo commit, una ejecución vieja en verde no tapa una
-        nueva en rojo porque comparten grupo por número de PR (no por evento) y la nueva cancela la vieja."""
+        """VIC-56, G4-2-B-01 y G4-3-B-01: los dos eventos comparten grupo por número de PR (no por evento),
+        así que una ejecución nueva cancela la que siga en curso, y nunca hay dos a la vez con datos distintos.
+        Esto no basta para que una ejecución vieja ya terminada en verde no tape una nueva en rojo: eso
+        depende de que el ruleset tome la ejecución más reciente de `checks-sdd` sobre el commit, y de que
+        cada ejecución lea las reviews en el momento (no del evento). Lo primero se comprueba en la
+        calculadora (#72), no aquí."""
         texto = leer("sdd.yml")
         self.assertIn("concurrency:\n  group: sdd-${{ github.event.pull_request.number }}\n"
                       "  cancel-in-progress: true\n", texto)
