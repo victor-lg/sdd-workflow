@@ -1045,8 +1045,14 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, s
     faltan = sorted(set(del_revisor) - vistos)
     if faltan:
         inf.error("hallazgos", f"los revisores dieron {', '.join(f'`{h}`' for h in faltan)} y la reconciliación no tiene su línea.")
+    # VIC-56 (ADR-0009 §5): con el auto-merge nadie los vería antes de fusionar. Fallan hasta que la
+    # resolución pase a `corregido en <sha>` o `descartado: <prueba>`. Límite aceptado (ADR-0009 §4, «G4
+    # depende del agente»): nada liga la nueva resolución a una respuesta de la persona; la cuenta del
+    # agente puede cambiarla sin que la persona conteste, como ya podía descartar con cualquier prueba.
     if preguntas:
-        inf.aviso("hallazgos", f"hallazgos pendientes de la persona: {', '.join(f'`{h}`' for h in preguntas)}. Respóndelos antes de aprobar.")
+        inf.error("hallazgos", f"hallazgos pendientes de la persona: {', '.join(f'`{h}`' for h in preguntas)}. El PR no se "
+                               f"fusiona hasta que conteste: entonces cambia `{PREGUNTA}` por `corregido en <sha>` o "
+                               "`descartado: <prueba>` (`sdd-review`).")
 
 
 # --- Respuestas borradas o editadas (VIC-47) ------------------------------

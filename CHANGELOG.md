@@ -4,6 +4,8 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Un hallazgo que espera a la persona impide fusionar (VIC-56, PR 1 de 4).** Primera de las reglas de `checks-sdd` que piden el auto-merge del ADR-0009 (§4 y §5). `check_hallazgos` ya no avisa de los hallazgos con `resolución: pregunta a la persona`: falla hasta que la resolución pasa a `corregido en <sha>` o `descartado: <prueba>`. Límite aceptado: nada liga esa resolución a una respuesta de la persona (ADR-0009 §4, «G4 depende del agente»). Ninguno de los últimos 40 PR de la calculadora (`gh pr list --state all --limit 40`) se fusionó con uno pendiente.
+
 - **ADR-0009 del workflow: el papel de la persona y la autonomía del agente (VIC-55).** Recoge las diez decisiones de Víctor del 2026-11-23 y lo ya aceptado en el plan (tu papel, M4, M20 y M28). No confundir con el ADR-0009 de la calculadora.
   - **El agente fusiona** con auto-merge los PR R0 y R1 de la calculadora que no tocan rutas sensibles, con la CI y G4 en verde. La persona aprueba las rutas sensibles (CODEOWNERS sobre toda la lista de controles de `checks.py` y, por ahora, `README.md`; 0 aprobaciones generales). Un R0 va sin G4 solo si `checks.py` comprueba que es solo documentación; hoy no lo hace, así que cuenta como R1. En `sdd-workflow` sigue aprobando la persona.
   - **Linear:** el agente crea, comenta y empieza issues; la persona da un único visto bueno al diseño y a su lista de issues.
