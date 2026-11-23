@@ -27,9 +27,15 @@ permissions:
   # Leer los comentarios del PR, donde van las respuestas de los revisores de G4 (VIC-38).
   pull-requests: read
 
+# Una por PR. Una ejecución nueva cancela la que siga en curso o en espera. Un relanzamiento (intento 2 o
+# siguientes, de sdd-relanzar.yml o a mano) no cancela la que está en curso: espera a que termine (VIC-56).
+# Si cancelara, el relanzamiento de una ejecución vieja (sdd-relanzar todavía no veía la nueva) tumbaría la
+# más nueva, que es la que toma el ruleset, y el PR quedaría bloqueado con un checks-sdd cancelado
+# (calculadora-discos#87, casos 7 y 10). Un relanzamiento en espera sí lo sustituye cualquier ejecución que
+# entre después en el grupo: GitHub deja una sola en espera.
 concurrency:
   group: sdd-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.run_attempt == 1 }}
 
 env:
   # checks.py sale de aquí y compara con esto. Con la ref completa: `origin/main` resolvería

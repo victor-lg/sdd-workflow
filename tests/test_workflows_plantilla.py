@@ -65,14 +65,15 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         self.assertIn("PR_BRANCH: ${{ github.event.pull_request.head.ref }}", texto)
 
     def test_sdd_una_ejecucion_por_pr(self):
-        """VIC-56, G4-2-B-01 y G4-3-B-01: un grupo por número de PR, así que una ejecución nueva (o una vuelta
-        a lanzar) cancela la que siga en curso, y nunca hay dos a la vez con datos distintos. Que una verde
-        vieja no tape una roja nueva depende de que el ruleset tome la última ejecución de `pull_request`
-        (comprobado en la calculadora, sdd-workflow#72) y de que cada ejecución lea las reviews en el
-        momento, no del evento."""
+        """VIC-56, G4-2-B-01 y G4-3-B-01: un grupo por número de PR, así que nunca hay dos a la vez con datos
+        distintos. Una ejecución nueva (intento 1) cancela la que siga en curso; un relanzamiento no, espera
+        (calculadora-discos#87, casos 7 y 10: el relanzamiento de una vieja cancelaba la más nueva, la que toma
+        el ruleset). Que una verde vieja no tape una roja nueva depende de que el ruleset tome la ejecución más
+        nueva de `pull_request`, no la que termina la última (comprobado en la calculadora, sdd-workflow#72),
+        y de que cada ejecución lea las reviews en el momento, no del evento."""
         texto = leer("sdd.yml")
         self.assertIn("concurrency:\n  group: sdd-${{ github.event.pull_request.number }}\n"
-                      "  cancel-in-progress: true\n", texto)
+                      "  cancel-in-progress: ${{ github.run_attempt == 1 }}\n", texto)
         self.assertNotIn("event_name", texto)
 
     def test_sdd_pasa_las_reviews_a_checks_py(self):
@@ -144,8 +145,8 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
 
     def test_sin_credenciales_ni_mas_permisos(self):
         # sdd.yml lee además los comentarios del PR: las respuestas de los revisores de G4 (VIC-38).
-        # sdd-relanzar.yml solo vuelve a lanzar ejecuciones: ni siquiera lee el código (VIC-56).
-        permisos_de = {"sdd.yml": ["contents: read", "pull-requests: read"], "sdd-relanzar.yml": ["actions: write"]}
+        # sdd-relanzar.yml solo vuelve a lanzar ejecuciones y lee la cabeza del PR: ni siquiera lee el código (VIC-56).
+        permisos_de = {"sdd.yml": ["contents: read", "pull-requests: read"], "sdd-relanzar.yml": ["actions: write", "pull-requests: read"]}
         for fichero in WORKFLOWS.glob("*.yml"):
             texto = fichero.read_text(encoding="utf-8")
             with self.subTest(fichero=fichero.name):
@@ -305,8 +306,14 @@ class SinOrigenAbreviado(unittest.TestCase):
 
 GH_FALSO = """#!/bin/bash
 # `gh api URL` devuelve la siguiente respuesta de $RESPUESTAS (la última se repite); `gh run rerun` se anota.
+# `gh api .../pulls/N --jq .head.sha` devuelve la siguiente cabeza de $CABEZAS_PR (la última se repite).
 echo "$*" >> "$LLAMADAS"
-if [ "$1" = api ]; then
+if [ "$1" = api ] && [[ "$2" == */pulls/* ]]; then
+  read -ra cabezas <<< "$CABEZAS_PR"
+  k=$(cat "$RESPUESTAS/k" 2>/dev/null || echo 0); echo $((k + 1)) > "$RESPUESTAS/k"
+  [ "$k" -lt "${#cabezas[@]}" ] || k=$((${#cabezas[@]} - 1))
+  echo "${cabezas[$k]}"
+elif [ "$1" = api ]; then
   n=$(cat "$RESPUESTAS/n" 2>/dev/null || echo 0)
   if [ -e "$RESPUESTAS/$((n + 1))" ]; then n=$((n + 1)); echo $n > "$RESPUESTAS/n"; fi
   cat "$RESPUESTAS/$n"
@@ -315,6 +322,11 @@ elif [ "$1 $2" = "run rerun" ]; then
   f=$(cat "$RESPUESTAS/fallos" 2>/dev/null || echo 0); echo $((f + 1)) > "$RESPUESTAS/fallos"
   [ "$f" -ge "${RERUN_FALLA:-0}" ]
 fi
+"""
+
+# `sleep` no espera: anota cuánto habría esperado, en el mismo registro que `gh`.
+SLEEP_FALSO = """#!/bin/bash
+echo "sleep $*" >> "$LLAMADAS"
 """
 
 CABEZA = "a" * 40
@@ -333,8 +345,9 @@ class Relanzar(unittest.TestCase):
         self.temporal = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.temporal)
         (self.temporal / "bin").mkdir()
-        (self.temporal / "bin" / "gh").write_text(GH_FALSO)
-        (self.temporal / "bin" / "gh").chmod(0o755)
+        for nombre, contenido in (("gh", GH_FALSO), ("sleep", SLEEP_FALSO)):
+            (self.temporal / "bin" / nombre).write_text(contenido)
+            (self.temporal / "bin" / nombre).chmod(0o755)
         self.respuestas = self.temporal / "respuestas"
         self.respuestas.mkdir()
         self.llamadas = self.temporal / "llamadas"
@@ -345,7 +358,7 @@ class Relanzar(unittest.TestCase):
             (self.respuestas / str(i)).write_text(json.dumps({"workflow_runs": runs}))
         script, base = paso(leer("sdd-relanzar.yml"), "Volver a lanzar checks-sdd", "main")
         env = {**os.environ, **base, "PATH": f"{self.temporal / 'bin'}:{os.environ['PATH']}",
-               "RESPUESTAS": str(self.respuestas), "LLAMADAS": str(self.llamadas), "ESPERA": "0",
+               "RESPUESTAS": str(self.respuestas), "LLAMADAS": str(self.llamadas), "CABEZAS_PR": CABEZA,
                "REPO": "victor-lg/proyecto", "PR_NUMBER": "7", "PR_HEAD_SHA": CABEZA,
                "PR_HEAD_REPO": "victor-lg/proyecto", "PR_BASE": "main", **entorno}
         r = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
@@ -354,33 +367,74 @@ class Relanzar(unittest.TestCase):
     def relanzadas(self, llamadas):
         return [l for l in llamadas if l.startswith("run rerun")]
 
+    def listados(self, llamadas):
+        return [l for l in llamadas if l.startswith("api ") and "/actions/" in l]
+
     def test_relanza_la_ultima_del_pr(self):
         """Ni la de otro PR ni la de otro evento, aunque sean más nuevas."""
         codigo, salida, llamadas = self.ejecutar([run(10), run(12), run(20, pr=8), run(22, evento="pull_request_review"),
                                                   run(21, pr=None), run(11)])
         self.assertEqual(codigo, 0, salida)
         self.assertEqual(self.relanzadas(llamadas), ["run rerun 12 --repo victor-lg/proyecto"])
-        self.assertIn("api repos/victor-lg/proyecto/actions/workflows/sdd.yml/runs?event=pull_request&per_page=100",
-                      llamadas[0])
+        self.assertEqual(llamadas[:3], ["sleep 20", "api repos/victor-lg/proyecto/pulls/7 --jq .head.sha",
+                                        "api repos/victor-lg/proyecto/actions/workflows/sdd.yml/runs"
+                                        "?event=pull_request&per_page=100"])
 
-    def test_si_la_ultima_es_de_otra_cabeza_no_relanza(self):
-        """G4-4-B-02: hubo un push tras la review. Relanzar la ejecución vieja cancelaría la de la cabeza nueva
-        (mismo grupo de `concurrency`), y esa ya lee las reviews. También si se ve mientras espera."""
-        for respuestas in ([[run(12), run(13, "in_progress", cabeza="b" * 40)]],
-                           [[run(12, "in_progress")], [run(12), run(13, "queued", cabeza="b" * 40)]]):
-            with self.subTest(respuestas=len(respuestas)):
-                (self.respuestas / "n").unlink(missing_ok=True)
+    def test_antes_de_listar_espera_a_que_la_lista_se_ponga_al_dia(self):
+        """Calculadora-discos#87, caso 7: la ejecución de un evento recién llegado tarda unos 7 s en salir en la
+        lista. AL_DIA, del workflow (20 s), antes de la primera consulta; ESPERA (10 s) entre vueltas."""
+        _, base = paso(leer("sdd-relanzar.yml"), "Volver a lanzar checks-sdd", "main")
+        self.assertEqual((base["AL_DIA"], base["ESPERA"], base["LIMITE"]), ("20", "10", "600"))
+        codigo, salida, llamadas = self.ejecutar([run(12, "in_progress")], [run(12)])
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(llamadas[0], "sleep 20")
+        self.assertEqual([l for l in llamadas if l.startswith("sleep")], ["sleep 20", "sleep 10"])
+
+    def test_si_la_cabeza_del_pr_es_otra_no_relanza(self):
+        """G4-4-B-02 y calculadora-discos#87, caso 10: hubo un push tras la review, y su ejecución ya lee las
+        reviews. Lo dice la cabeza actual del PR, no la lista de ejecuciones: la del push puede no salir aún
+        en la lista. También si el push llega mientras espera."""
+        nueva = "b" * 40
+        for respuestas, cabezas in (([[run(12)]], nueva), ([[run(12, "in_progress")]], f"{CABEZA} {nueva}")):
+            with self.subTest(cabezas=cabezas):
+                for f in ("n", "k"):
+                    (self.respuestas / f).unlink(missing_ok=True)
                 self.llamadas.write_text("")
-                codigo, salida, llamadas = self.ejecutar(*respuestas)
+                codigo, salida, llamadas = self.ejecutar(*respuestas, CABEZAS_PR=cabezas)
                 self.assertEqual(codigo, 0, salida)
+                self.assertIn(f"La cabeza del PR es ahora {nueva[:12]}", salida)
                 self.assertIn("hubo un push después de esta review", salida)
+                self.assertEqual(self.relanzadas(llamadas), [])
+
+    def test_si_la_lista_no_tiene_la_cabeza_del_pr_espera(self):
+        """Un push justo antes de la review: la cabeza del PR ya es la de la review, pero la lista solo muestra la
+        ejecución de la anterior. Espera a que salga la nueva y relanza esa, no la vieja."""
+        codigo, salida, llamadas = self.ejecutar([run(12, cabeza="b" * 40)], [run(12, cabeza="b" * 40), run(13)])
+        self.assertEqual(codigo, 0, salida)
+        self.assertIn("la lista aún no se ha puesto al día", salida)
+        self.assertEqual(self.relanzadas(llamadas), ["run rerun 13 --repo victor-lg/proyecto"])
+
+    def test_si_la_lista_nunca_tiene_la_cabeza_del_pr_falla_sin_relanzar(self):
+        codigo, salida, llamadas = self.ejecutar([run(12, cabeza="b" * 40)], LIMITE="0")
+        self.assertEqual(codigo, 1, salida)
+        self.assertIn("::error::Tras 0 s no aparece ninguna ejecución de checks-sdd (pull_request)", salida)
+        self.assertIn("Relánzala a mano", salida)
+        self.assertEqual(self.relanzadas(llamadas), [])
+
+    def test_si_no_puede_leer_la_cabeza_del_pr_falla(self):
+        for cabeza in ("''", "null", "$(id)"):
+            with self.subTest(cabeza=cabeza):
+                (self.respuestas / "k").unlink(missing_ok=True)
+                codigo, salida, llamadas = self.ejecutar([run(12)], CABEZAS_PR=cabeza)
+                self.assertEqual(codigo, 1, salida)
+                self.assertIn("::error::No pude leer la cabeza actual del PR", salida)
                 self.assertEqual(self.relanzadas(llamadas), [])
 
     def test_espera_a_que_termine_la_que_sigue_en_curso(self):
         """Podría haber leído las reviews antes de esta: se relanza al terminar, no antes."""
         codigo, salida, llamadas = self.ejecutar([run(12, "queued")], [run(12, "in_progress")], [run(12)])
         self.assertEqual(codigo, 0, salida)
-        self.assertEqual(len([l for l in llamadas if l.startswith("api ")]), 3)
+        self.assertEqual(len(self.listados(llamadas)), 3)
         self.assertEqual(self.relanzadas(llamadas), ["run rerun 12 --repo victor-lg/proyecto"])
 
     def test_si_mientras_espera_llega_otra_relanza_la_nueva(self):
