@@ -113,21 +113,16 @@ Spec: SPEC-CALC-003/AC-04
 Solo en el repo del workflow. Un PR que toca `plugin-sdd/skills/`, `plugin-sdd/agents/` o `plugin-sdd/evals/` no sale de borrador sin sus evaluaciones, igual que sin la CI y sin G4. Es la lección 2 de `historial/retrospectiva-bloque-4.md`: el #55 se dio por listo con ellas pendientes. La CI semanal (`evals.yml`) sigue corriendo todos los casos; esto no la sustituye.
 
 - **Qué casos:** los que cargan lo que cambia (la skill, el subagente o el caso tocado) y los que el cambio más puede romper, con el motivo en el PR.
-- **La orden va en la descripción del PR** y apunta a `refs/pull/<N>/head`, que GitHub guarda aunque se fusione el PR y se borre la rama; `origin/<rama>` desaparece con el squash. Empieza por `cd` al clon con su ruta absoluta: lanzada desde otro directorio, el `git fetch` falla.
+- **Desde el clon limpio de la persona** (`~/proyectos/sdd-workflow-persona`), nunca desde la copia del agente. La orden corre fuera del sandbox, y en la copia del agente un hook de Git que el agente haya puesto o cambiado (en `.git/hooks/` o con lefthook) se ejecutaría con los permisos de la persona: el `git switch` de la orden ya dispara `post-checkout`. El clon de la persona solo tiene lo que ella ha instalado.
+- **La orden va en la descripción del PR** y apunta a `refs/pull/<N>/head`, que GitHub guarda aunque se fusione el PR y se borre la rama; `origin/<rama>` desaparece con el squash. Empieza por `cd` al clon: lanzada desde otro directorio, el `git fetch` falla y no se evalúa nada. Es la que funcionó en el #65, y es el modelo:
 
   ```bash
-  cd <ruta absoluta del clon> && git fetch origin refs/pull/<N>/head && git worktree add --detach ../sdd-pr-<N> FETCH_HEAD && cd ../sdd-pr-<N>/plugin-sdd && for c in <casos>; do claude plugin eval . --case "$c" --ablation none --no-publish --trust-plugin || break; done
+  cd ~/proyectos/sdd-workflow-persona && git fetch origin refs/pull/<N>/head && git switch --detach FETCH_HEAD && git log --oneline -1 && cd plugin-sdd && for c in <casos>; do claude plugin eval . --trust-plugin --case "$c" --threshold 0.8 --model claude-sonnet-5-5 --judge-model claude-haiku-5-5 --ablation none --no-publish || break; done
   ```
 
-  - **Ejemplo real, el #65** (cambia `sdd-review`). Esta orden funcionó lanzada desde el clon:
-
-    ```bash
-    git fetch origin refs/pull/65/head && git worktree add --detach ../sdd-pr-65 FETCH_HEAD && cd ../sdd-pr-65/plugin-sdd && for c in activacion-sdd-review 'g4-*' n8-revisor-sin-contexto-del-autor hook-cuerpo-por-fichero; do claude plugin eval . --case "$c" --ablation none --no-publish --trust-plugin || break; done
-    ```
-
-    Lanzada fuera del clon, falla en el primer paso: `git fetch` no encuentra el repo (`fatal: not a git repository`) y no se evalúa nada. Por eso la orden empieza ahora por `cd`.
-  - `--no-publish` deja los informes en local, en `plugin-sdd/evals/results/` del worktree, que Git ignora (es donde están los de ejecuciones anteriores en el clon). `--trust-plugin` va siempre en las órdenes locales.
-  - Al terminar, desde el clon: `git worktree remove ../sdd-pr-<N>`. Los informes se borran con él, así que el resultado se anota antes. Si hay que repetirlas, primero se quita el worktree, o `worktree add` falla.
+  - **Sin worktree:** `git switch --detach` deja el clon en el commit del PR, y `git log --oneline -1` enseña cuál es, el que se anota. Al terminar, `git switch main` lo devuelve a su sitio. Para que el `switch` no falle, el clon tiene que estar limpio.
+  - **El umbral y los modelos van en la orden** porque no están fijados en ninguna configuración de las evaluaciones: solo en los flags de `.github/workflows/evals.yml`, con los mismos valores. Así el resultado del PR se compara con el de la CI semanal.
+  - `--no-publish` deja los informes en local, en `plugin-sdd/evals/results/` del clon, que Git ignora.
 - **El resultado va en el PR** antes de `gh pr ready`, en «Validación»: la versión del plugin, el commit evaluado y una línea por caso, que pasa o falla, con una nota si falla o si el evaluador da ruido. El commit evaluado tiene que ser el último del PR: si después entra otro que toca esas rutas, se repiten.
 - **Quién las lanza:** la persona, mientras el sandbox del agente no llegue a la API. El agente deja la orden y no quita el borrador hasta que el resultado esté anotado. Un caso que falla cuenta como una CI en rojo: se corrige o se explica, y decide la persona.
 

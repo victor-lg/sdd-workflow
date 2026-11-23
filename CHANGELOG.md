@@ -5,7 +5,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 ## v1.1 — en curso
 
 - **Las evaluaciones, condición para quitar el borrador en los PR del plugin (VIC-51). Plugin `sdd` 1.17.0.** Lección 2 de `historial/retrospectiva-bloque-4.md`: el #55 se dio por listo con las evaluaciones pendientes.
-  - **`docs/convenciones.md`, §5.1:** un PR que toca `plugin-sdd/skills/`, `plugin-sdd/agents/` o `plugin-sdd/evals/` no sale de borrador sin sus evaluaciones. El resultado se anota en el PR: versión del plugin, commit evaluado (el último del PR) y una línea por caso. La orden apunta a `refs/pull/<N>/head`, que sobrevive al squash y al borrado de la rama, y empieza por `cd` al clon: lanzada fuera de él, la del #65 fallaba en el `git fetch`.
+  - **`docs/convenciones.md`, §5.1:** un PR que toca `plugin-sdd/skills/`, `plugin-sdd/agents/` o `plugin-sdd/evals/` no sale de borrador sin sus evaluaciones. El resultado se anota en el PR: versión del plugin, commit evaluado (el último del PR) y una línea por caso. La orden apunta a `refs/pull/<N>/head`, que sobrevive al squash y al borrado de la rama. Se lanza desde el clon limpio de la persona, nunca desde la copia del agente: corre fuera del sandbox, y un hook de Git de esa copia se ejecutaría. El modelo es la orden que funcionó en el #65: `git switch --detach` sin worktree, con el umbral y los modelos de la CI semanal.
   - **`sdd-review`:** sin ese resultado anotado no quita el borrador; deja la orden y avisa a la persona.
   - La CI semanal de evaluaciones no cambia, y no corren en la CI de cada PR (fuera de alcance).
 
