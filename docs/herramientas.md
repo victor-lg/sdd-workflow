@@ -451,6 +451,28 @@ El ejemplo `docs/ejemplos/e2e/` (M27) comprueba con axe cada ruta al llegar y ca
 - **Qué no cubre el control:** `checks.py` solo ve rutas. Las tolerancias o máscaras escritas en un fichero de test (`toHaveScreenshot({ maxDiffPixels })`, `mask`, `expect.configure`, `test.use`), un script de `package.json` que lance `--update-snapshots` (ya R2, por ser manifiesto) una configuración con otro nombre pasada con `-c`, o un fichero que importe `playwright.config.*` y que fije tolerancias o `updateSnapshots` dependen de la regla de `sdd-implement` y de la revisión. Es un límite aceptado: es una regla, no un control. Si un proyecto cambia la carpeta de las capturas con `snapshotPathTemplate`, añade la nueva a las rutas sensibles de su README.
 - **Falsos positivos, medidos (Víctor, 2026-11-17):** las cuatro capturas del ejemplo, generadas en el contenedor de Playwright 1.65.0 (digest `9beb5460…73dbe`, desde `c2776e8`). Después, cinco ejecuciones seguidas sin `--update-snapshots`, con 4 passed cada vez: ningún falso positivo en 20 comparaciones. El rojo, con `padding: 12px` en `.panel-resumen`, hace fallar `panel-resumen`. Se vio en Chromium y en WebKit (2 failed, 2 passed).
 
+## Respuestas de G4 en el check `hallazgos` (VIC-47)
+
+Desde sdd-workflow#68, el check `hallazgos` de `checks.py` (`check_respuestas`) falla en dos casos, porque la cuenta del agente es la misma que publica las respuestas de G4 y podía sacar sus hallazgos del check (revisor B de calculadora-discos#74):
+
+- **Borrada:** «Revisión IA» enlaza un comentario de este PR que no está entre los de `CUENTAS_G4`. La URL del PR sale de `GITHUB_SERVER_URL`, `GITHUB_REPOSITORY` y `GITHUB_REF`; en local, sin ellas, esto no se comprueba.
+- **Editada:** un comentario de G4 (de `CUENTAS_G4` y enlazado en «Revisión IA», o con un ID `G4-R-L` o una línea «Métricas G4») tiene `updated_at` distinto de `created_at`. La salida es la línea `Comentario editado: <enlace> · <motivo>` en «Revisión IA», fuera de `<details>`: la API REST no da la versión anterior, así que el check no sabe qué cambió y la edición queda a la vista de la persona.
+
+**Prueba en la CI de la calculadora** (regla 2), con el `checks.py` de `5701c02` en su `main` (calculadora-discos#81): PR desechable calculadora-discos#82, cerrado sin fusionar. La tabla, con las ejecuciones, está en [el comentario de sdd-workflow#68](https://github.com/victor-lg/sdd-workflow/pull/68#issuecomment-7100354495). `checks-sdd` tardó de 6 a 11 s.
+
+| Caso | Resultado |
+| --- | --- |
+| Comentario de G4 enlazado en «Revisión IA» | verde |
+| Comentario editado | rojo: «se editó después de publicarse» |
+| Editado, con la línea `Comentario editado:` | verde |
+| La misma línea, plegada en `<details>` | rojo |
+| Comentario borrado | rojo: «¿se borró?» |
+| Comentario ocultado («Hide») sin editarlo | rojo |
+
+- **Comportamiento aceptado: ocultar un comentario cuenta como edición.** GitHub cambia su `updated_at` al ocultarlo (caso 6), y el check falla igual que con una edición. Se acepta: ocultar una respuesta de G4 también la quita de la vista, y la línea `Comentario editado:`, con el motivo, lo resuelve. Distinguirlo pediría leer `isMinimized` por GraphQL, y eso es cambiar `sdd.yml`.
+- **Límite aceptado: borrar y quitar el enlace, o borrar y publicar otro retocado.** La misma cuenta puede borrar un comentario y quitar su enlace de «Revisión IA», o borrarlo y publicar otro con los hallazgos retocados, y el check no lo ve: no queda nada que comparar. Cerrarlo pide que los revisores publiquen desde otra cuenta, y eso es decisión del ADR-0009 del workflow (bloque 5). Está escrito también en el comentario de `check_respuestas`.
+- **Límite aceptado: el verde puede no estar al día.** Borrar, editar u ocultar un comentario no lanza `sdd.yml` (solo `opened`, `edited`, `synchronize`, `reopened` y `ready_for_review`): el `checks-sdd` en verde es el de la última ejecución, y los comentarios pueden haber cambiado después. Lo cubre `ready_for_review`: al quitar el borrador, el check vuelve a correr con los comentarios de ese momento, y el hook de `gh pr ready` ya exige el verde antes. Lo que pase tras quitar el borrador no lo relanza nada hasta el siguiente push o edición de la descripción: si la persona ve un comentario de G4 marcado como editado o desaparecido, relanza `checks-sdd` antes de aprobar (G6). Es una regla, no un control.
+
 ## Evaluadas y no aprobadas
 
 | Herramienta | Fecha | Motivo |

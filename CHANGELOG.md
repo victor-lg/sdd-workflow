@@ -4,12 +4,15 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Los límites del check de respuestas de G4, documentados (VIC-47, PR 2). Plugin `sdd` 1.18.0.**
+  - **`docs/herramientas.md`,** sección nueva: el límite aceptado (borrar y quitar el enlace, o borrar y publicar otro retocado; ADR-0009), que el verde puede no estar al día (borrar o editar un comentario no relanza `checks-sdd`; lo cubre `ready_for_review`) y que ocultar un comentario cambia `updated_at` y cuenta como edición, que queda como comportamiento aceptado. Con el resultado de la prueba en la calculadora (calculadora-discos#82).
+  - **`sdd-review`:** las causas nuevas por las que falla `hallazgos` (respuesta borrada, editada u ocultada), que una respuesta de G4 no se borra, edita ni oculta, y la línea `Comentario editado: <enlace> · <motivo>` para justificar una edición.
+
 - **Las respuestas de G4, sin borrar ni editar desde la cuenta del agente (VIC-47, PR 1).** El revisor B de calculadora-discos#74 (VIC-46) vio que la cuenta del agente, la que publica las respuestas, podía sacar sus hallazgos del check `hallazgos` borrándolas o editándolas.
   - **Borrada:** `checks.py` falla si «Revisión IA» enlaza un comentario de este PR que no está entre los de `CUENTAS_G4`. La URL del PR sale de `GITHUB_SERVER_URL`, `GITHUB_REPOSITORY` y `GITHUB_REF`, que GitHub pone en la CI: `sdd.yml` no cambia.
   - **Editada:** falla si un comentario de G4 (enlazado en «Revisión IA», o con un ID de revisor `G4-R-L` o una línea «Métricas G4») tiene `updated_at` distinto de `created_at`, salvo que «Revisión IA» lo justifique con `Comentario editado: <enlace> · <motivo>`. La API no da la versión anterior, así que una edición del SHA de «Commit revisado» también se justifica con esa línea. Sin fechas, cuenta como editado.
   - Medido antes: de 59 comentarios de G4 en los últimos 40 PR de la calculadora, solo uno está editado, el del #74.
   - **Límite aceptado:** la misma cuenta puede borrar un comentario y quitar su enlace de «Revisión IA», o borrarlo y publicar otro retocado, y el check no lo ve. Cerrarlo pide que los revisores publiquen desde otra cuenta (ADR-0009 del workflow, bloque 5).
-  - Queda para el PR 2: documentar en `docs/herramientas.md` que el verde puede no estar al día (límite 2) y el límite aceptado.
 
 - **Las evaluaciones, condición para quitar el borrador en los PR del plugin (VIC-51). Plugin `sdd` 1.17.0.** Lección 2 de `historial/retrospectiva-bloque-4.md`: el #55 se dio por listo con las evaluaciones pendientes.
   - **`docs/convenciones.md`, §5.1:** un PR que toca `plugin-sdd/skills/`, `plugin-sdd/agents/` o `plugin-sdd/evals/` no sale de borrador sin sus evaluaciones. El resultado se anota en el PR: versión del plugin, commit evaluado (el último del PR) y una línea por caso. La orden apunta a `refs/pull/<N>/head`, que sobrevive al squash y al borrado de la rama. Se lanza desde el clon limpio de la persona, nunca desde la copia del agente: corre fuera del sandbox, y un hook de Git de esa copia se ejecutaría. El modelo es la orden que funcionó en el #65: `git switch --detach` sin worktree, con el umbral y los modelos de la CI semanal.
