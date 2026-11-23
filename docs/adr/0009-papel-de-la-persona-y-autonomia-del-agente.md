@@ -9,9 +9,10 @@ modifica:
   - "docs/linea-base-v1.md, P03: aprobar ya no es siempre fusionar a mano; en lo que el agente fusiona solo, la aprobación es la de las reglas de GitHub que el agente no controla (§3.1 y §3.5)"
   - "docs/linea-base-v1.md, G2: la persona ya no mueve cada issue a Ready; da un visto bueno al diseño y a su lista de issues (§3.6)"
   - "docs/linea-base-v1.md, G6: merge humano solo en las rutas sensibles, en R2 y en el repo del workflow (§3.1 a §3.4)"
-  - "docs/linea-base-v1.md, N4: lo sustituye la validación de §5 cuando el agente pueda pedir el auto-merge"
-  - "docs/linea-base-v1.md §8, modelo de identidades y reglas de main: el agente puede fusionar con auto-merge; 0 aprobaciones generales; CODEOWNERS en la lista de §3.3, sin README.md"
-  - "ADR-0001, M2: el merge humano en rama protegida deja de ser el único mecanismo de aprobación"
+  - "docs/linea-base-v1.md, N4: lo sustituye la validación de §5 cuando el agente pueda pedir el auto-merge; N5 se mantiene"
+  - "docs/linea-base-v1.md, H02: el merge que pide el agente con auto-merge no lleva una identidad distinta de la suya; la aprobación es la de las reglas (§3.5)"
+  - "docs/linea-base-v1.md §8, modelo de identidades y reglas de main: el agente puede fusionar con auto-merge; 0 aprobaciones generales; CODEOWNERS en la lista de §3.3, sin README.md. Se mantienen los checks requeridos sobre el commit exacto y que cada push invalide las aprobaciones anteriores"
+  - "ADR-0001, M2: el merge humano en rama protegida deja de ser el único mecanismo de aprobación, y las escrituras del agente en Linear dejan de estar deshabilitadas, con la aprobación de §3.6"
   - "ADR-0003 §3 y §6: el agente escribe en Linear (crea, comenta y empieza issues); Ready deja de moverlo la persona"
   - "ADR-0005 §1, §3 y §5: «sin permiso para fusionar», «PR obligatorio con una aprobación» y la validación N4"
   - "ADR-0006 §2.6 y §2.10: Ready deja de ser un gate por issue; el MCP de Linear deja de ser de solo lectura"
@@ -80,6 +81,9 @@ resto sigue vigente y no se edita.
 - **M4:** «Refs» por defecto cuando hay prueba manual; la issue la cierra la persona tras probar.
 - **M20:** una sesión por PR, también en entregas partidas, con el estado en `.tareas/`; los subagentes se lanzan solo por un motivo explícito (explorar, verificar de forma independiente o relevar una sesión larga).
 - **M28:** la plantilla de la issue de Linear lleva el contrato: alcance, fuera de alcance, cuándo está hecho, ficheros permitidos y qué hacer si se bloquea.
+- **Dejar el chat:** el agente de WSL es el único sitio de trabajo. GitHub, con `gh`, como ahora. La fuente de verdad es el repo, no el Project. La app queda para el diseño visual y la exploración (y para la segunda mirada, §3.10).
+
+**Cómo se aprueba el visto bueno de §3.6** (ADR-0001, M2, pide que un ADR diseñe la aprobación de una escritura externa): es un acto en GitHub que el agente no controla, un merge en rama protegida o una review de PR (P03). No puede ser un estado, una etiqueta ni un comentario de Linear, porque con el MCP de escritura el agente los puede cambiar. Dónde va la lista de issues dentro de ese acto lo fija la issue de Linear por MCP.
 
 **Este ADR no cambia ningún permiso por sí mismo.** Hasta que la persona aplique el ruleset y CODEOWNERS de la calculadora, y hasta que se cambien el MCP de Linear, sus hooks y las skills, sigue en vigor lo de hoy: la persona aprueba y fusiona cada PR, mueve las issues a *Ready*, y el agente solo lee y comenta en Linear. Cada parte entra en vigor con la issue que la aplica (§6).
 
@@ -91,21 +95,25 @@ resto sigue vigente y no se edita.
   - un ADR que se podía fusionar en estado *Propuesto*;
   - el límite de VIC-47: la cuenta que publica las respuestas de G4 puede borrarlas o editarlas.
 
+  Y un control que la línea base asigna a la persona en cada PR: leer todo cambio en un test existente (lista de cinco minutos, punto 1), la defensa contra un test debilitado para pasar la CI. En lo que el agente fusiona solo lo sustituyen el check `mutaciones`, que falla si los tests dejan de matar mutantes, y la pregunta expresa de G4 por los tests debilitados; ninguno lee la intención del cambio.
+
   La segunda mirada (§3.10) recupera parte, después y no antes de fusionar.
 - **Costes:** la persona aplica el ruleset y CODEOWNERS y sube a mano lo de `.github/` con el script; Claude dedica un repaso semanal.
 - **Riesgos y mitigaciones:**
-  - **El nivel de riesgo lo declara el agente.** La CI solo lo sube (M3): las rutas sensibles las marca `checks.py` y las bloquea CODEOWNERS. Un PR que el agente declare R1 y sea R2 en el fondo, sin tocar rutas sensibles, se fusiona solo. Lo mitigan G4 y la segunda mirada.
-  - **Un R2 que no toca rutas sensibles:** el ruleset de §3.5 (0 aprobaciones y CODEOWNERS por ruta) no lo detiene por sí mismo. Que no se fusione solo (§3.4) es, de momento, una regla del agente; la issue del ruleset decide el control que lo haga cumplir.
+  - **El nivel de riesgo lo declara el agente.** La CI solo lo sube (M3): `checks.py` marca R2 lo que toca sus listas (entre ellas, las rutas sensibles que el proyecto declara en su README), y CODEOWNERS bloquea las de §3.3. No son el mismo conjunto: un PR que toca una ruta del README del proyecto es R2 por la CI y no entra en el primer escalón, pero solo CODEOWNERS lo detiene si la ruta está también en §3.3. Un PR que el agente declare R1 y sea R2 en el fondo, sin tocar rutas sensibles, se fusiona solo. Lo mitigan G4 y la segunda mirada.
+  - **Un R2 que no toca rutas de CODEOWNERS:** el ruleset de §3.5 (0 aprobaciones y CODEOWNERS por ruta) no lo detiene por sí mismo, y sin otro control la decisión 4 quedaría en una regla del agente (P04). La issue del ruleset pone el control que lo haga cumplir, y §5 lo valida.
   - **G4 depende del agente** (ADR-0006 §2.6): el rastro en el PR y el check `hallazgos` lo hacen comprobable, con el límite de VIC-47 (§3.9).
   - **Escrituras del agente en Linear:** la regla de datos de ADR-0003 (en proyectos `confidencial`, solo títulos y enlaces) sigue en vigor y se aplica también a lo que escriba el agente.
 - **Impacto:** el ruleset y CODEOWNERS de la calculadora; el MCP de Linear y `guarda-linear.py`; `sdd-plan`, `sdd-spec`, `sdd-implement` y `sdd-review`; la plantilla de issue y la de PR; la guía de instalación. `sdd-workflow` no cambia de reglas (§3.2).
 
 ## 5. Validación
 
-- **Sustituye a N4 y N5 cuando el agente pueda pedir el auto-merge:**
+- **Sustituye a N4, y mantiene N5, cuando el agente pueda pedir el auto-merge:**
   - el agente no puede fusionar, ni con auto-merge ni a mano, un PR que toque una ruta sensible sin la aprobación de CODEOWNERS;
+  - un push del agente después de esa aprobación la invalida, y el PR no se fusiona hasta que la persona apruebe de nuevo;
+  - no puede fusionar solo un PR R2, aunque no toque rutas de CODEOWNERS (§3.4);
   - no puede saltarse el ruleset: ni push directo a `main`, ni fusionar con un check requerido en rojo, pendiente o cancelado, ni cambiar el ruleset o CODEOWNERS;
-  - no puede modificar `.github/` (su token sigue sin `workflow`, como N5).
+  - no puede modificar `.github/workflows/` (su token sigue sin `workflow`: N5, sin cambios).
 
   Cada caso se intenta y GitHub lo rechaza. Hacerla es de la issue del ruleset, no de este PR.
 - **Escalón 2:** diez PR fusionados por el agente sin ningún defecto escapado (`historial/defectos-escapados.csv`, `sdd-metricas`), y la persona decide.
@@ -114,5 +122,5 @@ resto sigue vigente y no se edita.
 ## 6. Seguimiento
 
 - **Issues que salen de este ADR:** las propone el PR de VIC-55 y las aprueba la persona; quedan en `docs/plan-v1.1.md`, bloque 5.
-- **Cómo queda el visto bueno del §3.6** (dónde va la lista de issues y qué acto lo aprueba) lo fija la issue de Linear por MCP. Tiene que ser un acto en un sistema que el agente no controla (P03).
+- **Dónde va la lista de issues** dentro del acto que aprueba el visto bueno de §3.6 lo fija la issue de Linear por MCP.
 - **Revisar este ADR** si un defecto escapa en un PR que el agente fusionó solo, si la segunda mirada encuentra algo que debía haber parado la fusión, o al llegar al revisor en la CI (M34, bloque 7), que cierra el límite de §3.9.

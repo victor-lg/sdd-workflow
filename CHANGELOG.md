@@ -7,7 +7,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 - **ADR-0009 del workflow: el papel de la persona y la autonomía del agente (VIC-55).** Recoge las diez decisiones de Víctor del 2026-11-23 y lo ya aceptado en el plan (tu papel, M4, M20 y M28). No confundir con el ADR-0009 de la calculadora.
   - **El agente fusiona** con auto-merge los PR R0 y R1 de la calculadora que no tocan rutas sensibles, con la CI y G4 en verde. La persona aprueba las rutas sensibles (CODEOWNERS, 0 aprobaciones generales); `README.md` deja de serlo. En `sdd-workflow` sigue aprobando la persona.
   - **Linear:** el agente crea, comenta y empieza issues; la persona da un único visto bueno al diseño y a su lista de issues.
-  - **Modifica** P03, G2, G6 y N4 y la §8 de la línea base, ADR-0001 (M2), ADR-0003, ADR-0005 y ADR-0006, anotados en el índice de `docs/adr/README.md`. Fija la validación que sustituye a N4 y N5.
+  - **Modifica** P03, G2, G6, N4 y H02 y la §8 de la línea base, ADR-0001 (M2), ADR-0003, ADR-0005 y ADR-0006, anotados en el índice de `docs/adr/README.md`. Fija la validación que sustituye a N4 y N5.
   - **No cambia ningún permiso por sí mismo:** cada parte entra en vigor con su issue, propuestas en `docs/plan-v1.1.md` (bloque 5).
 
 - **Las respuestas de G4, sin borrar ni editar desde la cuenta del agente (VIC-47, PR 1).** El revisor B de calculadora-discos#74 (VIC-46) vio que la cuenta del agente, la que publica las respuestas, podía sacar sus hallazgos del check `hallazgos` borrándolas o editándolas.

@@ -113,7 +113,7 @@ Estado el 2026-11-22 (retrospectiva del bloque 4):
 
 Decisiones de Víctor del 2026-11-22, en el PR de la retrospectiva del bloque 4 (#62). Además, VIC-51 (las evaluaciones, condición para quitar el borrador en los PR de skills) va en el bloque 5, y VIC-50 (la evaluación semanal en rojo y los evaluadores que fallan una de cada tres, empezando por el rojo) va antes del bloque 6.
 
-**ADR-0009 del workflow** (`docs/adr/0009-papel-de-la-persona-y-autonomia-del-agente.md`, VIC-55): recoge las diez decisiones de Víctor del 2026-11-23 y lo ya aceptado aquí (tu papel, M4, M20 y M28). Modifica P03, G2, G6 y N4, la §8 de la línea base, ADR-0001 (M2), ADR-0003, ADR-0005 y ADR-0006. En corto:
+**ADR-0009 del workflow** (`docs/adr/0009-papel-de-la-persona-y-autonomia-del-agente.md`, VIC-55): recoge las diez decisiones de Víctor del 2026-11-23 y lo ya aceptado aquí (tu papel, M4, M20 y M28). Modifica P03, G2, G6, N4 y H02, la §8 de la línea base, ADR-0001 (M2), ADR-0003, ADR-0005 y ADR-0006. En corto:
 - **El agente fusiona** con auto-merge los PR R0 y R1 que no tocan rutas sensibles, con la CI y G4 en verde; solo en la calculadora. En `sdd-workflow` sigues aprobando tú.
 - **Tú apruebas** las rutas sensibles (specs, ADR, dependencias, `.github/`, `.claude/`, `AGENTS.md`, `CLAUDE.md` y los ficheros que gobiernan los controles), con CODEOWNERS en ellas y 0 aprobaciones generales. `README.md` deja de ser sensible.
 - **R2 no sensible:** ahora no; lo decides tras diez PR fusionados por el agente sin defectos escapados.
@@ -121,6 +121,7 @@ Decisiones de Víctor del 2026-11-22, en el PR de la retrospectiva del bloque 4 
 - **`.github/`** lo subes tú, con un script desde el clon limpio que comprueba el SHA-256. Las evaluaciones del plugin siguen siendo tuyas.
 - **Revisores desde otra cuenta:** en el bloque 7 (M34); el límite de VIC-47 queda aceptado hasta entonces.
 - **Segunda mirada (M18):** Claude, desde la app, repasa cada semana lo que el agente fusionó solo.
+- **Dejar el chat:** el agente de WSL es el único sitio de trabajo; GitHub, con `gh`, como ahora; la fuente de verdad es el repo, no el Project; la app queda para el diseño visual y la exploración.
 - **El ADR no cambia ningún permiso por sí mismo:** hasta que se aplique cada issue de abajo, sigue en vigor lo de hoy.
 
 **Issues que salen del ADR-0009** (propuesta de VIC-55; las aprueba Víctor y se crean después, cada una con su contrato):
