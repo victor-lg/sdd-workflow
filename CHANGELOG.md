@@ -4,6 +4,14 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **El informe falso de Stryker, cerrado en la plantilla, y la medida en el log (VIC-53).** `plantilla-proyecto/.github/workflows/calidad.yml` recibe los pasos «CPU del runner» y «Stryker» de calculadora-discos#77 (commit e7e1782), salvo el comentario de «CPU del runner» y la documentación a la que remite el error, y dos defensas más que la calculadora aún no tiene.
+  - **Informe de solo lectura** (G4-1-B-01 de #64): el paso falla si el informe no se puede escribir.
+  - **Medida:** «CPU del runner» imprime también el modelo de CPU; el paso Stryker deja, después del token, un aviso `MEDIDA` con `nproc`, los mutantes por tiempo y la puntuación contándolos como supervivientes.
+  - **Informe falso escribible con Stryker sin descriptores** (sospecha del revisor B del #77, confirmada con `prlimit`): el paso falla si la salida de Stryker trae un error del reporter json.
+  - **El log, por descriptor:** tee escribe en `/dev/fd/5` y los grep leen de ahí, así que un `stryker.log` limpio en la ruta no esconde el error; si grep no puede leerlo, el paso falla (G4 de #66). Matar a tee ya hacía fallar el paso (medido): sin defensa nueva.
+  - **Límites aceptados:** un proceso vivo, el `sudo` del runner y cualquier otra forma de engañar al paso desde el mismo usuario, junto a `__STRYKER_ACTIVE_MUTANT__`.
+  - **Tests** en `tests/test_calidad_plantilla.py`, con Stryker real y con un Stryker falso. La calculadora queda distinta hasta el siguiente PR de VIC-53 allí.
+
 - **Métricas por revisor de G4 (VIC-48). Plugin `sdd` 1.16.0.** El coste de cada ronda ya no se saca a mano de los transcripts (VIC-43, `historial/coste-revision-bloque-4.md`, §7).
   - **`sdd-review`:** en el comentario de reconciliación, debajo de `Métricas G4`, una línea por revisor: `Métricas revisor: PR #N · ronda R · revisor L · modelo M · agente ID · confirmados D/I/M · descartados D/I/M` (debe corregirse / importante / menor). Sin el `agentId`, va sin `agente ID ·` y queda sin tokens ni tiempo.
   - **`sdd-metricas.py`:** lee esas líneas con las mismas reglas que `Métricas G4` (entrada de un `gh pr comment` que no falla) y, del transcript del subagente, sus tokens por modelo (una vez por respuesta) y sus minutos, del primer al último mensaje. Del subagente solo guarda recuentos.

@@ -304,6 +304,68 @@ class Preparar(RepoDePrueba):
         self.assertIn("::error::Git no encuentra refs/remotes/origin/main", texto)
 
 
+TEST_ATACANTE = r"""import { test } from "node:test";
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+// Un test de la rama que ataca el paso Stryker (VIC-53). Con el mutante activo, deja un informe falso
+// con 7 Killed y hace los ataques de ATAQUES: nofile (baja con prlimit el límite de ficheros abiertos
+// del proceso principal de Stryker, que se llama `stryker`), log (cambia $RUNNER_TEMP/stryker.log por
+// uno vacío), chmod (le quita todos los permisos al log, el mismo fichero que el descriptor 5) y tee
+// (mata al tee del paso). Apunta en MARCAS lo que ha hecho.
+const padre = (pid) => Number(fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /, "").split(" ")[1]);
+const marca = (texto) => fs.appendFileSync(process.env.MARCAS, `${texto}\n`);
+
+function stryker() {
+  for (let pid = process.pid; pid > 1; pid = padre(pid)) {
+    if (fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0")[0] === "stryker") return pid;
+  }
+  throw new Error("no encuentro el proceso de Stryker");
+}
+
+test("ataca el paso", () => {
+  if (!process.env.__STRYKER_ACTIVE_MUTANT__) return;
+  const ruta = process.env.INFORME_FALSO;
+  const ataques = (process.env.ATAQUES || "").split(",");
+  const mutantes = [0, 1, 2, 3, 4, 5, 6].map((i) => ({ id: String(i), mutatorName: "X", status: "Killed",
+    location: { start: { line: 2, column: 1 }, end: { line: 2, column: 2 } } }));
+  fs.mkdirSync(path.dirname(ruta), { recursive: true });
+  try { fs.chmodSync(ruta, 0o644); } catch {}
+  fs.writeFileSync(ruta, JSON.stringify({ schemaVersion: "2", files: { "src/unidades.js": { mutants: mutantes } } }));
+  if (process.env.SOLO_LECTURA) fs.chmodSync(ruta, 0o444);
+  marca("informe");
+  const pid = stryker();
+  if (ataques.includes("log")) {
+    const log = path.join(process.env.RUNNER_TEMP, "stryker.log");
+    fs.unlinkSync(log);
+    fs.writeFileSync(log, "");
+    marca("log");
+  }
+  if (ataques.includes("chmod")) {
+    fs.chmodSync(path.join(process.env.RUNNER_TEMP, "stryker.log"), 0);
+    marca("chmod");
+  }
+  if (ataques.includes("tee")) {
+    for (const otro of fs.readdirSync("/proc").filter((d) => /^\d+$/.test(d))) {
+      try {
+        if (fs.readFileSync(`/proc/${otro}/comm`, "utf8").trim() === "tee" && padre(otro) === padre(pid)) {
+          process.kill(Number(otro), "SIGKILL");
+          marca("tee");
+        }
+      } catch {}
+    }
+  }
+  if (ataques.includes("nofile")) {
+    const abiertos = new Set(fs.readdirSync(`/proc/${pid}/fd`).map(Number));
+    let libre = 0;
+    while (abiertos.has(libre)) libre++;
+    if (spawnSync("prlimit", [`--pid=${pid}`, `--nofile=${libre}:${libre}`]).status === 0) marca("nofile");
+  }
+});
+"""
+
+
 @unittest.skipUnless(shutil.which("node") and shutil.which("npm"), "sin node o npm en el PATH")
 class StrykerEnLaCi(unittest.TestCase):
     """Hecho cuando (VIC-21): un cambio que rompe el código hace fallar una mutación. El paso
@@ -426,6 +488,82 @@ class StrykerEnLaCi(unittest.TestCase):
         self.assertEqual(estado, 1, texto)
         self.assertIn("Force mode is activated", texto)
 
+    def tapar_y_dejar_informe_falso(self, solo_lectura=False, ataques=()):
+        """El test debilitado y los supervivientes tapados con `// Stryker disable`: Stryker sale con 0 y
+        el paso falla por los Ignored. Además, un test de la rama (TEST_ATACANTE) que, en cada mutante,
+        deja un informe falso con 7 Killed en la ruta del informe, de solo lectura o no, y hace los
+        ataques que se le pidan. Devuelve la salida del paso y lo que el test dice haber hecho."""
+        informe = self.proyecto / "reports" / "mutation" / "mutation.json"
+        marcas = self.temporal / "marcas"
+        (self.proyecto / "test" / "atacante.test.js").write_text(TEST_ATACANTE)
+        self.stryker = lambda: ejecutar(self.PASO, self.proyecto, self.temporal, INFORME_FALSO=str(informe),
+                                        SOLO_LECTURA="1" if solo_lectura else "", ATAQUES=",".join(ataques),
+                                        MARCAS=str(marcas))
+        estado, texto, _ = self.debilitar_y_tapar(
+            "export function tbAGb(tb) {\n  // Stryker disable next-line all\n"
+            "  if (tb < 0) throw new RangeError();\n  // Stryker disable next-line all\n"
+            "  return tb * 1024;\n}\n")
+        return estado, texto, set(marcas.read_text().split()) if marcas.exists() else set()
+
+    def test_un_informe_de_solo_lectura_no_cuenta(self):
+        """Hecho cuando (VIC-53): con Stryker 10.1.1 real, el informe falso de solo lectura hace fallar el
+        paso. Sin la comprobación, Stryker anota EACCES en el reporter json, sale con 0 y el paso
+        contaba 7/7 sin ver los Ignored (medido en el G4 de sdd-workflow#64)."""
+        estado, texto, hecho = self.tapar_y_dejar_informe_falso(solo_lectura=True)
+        self.assertIn("informe", hecho)
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("Final mutation score of 100.00 is greater than or equal to break threshold 80", texto)
+        self.assertIn("An error occurred during 'wrapUp' on reporter 'json'", texto)
+        self.assertIn("::error::El informe JSON de Stryker (reports/mutation/mutation.json) no se puede escribir", texto)
+
+    @unittest.skipUnless(shutil.which("prlimit"), "sin prlimit en el PATH")
+    def test_sin_descriptores_el_informe_falso_no_cuenta(self):
+        """Sospecha del revisor B de calculadora-discos#77, confirmada (VIC-53): un test baja con prlimit
+        el límite de ficheros abiertos del proceso de Stryker y deja un informe falso que sí se puede
+        escribir. El reporter json da EMFILE, Stryker lo anota, sale con 0, y el paso contaba 7/7 y
+        escondía los Ignored (medido). Ahora falla por el error del reporter json en el log."""
+        estado, texto, hecho = self.tapar_y_dejar_informe_falso(ataques=("nofile",))
+        self.assertEqual(hecho, {"informe", "nofile"})
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("Final mutation score of 100.00 is greater than or equal to break threshold 80", texto)
+        self.assertRegex(texto, r"An error occurred during 'wrapUp' on reporter 'json'\. Error: EMFILE")
+        self.assertIn("::error::Stryker no ha podido escribir el informe JSON (el error del reporter json", texto)
+        self.assertNotIn("Puntuación contándolos como supervivientes", texto)  # el falso ni se cuenta
+        self.assertNotIn("MEDIDA", texto)
+
+    @unittest.skipUnless(shutil.which("prlimit"), "sin prlimit en el PATH")
+    def test_un_log_limpio_en_la_ruta_no_esconde_el_error(self):
+        """VIC-53: el mismo ataque, y además el test borra $RUNNER_TEMP/stryker.log y deja otro vacío. Con
+        el log leído por la ruta, el paso salía con 0 (medido); tee y los grep usan el descriptor 5, que
+        sigue en el fichero de antes."""
+        estado, texto, hecho = self.tapar_y_dejar_informe_falso(ataques=("nofile", "log"))
+        self.assertEqual(hecho, {"informe", "nofile", "log"})
+        self.assertEqual((self.temporal / "stryker.log").read_text(), "")  # el test sí lo cambió
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::Stryker no ha podido escribir el informe JSON (el error del reporter json", texto)
+
+    @unittest.skipUnless(shutil.which("prlimit"), "sin prlimit en el PATH")
+    def test_un_log_que_no_se_puede_leer_hace_fallar_el_paso(self):
+        """G4-1-B-01 de sdd-workflow#66: el mismo ataque, y además el test le quita los permisos a
+        $RUNNER_TEMP/stryker.log, el mismo fichero que el descriptor 5. grep no puede leerlo y sale con 2;
+        si eso contara como «sin el error», el paso saldría con 0 (medido). Falla cerrado."""
+        estado, texto, hecho = self.tapar_y_dejar_informe_falso(ataques=("nofile", "chmod"))
+        self.assertEqual(hecho, {"informe", "nofile", "chmod"})
+        self.assertEqual(estado, 1, texto)
+        self.assertIn("::error::No se ha podido leer el log de Stryker", texto)
+        self.assertNotIn("Puntuación contándolos como supervivientes", texto)  # el falso ni se cuenta
+        self.assertNotIn("MEDIDA", texto)
+
+    @unittest.skipUnless(shutil.which("prlimit"), "sin prlimit en el PATH")
+    def test_matar_a_tee_hace_fallar_el_paso(self):
+        """VIC-53, descartado sin defensa nueva: si un test mata a tee, el estado de la tubería es el de
+        tee (137) y `bash -e`, la shell por defecto del runner, corta el paso. Stryker sale con 1 (EPIPE)."""
+        estado, texto, hecho = self.tapar_y_dejar_informe_falso(ataques=("nofile", "tee"))
+        self.assertEqual(hecho, {"informe", "nofile", "tee"})
+        self.assertEqual(estado, 137, texto)
+        self.assertRegex(texto, r"Exit 1\s+node_modules/\.bin/stryker run")  # el aviso de bash sobre la tubería
+        self.assertNotIn("MEDIDA", texto)
+
     def test_la_alarma_lee_el_informe_de_stryker(self):
         """VIC-44 y VIC-45: la alarma, dentro del paso Stryker, sobre el informe que acaba de dejar. El
         `break` del fixture es 80: el mínimo es el menor de los dos."""
@@ -520,7 +658,6 @@ class MutantesPorTiempo(unittest.TestCase):
     def test_pasos_y_minimo(self):
         nombres = [p.get("name") for p in self.PASOS]
         self.assertLess(nombres.index("CPU del runner"), nombres.index("Stryker"))
-        self.assertEqual(self.paso("CPU del runner")["run"], "nproc")
         self.assertEqual(self.paso("Stryker")["id"], "stryker")
         self.assertEqual(self.paso("Stryker")["env"], {"PUNTUACION_MINIMA_SIN_TIEMPO": "90"})
 
@@ -653,7 +790,10 @@ class MutantesPorTiempo(unittest.TestCase):
         self.assertLess(lineas.index(parar[0]), lineas.index("::error::inyectada"))
         self.assertLess(lineas.index("::error::inyectada"), seguir)
         self.assertFalse([l for l in lineas[seguir + 1:] if "inyectada" in l or "::error::fichero" in l])
-        self.assertTrue(lineas[seguir + 1].startswith("::error::Contando como supervivientes"))
+        # VIC-53: lo primero después del token es el aviso MEDIDA, con números del paso.
+        self.assertRegex(lineas[seguir + 1], r"^::notice title=MEDIDA::nproc \d+, mutantes por tiempo 2, "
+                                             r"puntuación contándolos como supervivientes 1/3 = 33\.33$")
+        self.assertTrue(lineas[seguir + 2].startswith("::error::Contando como supervivientes"))
 
     def test_lo_que_escribe_la_rama_no_cambia_la_alarma(self):
         """Hecho cuando (VIC-45): un test de la rama escribe en $GITHUB_PATH y $GITHUB_ENV, deja un
@@ -703,6 +843,68 @@ class MutantesPorTiempo(unittest.TestCase):
         self.assertEqual(estado, 1, texto)
         self.assertIn("643/792 = 81.19", texto)
         self.assertIn("REESCRITO", (self.temporal / "paso.sh").read_text())  # el test sí lo reescribió
+
+
+    def test_la_cpu_del_runner(self):
+        """VIC-53: «CPU del runner» imprime nproc y el modelo de CPU de /proc/cpuinfo, o lo dice si no lo hay."""
+        orden = self.paso("CPU del runner")["run"]
+        r = subprocess.run(["bash", "-e", "-c", orden], capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lineas = r.stdout.splitlines()
+        self.assertEqual(lineas[0], subprocess.run(["nproc"], capture_output=True, text=True).stdout.strip())
+        modelo = re.search(r"^model name\s*: (.*)$", pathlib.Path("/proc/cpuinfo").read_text(), re.M)
+        if modelo:
+            self.assertEqual(lineas[1], f"Modelo de CPU: {modelo.group(1)}")
+        sin_modelo = self.temporal / "cpuinfo"
+        sin_modelo.write_text("processor\t: 0\nvendor_id\t: X\n")
+        r = subprocess.run(["bash", "-e", "-c", orden.replace("/proc/cpuinfo", str(sin_modelo), 1)],
+                           capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines()[1], "Modelo de CPU: desconocido (sin model name en /proc/cpuinfo)")
+
+    def test_un_informe_de_solo_lectura_falla(self):
+        """Hecho cuando (VIC-53, G4-1-B-01 de sdd-workflow#64): un test deja su propio informe sin permiso
+        de escritura, Stryker no puede escribir encima y sale como si nada. El paso falla sin contar el
+        falso, que traería 100 y escondería los Ignored, aunque Stryker salga con 0 o con 1."""
+        ruta = self.proyecto / "reports" / "mutation" / "mutation.json"
+        falso = {"files": {"src/a.js": {"mutants": [mutante("Killed", i) for i in range(10)]}}}
+        self.rama(f"mkdir -p '{ruta.parent}'\nprintf '%s' '{json.dumps(falso)}' > '{ruta}'\nchmod 444 '{ruta}'\n")
+        for salida in (0, 1):
+            with self.subTest(stryker_sale_con=salida):
+                self.stryker_sale_con(salida)
+                ruta.unlink(missing_ok=True)
+                estado, texto = self.alarma()
+                self.assertEqual(estado, 1, texto)
+                self.assertIn("::error::El informe JSON de Stryker (reports/mutation/mutation.json) no se puede escribir", texto)
+                self.assertNotIn("Puntuación contándolos como supervivientes", texto)
+                self.assertNotIn("MEDIDA", texto)
+                self.assertNotIn("dentro del mínimo", texto)
+
+    def test_la_medida_sale_en_el_log(self):
+        """VIC-53: después del token, un aviso MEDIDA con nproc, los mutantes por tiempo y la puntuación
+        contándolos como supervivientes, también cuando la alarma falla. Un `nproc` falso en el PATH no
+        cambia el número (ruta absoluta), y sin cuenta no hay aviso."""
+        (self.escribible / "nproc").write_text("#!/bin/sh\necho 99\n")
+        (self.escribible / "nproc").chmod(0o755)
+        cpus = subprocess.run(["/usr/bin/nproc"], capture_output=True, text=True).stdout.strip()
+        for args, cifras in (((728, 6, 58), "6, puntuación contándolos como supervivientes 728/792 = 91.92"),
+                             ((643, 91, 58), "91, puntuación contándolos como supervivientes 643/792 = 81.19")):
+            with self.subTest(cifras=cifras):
+                self.informe(*args)
+                _, texto = self.alarma()
+                lineas = texto.splitlines()
+                aviso = f"::notice title=MEDIDA::nproc {cpus}, mutantes por tiempo {cifras}"
+                self.assertIn(aviso, lineas)
+                token = next(l for l in lineas if l.startswith("::stop-commands::")).removeprefix("::stop-commands::")
+                self.assertLess(lineas.index(f"::{token}::"), lineas.index(aviso))
+                # La lista de mutantes por tiempo sigue en el log, entre los stop-commands.
+                self.assertLess(lineas.index("src/a.js:10000 EqualityOperator: 'a <= b'"), lineas.index(f"::{token}::"))
+        for caso, contenido in (("no es JSON", "{"), ("sin válidos", json.dumps({"files": {"a": {"mutants": []}}}))):
+            with self.subTest(caso=caso):
+                self.informe_tal_cual(contenido)
+                estado, texto = self.alarma()
+                self.assertEqual(estado, 1, texto)
+                self.assertNotIn("MEDIDA", texto)
 
 
 class BaseSinAmbiguedad(unittest.TestCase):

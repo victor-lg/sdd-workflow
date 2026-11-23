@@ -110,10 +110,15 @@ jobs:
           package-manager-cache: false
 
       # VIC-44: vCPU del runner (en los repos privados, 2; en los públicos, 4), para leer la
-      # alarma de mutantes por tiempo.
+      # alarma de mutantes por tiempo. Desde VIC-53, también el modelo de CPU: con 4 vCPU los
+      # mutantes por tiempo varían entre jobs, y el modelo es una de las variables que se miden.
+      # Corre antes que el código de la rama.
       - name: CPU del runner
         if: steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft
-        run: nproc
+        run: |
+          nproc
+          modelo=$(sed -n '/^model name/{s/^model name[[:space:]]*: //p;q}' /proc/cpuinfo)
+          echo "Modelo de CPU: ${modelo:-desconocido (sin model name en /proc/cpuinfo)}"
 
       # --force: ejecuta todos los mutantes aunque la rama traiga un fichero incremental.
       # Con cero mutantes la puntuación es NaN y Stryker no aplica el umbral: falla aquí.
@@ -142,15 +147,32 @@ jobs:
       # - la ruta del informe y el mínimo se calculan antes de Stryker: un test puede reescribir
       #   la configuración de $RUNNER_TEMP;
       # - todo el script va entre llaves, que bash lee enteras antes de ejecutar: un test puede
-      #   reescribir el fichero del script mientras corre, y sin ellas bash leería lo nuevo.
+      #   reescribir el fichero del script mientras corre, y sin ellas bash leería lo nuevo;
+      # - un informe en el que no se puede escribir hace fallar el paso (VIC-53): un test puede
+      #   dejar el suyo sin permiso de escritura, Stryker no puede escribir encima, sale con 0
+      #   y se leería el falso;
+      # - también falla si la salida de Stryker trae un error del reporter json (VIC-53): un
+      #   test puede bajar con prlimit el límite de ficheros abiertos del proceso de Stryker y
+      #   dejar un informe falso que sí se puede escribir; Stryker anota EMFILE y sale con 0;
+      # - el log de Stryker se abre en el descriptor 5 antes de lanzarlo (Stryker no lo
+      #   hereda: `5>&-`); tee escribe en /dev/fd/5 y los grep leen de ahí, no de la ruta: un
+      #   test puede borrar $RUNNER_TEMP/stryker.log y dejar otro sin el error (VIC-53). Si
+      #   grep no puede leerlo (un test le quita los permisos), falla (G4 de sdd-workflow#66).
+      #   Un test que mate a tee ya hace fallar el paso: sin pipefail, la tubería sale con el
+      #   estado de tee y `bash -e` corta (medido en VIC-53).
       # Ficheros y sustituciones salen del código de la rama: se imprimen entre stop-commands,
-      # como la salida de Stryker. Límites aceptados, como `__STRYKER_ACTIVE_MUTANT__`
-      # (cabecera), que ve la revisión: un proceso que un test deje vivo y reescriba el informe
-      # antes de leerlo o escriba en el log del paso, y un test que use el sudo sin contraseña
-      # del runner, que con root puede saltarse cualquiera de estas defensas. Abierto y sin
-      # aceptar (G4 de sdd-workflow#64, medido): un test que deje su propio informe en la ruta
-      # del informe, sin permiso de escritura. Stryker no puede escribir el suyo, lo anota en el
-      # log y sale como si nada, y el paso cuenta el falso. Cambiar el mínimo es R2.
+      # como la salida de Stryker. Después del token, un aviso MEDIDA con nproc, los mutantes
+      # por tiempo y la puntuación contándolos como supervivientes (VIC-53): son números que
+      # calcula el paso, no texto de la rama, para comparar jobs: la cuenta los escribe en el
+      # descriptor 3, que va a la variable `medida`, y su salida normal sigue en el log por el
+      # 4 (`3>&1 1>&4` dentro de `$(…)` y `4>&1` en las llaves de fuera), dentro de los
+      # stop-commands. Sin el 4, la lista de mutantes por tiempo acabaría en la variable.
+      # Límites aceptados, como `__STRYKER_ACTIVE_MUTANT__` (cabecera), que ve la revisión: un
+      # proceso que un test deje vivo y reescriba el informe antes de leerlo o escriba en el
+      # log del paso, un test que use el sudo sin contraseña del runner, que con root puede
+      # saltarse cualquiera de estas defensas, y cualquier otra forma de engañar al paso desde
+      # el mismo usuario (los tests corren con el del runner; VIC-53 cierra esta familia).
+      # Cambiar el mínimo es R2.
       - name: Stryker
         id: stryker
         if: steps.preparar.outputs.stryker == 'si' && !github.event.pull_request.draft
@@ -158,6 +180,7 @@ jobs:
           PUNTUACION_MINIMA_SIN_TIEMPO: "90"
         run: |
           {
+          cpus=$(/usr/bin/nproc)
           npm ci --ignore-scripts --no-audit --no-fund
           [ -x node_modules/.bin/stryker ] || { echo "::error::npm ci no instaló Stryker"; exit 1; }
           informe=$(python3 -I -c '
@@ -179,12 +202,28 @@ jobs:
           rm -f "$informe"
           token=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
           echo "::stop-commands::$token"
-          node_modules/.bin/stryker run "$RUNNER_TEMP/stryker.config.json" --force --reporters clear-text,json 2>&1 | tee "$RUNNER_TEMP/stryker.log"
+          exec 5> "$RUNNER_TEMP/stryker.log"
+          node_modules/.bin/stryker run "$RUNNER_TEMP/stryker.config.json" --force --reporters clear-text,json 5>&- 2>&1 | tee /dev/fd/5
           estado=${PIPESTATUS[0]}
+          # grep sale con 0 si encuentra la línea, con 1 si no y con 2 si no puede leer el log (un
+          # test puede quitarle los permisos): solo el 1 deja seguir (falla cerrado, G4 de #66).
+          error_json=0
+          /usr/bin/grep -Eq "An error occurred during '[^']+' on reporter 'json'" /dev/fd/5 || error_json=$?
+          nan=0
+          /usr/bin/grep -q "Final mutation score of NaN" /dev/fd/5 || nan=$?
           alarma=0
-          if [ -f "$informe" ]; then
-            /usr/bin/python3 -I -c '
-          import json, sys
+          medida=
+          solo_lectura=0
+          if [ -f "$informe" ] && [ ! -w "$informe" ]; then
+            # Stryker no ha podido escribir encima: el informe que hay no es el suyo.
+            solo_lectura=1
+          elif [ "$error_json" -ne 1 ]; then
+            # Stryker no ha podido escribir el informe y sale como si nada (o el log no se puede
+            # leer): el que haya no es el suyo.
+            :
+          elif [ -f "$informe" ]; then
+            { medida=$(/usr/bin/python3 -I -c '
+          import json, os, sys
           from decimal import Decimal
           minimo = Decimal(sys.argv[2])
           informe = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -208,11 +247,25 @@ jobs:
           puntuacion = Decimal(muertos) * 100 / validos
           print(f"Mutantes por tiempo: {por_tiempo}")
           print(f"Puntuación contándolos como supervivientes: {muertos}/{validos} = {puntuacion:.2f} (mínimo {minimo})")
+          os.write(3, f"{por_tiempo} {muertos} {validos} {puntuacion:.2f}".encode())
           sys.exit(3 if puntuacion < minimo else 0)
-          ' "$informe" "$minimo" || alarma=$?
+          ' "$informe" "$minimo" 3>&1 1>&4) || alarma=$?; } 4>&1
           fi
           echo "::$token::"
-          if /usr/bin/grep -q "Final mutation score of NaN" "$RUNNER_TEMP/stryker.log"; then
+          if [ "$solo_lectura" -eq 1 ]; then
+            echo "::error::El informe JSON de Stryker ($informe) no se puede escribir: Stryker no ha podido dejar el suyo, así que el que hay lo ha dejado otro proceso (un test, por ejemplo) y no se cuenta"; exit 1
+          fi
+          if [ "$error_json" -gt 1 ] || [ "$nan" -gt 1 ]; then
+            echo "::error::No se ha podido leer el log de Stryker ($RUNNER_TEMP/stryker.log; grep salió con $error_json y $nan): sin él no se sabe si Stryker ha escrito el informe, y no se cuenta"; exit 1
+          fi
+          if [ "$error_json" -eq 0 ]; then
+            echo "::error::Stryker no ha podido escribir el informe JSON (el error del reporter json, en su salida, arriba) y no falla por eso: el que haya en $informe no es el suyo y no se cuenta"; exit 1
+          fi
+          # Números que calcula este paso, no texto de la rama (VIC-53).
+          if [[ "$cpus" =~ ^[0-9]+$ && "$medida" =~ ^([0-9]+)\ ([0-9]+)\ ([0-9]+)\ ([0-9]+\.[0-9]{2})$ ]]; then
+            echo "::notice title=MEDIDA::nproc $cpus, mutantes por tiempo ${BASH_REMATCH[1]}, puntuación contándolos como supervivientes ${BASH_REMATCH[2]}/${BASH_REMATCH[3]} = ${BASH_REMATCH[4]}"
+          fi
+          if [ "$nan" -eq 0 ]; then
             echo "::error::Stryker no ha probado ningún mutante: revisa mutate en stryker.config.json"; exit 1
           fi
           if [ ! -f "$informe" ]; then
