@@ -1011,8 +1011,10 @@ class TestHallazgos(unittest.TestCase):
                 self.assertEqual(self.comprobar(respuesta, "- G4-1-A-01 · menor · prueba: x · resolución: descartado").errores, [])
 
 
-def comentario(cuerpo: str, login: str = "victor-lg-bot", n: int = 1) -> dict:
-    return {"user": {"login": login}, "body": cuerpo, "html_url": f"https://github.com/o/r/pull/1#issuecomment-{n}"}
+def comentario(cuerpo: str, login: str = "victor-lg-bot", n: int = 1,
+               editado: str = "2026-11-20T10:00:00Z") -> dict:
+    return {"user": {"login": login}, "body": cuerpo, "html_url": f"https://github.com/o/r/pull/1#issuecomment-{n}",
+            "created_at": "2026-11-20T10:00:00Z", "updated_at": editado}
 
 
 class TestHallazgosEnComentarios(unittest.TestCase):
@@ -1032,7 +1034,8 @@ class TestHallazgosEnComentarios(unittest.TestCase):
         # Como `gh api --paginate`: una lista por página, una detrás de otra.
         texto = contenido if isinstance(contenido, str) else "\n".join(json.dumps(p) for p in contenido)
         ruta.write_text(texto, encoding="utf-8")
-        return checks.comentarios_de_g4(str(ruta))
+        leidos = checks.comentarios_de_cuentas(str(ruta))
+        return None if leidos is None else checks.enlaces_y_cuerpos(leidos)
 
     def test_respuesta_en_comentario_exige_su_linea(self):
         for respuesta in ("### G4-1-A-01 · importante\n\n- **Dónde:** x", "- **G4-1-A-01** · importante",
@@ -1089,7 +1092,114 @@ class TestHallazgosEnComentarios(unittest.TestCase):
         for contenido in ("", " \n", "{", "{}", "[]{}", "[] x", "[1]", '[["x"]]'):
             with self.subTest(contenido=contenido):
                 self.assertIsNone(self.leer(contenido))
-        self.assertIsNone(checks.comentarios_de_g4(str(pathlib.Path(self.tmp.name) / "no-existe.json")))
+        self.assertIsNone(checks.comentarios_de_cuentas(str(pathlib.Path(self.tmp.name) / "no-existe.json")))
+
+class TestRespuestasBorradasOEditadas(unittest.TestCase):
+    """VIC-47: la cuenta del agente no puede anular una respuesta de G4 borrándola ni editándola."""
+
+    URL = "https://github.com/o/r/pull/1"
+    RESPUESTA = "### G4-1-A-01 · importante\n\nCommit revisado: G4-1-A · " + "a" * 40
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def comprobar(self, comentarios, *lineas, url=URL):
+        return ejecutar(checks.check_respuestas, reconciliacion(*lineas), comentarios, url)
+
+    def enlace(self, n=1):
+        return f"- **Revisor A (Sonnet):** [respuesta]({self.URL}#issuecomment-{n}) · [reconciliación]({self.URL}#issuecomment-{n + 1})"
+
+    def test_comentarios_enlazados_y_sin_editar_pasan(self):
+        comentarios = [comentario(self.RESPUESTA), comentario("Reconciliación\n\nMétricas G4: PR #1 · ronda 1 ·", n=2)]
+        self.assertEqual(self.comprobar(comentarios, self.enlace()).errores, [])
+        self.assertEqual(self.comprobar([], "Sin G4: R0.").errores, [])
+
+    def test_comentario_borrado_falla(self):
+        inf = self.comprobar([comentario(self.RESPUESTA)], self.enlace())
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn(f"enlaza el comentario {self.URL}#issuecomment-2 y no está", inf.errores[0])
+
+    def test_enlace_a_comentario_de_otra_cuenta_falla(self):
+        """Solo se leen los de CUENTAS_G4: uno de otra cuenta enlazado cuenta como borrado (G4-1-B-03)."""
+        ruta = pathlib.Path(self.tmp.name) / "comentarios.json"
+        ruta.write_text(json.dumps([comentario(self.RESPUESTA), comentario("Reconciliación", login="intruso", n=2)]),
+                        encoding="utf-8")
+        inf = self.comprobar(checks.comentarios_de_cuentas(str(ruta)), self.enlace())
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn(f"enlaza el comentario {self.URL}#issuecomment-2 y no está", inf.errores[0])
+
+    def test_enlaces_de_otro_pr_o_escondidos_no_cuentan(self):
+        """Una aclaración puede enlazar la respuesta de la persona en otro PR; lo que no se ve no es enlace."""
+        lineas = ("- Aclaración SPEC-CALC-003/FR-05: x. Respuesta: https://github.com/o/r/pull/2#issuecomment-9",
+                  f"<!-- {self.URL}#issuecomment-8 -->", "```", f"{self.URL}#issuecomment-7", "```")
+        self.assertEqual(self.comprobar([], *lineas).errores, [])
+
+    def test_sin_url_del_pr_no_comprueba_los_enlaces(self):
+        self.assertEqual(self.comprobar([], self.enlace(), url=None).errores, [])
+
+    def test_comentario_editado_falla(self):
+        editado = comentario(self.RESPUESTA, editado="2026-11-20T11:00:00Z")
+        for c in (editado, {**editado, "updated_at": None}, {k: v for k, v in editado.items() if k != "created_at"}):
+            with self.subTest(c=c):
+                inf = self.comprobar([c, comentario("Métricas G4: PR #1 · ronda 1 ·", n=2)], self.enlace())
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn(f"{self.URL}#issuecomment-1 se editó después de publicarse", inf.errores[0])
+                self.assertIn("`Comentario editado: <enlace> · <motivo>`", inf.errores[0])
+
+    def test_editado_sin_enlace_tambien_falla_si_es_de_g4(self):
+        """Quitar también el enlace de la descripción no lo esconde: trae un ID de revisor o métricas."""
+        for cuerpo in (self.RESPUESTA, "Commit revisado: G4-2-B · " + "b" * 40, "x\nMétricas G4: PR #1 · ronda 1 ·"):
+            with self.subTest(cuerpo=cuerpo):
+                inf = self.comprobar([comentario(cuerpo, editado="2026-11-21T00:00:00Z")])
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+
+    def test_editar_otros_comentarios_no_falla(self):
+        c = comentario("Gracias, lo miro mañana.", login="victor-lg", n=5, editado="2026-11-21T00:00:00Z")
+        self.assertEqual(self.comprobar([c]).errores, [])
+
+    def test_edicion_justificada_pasa(self):
+        c = comentario(self.RESPUESTA, editado="2026-11-20T11:00:00Z")
+        for linea in (f"Comentario editado: {self.URL}#issuecomment-1 · solo el SHA de «Commit revisado»",
+                      f"- Comentario editado: [respuesta A]({self.URL}#issuecomment-1) · corrijo el SHA"):
+            with self.subTest(linea=linea):
+                self.assertEqual(self.comprobar([c, comentario("Métricas G4: PR #1 · ronda 1 ·", n=2)],
+                                                self.enlace(), linea).errores, [])
+
+    def test_justificacion_sin_motivo_escondida_o_de_otro_comentario_no_vale(self):
+        c = comentario(self.RESPUESTA, editado="2026-11-20T11:00:00Z")
+        for linea in (f"Comentario editado: {self.URL}#issuecomment-1",
+                      f"Comentario editado: {self.URL}#issuecomment-1 · ",
+                      f"<!-- Comentario editado: {self.URL}#issuecomment-1 · x -->",
+                      f"Comentario editado: {self.URL}#issuecomment-3 · x"):
+            with self.subTest(linea=linea):
+                errores = self.comprobar([c], linea).errores
+                self.assertEqual(sum("issuecomment-1 se editó" in e for e in errores), 1, errores)
+
+    def test_justificacion_plegada_no_vale(self):
+        """G4-1-B-01: plegada, la persona no la ve al aprobar."""
+        c = comentario(self.RESPUESTA, editado="2026-11-20T11:00:00Z")
+        linea = f"Comentario editado: {self.URL}#issuecomment-1 · x"
+        for envoltura in (f"<details><summary>x</summary>\n\n{linea}\n\n</details>",
+                          f"<details>\n<summary>x</summary>\n<details>\n\n{linea}\n\n</details>\n</details>"):
+            with self.subTest(envoltura=envoltura):
+                errores = self.comprobar([c], envoltura).errores
+                self.assertEqual(sum("issuecomment-1 se editó" in e for e in errores), 1, errores)
+
+    def test_justificacion_fuera_de_revision_ia_no_vale(self):
+        c = comentario(self.RESPUESTA, editado="2026-11-20T11:00:00Z")
+        cuerpo = reconciliacion().replace("## Guía para el revisor humano",
+                                          f"## Guía para el revisor humano\n\nComentario editado: {self.URL}#issuecomment-1 · x", 1)
+        self.assertEqual(len(ejecutar(checks.check_respuestas, cuerpo, [c], self.URL).errores), 1)
+
+    def test_url_del_pr_sale_de_las_variables_de_github(self):
+        entorno = {"GITHUB_SERVER_URL": "https://github.com", "GITHUB_REPOSITORY": "o/r", "GITHUB_REF": "refs/pull/12/merge"}
+        with unittest.mock.patch.dict(os.environ, entorno):
+            self.assertEqual(checks.url_del_pr(), "https://github.com/o/r/pull/12")
+        for cambio in ({"GITHUB_REF": "refs/heads/main"}, {"GITHUB_REPOSITORY": ""}, {"GITHUB_REF": "refs/pull/0/merge"}):
+            with self.subTest(cambio=cambio), unittest.mock.patch.dict(os.environ, {**entorno, **cambio}):
+                self.assertIsNone(checks.url_del_pr())
+
 
 class TestRondasDeG4(unittest.TestCase):
     """VIC-39: de los comentarios salen el commit que vio cada revisor y los revisores de cada ronda."""
@@ -1378,6 +1488,24 @@ class TestPuntaAPunta(unittest.TestCase):
                         PR_COMENTARIOS=str(self.repo / "no-existe.json"))
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("**hallazgos:** no he podido leer los comentarios del PR", r.stdout)
+
+    def test_respuesta_editada_o_borrada_falla(self):
+        """VIC-47, con las variables que pone GitHub en un pull_request."""
+        ruta = self.repo / "comentarios.json"
+        cuerpo = ("Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n\n## Revisión IA (G4)\n\n"
+                  "- Revisor A: https://github.com/o/r/pull/1#issuecomment-1\n")
+        github = {"GITHUB_SERVER_URL": "https://github.com", "GITHUB_REPOSITORY": "o/r", "GITHUB_REF": "refs/pull/1/merge"}
+        casos = (([comentario("Revisión sin hallazgos")], 0, None),
+                 ([comentario("Revisión", editado="2026-11-21T00:00:00Z")], 1, "se editó después de publicarse"),
+                 ([], 1, "enlaza el comentario https://github.com/o/r/pull/1#issuecomment-1 y no está"))
+        for n, (comentarios, codigo, error) in enumerate(casos):
+            with self.subTest(n=n):
+                ruta.write_text(json.dumps(comentarios), encoding="utf-8")
+                r = self.correr("adr: decide x\n\nRefs: VIC-7", f'referencias: ["PR #{30 + n}"]',
+                                PR_BODY=cuerpo, PR_COMENTARIOS=str(ruta), **github)
+                self.assertEqual(r.returncode, codigo, r.stdout)
+                if error:
+                    self.assertIn(error, r.stdout)
 
     def test_publica_los_cambios_tras_la_ultima_ronda(self):
         """VIC-39: con la cabeza del PR en PR_HEAD_SHA, como en la CI; sin el commit revisado, falla."""
