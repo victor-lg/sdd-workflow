@@ -1038,8 +1038,13 @@ def comentario(cuerpo: str, login: str = "victor-lg-bot", n: int = 1,
             "created_at": "2026-11-20T10:00:00Z", "updated_at": editado}
 
 
-def review(estado: str, commit: str, login: str = "victor-lg", n: int = 1) -> dict:
-    return {"id": n, "user": {"login": login}, "state": estado, "commit_id": commit}
+ID_PERSONA = 95044073  # victor-lg, en checks.PERSONAS
+
+
+def review(estado: str, commit: str, login: str = "victor-lg", n: int = 1, uid: int | None = None) -> dict:
+    """Una review de la API; por defecto, de la persona (su id)."""
+    return {"id": n, "user": {"login": login, "id": ID_PERSONA if uid is None else uid}, "state": estado,
+            "commit_id": commit}
 
 
 CABEZA = "c" * 40
@@ -1071,12 +1076,25 @@ class TestAprobacionR2(unittest.TestCase):
 
     def test_solo_cuenta_la_persona(self):
         """Ni la cuenta del agente ni otra cualquiera: el repo es público y aprueba cualquiera con permiso."""
-        for login in ("victor-lg-bot", "otra", "Victor-lg", ""):
+        for login, uid in (("victor-lg-bot", 1), ("otra", 2), ("Victor-lg", 3), ("", 4)):
             with self.subTest(login=login):
-                inf = self.comprobar([review("APPROVED", CABEZA, login=login)])
+                inf = self.comprobar([review("APPROVED", CABEZA, login=login, uid=uid)])
                 self.assertIn("no hay ninguna review de la persona", inf.errores[0])
         inf = self.comprobar([{"id": 1, "user": None, "state": "APPROVED", "commit_id": CABEZA}])
         self.assertEqual(len(inf.errores), 1)
+
+    def test_identidad_por_id_y_no_por_login(self):
+        """Si victor-lg cambiara de nombre, otra cuenta podría registrar el libre: cuenta el id, no el login."""
+        for uid in (1, str(ID_PERSONA), True, None):
+            with self.subTest(uid=uid):
+                r = review("APPROVED", CABEZA)
+                r["user"]["id"] = uid
+                inf = self.comprobar([r])
+                self.assertIn("no hay ninguna review de la persona", inf.errores[0])
+        # Con el login cambiado, su aprobación sigue contando (y el mensaje usa el nombre de PERSONAS).
+        inf = self.comprobar([review("APPROVED", CABEZA, login="nombre-nuevo")])
+        self.assertEqual(inf.errores, [])
+        self.assertIn("aprobado por victor-lg", inf.secciones[0])
 
     def test_un_comentario_de_review_no_aprueba(self):
         for estado in ("COMMENTED", "PENDING", "approved", ""):
@@ -1113,7 +1131,7 @@ class TestAprobacionR2(unittest.TestCase):
                     self.assertEqual(inf.errores, [])
 
     def test_sin_id_falla_cerrado(self):
-        inf = self.comprobar([{"user": {"login": "victor-lg"}, "state": "APPROVED", "commit_id": CABEZA}])
+        inf = self.comprobar([{"user": {"login": "victor-lg", "id": ID_PERSONA}, "state": "APPROVED", "commit_id": CABEZA}])
         self.assertIn("no tiene id", inf.errores[0])
 
     def test_sin_reviews_o_sin_cabeza_falla_en_r2(self):

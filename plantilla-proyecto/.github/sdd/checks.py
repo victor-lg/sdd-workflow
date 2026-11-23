@@ -1222,7 +1222,10 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
 # falla en todo R2 hasta que la persona lo aprueba en GitHub, sobre el commit de la cabeza: un push
 # posterior la deja sin valor. Solo cuenta la review de estas cuentas, nunca la del agente (CUENTAS_G4
 # incluye la suya). `sdd.yml` se lanza también con `pull_request_review` y pasa las reviews en PR_REVIEWS.
-PERSONAS = ("victor-lg",)
+# Por `user.id` y no por login: si la cuenta cambiara de nombre, otra podría registrar el libre, y en un
+# repo público cualquiera envía reviews. El login solo sirve para los mensajes.
+# Id de una cuenta: `gh api users/<login> --jq .id`.
+PERSONAS = {95044073: "victor-lg"}
 # Los estados que deciden; un COMMENTED no aprueba ni retira nada, como en GitHub.
 ESTADOS_DECISIVOS = {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
 
@@ -1230,7 +1233,8 @@ ESTADOS_DECISIVOS = {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
 def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
     """(aprobado, motivo): la última review decisiva de PERSONAS es APPROVED y sobre `cabeza`."""
     suyas = [r for r in reviews if isinstance(r, dict) and isinstance(r.get("user"), dict)
-             and r["user"].get("login") in PERSONAS and r.get("state") in ESTADOS_DECISIVOS]
+             and type(r["user"].get("id")) is int and r["user"]["id"] in PERSONAS
+             and r.get("state") in ESTADOS_DECISIVOS]
     if not suyas:
         return False, "no hay ninguna review de la persona"
     # Por id: es el orden en que se enviaron. Sin id numérico no se sabe cuál es la última.
@@ -1242,7 +1246,7 @@ def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
                        "DISMISSED": "la última review de la persona se retiró (dismiss)"}[ultima["state"]]
     if ultima.get("commit_id") != cabeza:
         return False, f"la persona aprobó `{str(ultima.get('commit_id'))[:12]}` y la cabeza es `{cabeza[:12]}`"
-    return True, f"aprobado por {ultima['user']['login']} en `{cabeza[:12]}`"
+    return True, f"aprobado por {PERSONAS[ultima['user']['id']]} en `{cabeza[:12]}`"
 
 
 def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str | None) -> None:
@@ -1256,7 +1260,7 @@ def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str
     inf.secciones.append(f"### Aprobación de la persona (R2)\n\n- {'Sí' if aprobado else 'No'}: {motivo}.")
     if not aprobado:
         inf.error("aprobacion", f"PR R2: {motivo}. Un R2 solo se fusiona con la aprobación de "
-                                f"{', '.join(f'`{p}`' for p in PERSONAS)} sobre el último commit (ADR-0009 §3.4); "
+                                f"{', '.join(f'`{p}`' for p in PERSONAS.values())} sobre el último commit (ADR-0009 §3.4); "
                                 "al aprobar, este check se vuelve a lanzar solo.")
 
 
