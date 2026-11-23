@@ -4,6 +4,11 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **Las evaluaciones, condición para quitar el borrador en los PR del plugin (VIC-51). Plugin `sdd` 1.17.0.** Lección 2 de `historial/retrospectiva-bloque-4.md`: el #55 se dio por listo con las evaluaciones pendientes.
+  - **`docs/convenciones.md`, §5.1:** un PR que toca `plugin-sdd/skills/`, `plugin-sdd/agents/` o `plugin-sdd/evals/` no sale de borrador sin sus evaluaciones. El resultado se anota en el PR: versión del plugin, commit evaluado (el último del PR) y una línea por caso. La orden apunta a `refs/pull/<N>/head`, que sobrevive al squash y al borrado de la rama, y empieza por `cd` al clon: lanzada fuera de él, la del #65 fallaba en el `git fetch`.
+  - **`sdd-review`:** sin ese resultado anotado no quita el borrador; deja la orden y avisa a la persona.
+  - La CI semanal de evaluaciones no cambia, y no corren en la CI de cada PR (fuera de alcance).
+
 - **El informe falso de Stryker, cerrado en la plantilla, y la medida en el log (VIC-53).** `plantilla-proyecto/.github/workflows/calidad.yml` recibe los pasos «CPU del runner» y «Stryker» de calculadora-discos#77 (commit e7e1782), salvo el comentario de «CPU del runner» y la documentación a la que remite el error, y dos defensas más que la calculadora aún no tiene.
   - **Informe de solo lectura** (G4-1-B-01 de #64): el paso falla si el informe no se puede escribir.
   - **Medida:** «CPU del runner» imprime también el modelo de CPU; el paso Stryker deja, después del token, un aviso `MEDIDA` con `nproc`, los mutantes por tiempo y la puntuación contándolos como supervivientes.

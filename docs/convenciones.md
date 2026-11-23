@@ -108,6 +108,29 @@ Spec: SPEC-CALC-003/AC-04
 - **Mensaje del squash:** en *Settings → General → Pull Requests*, *Default commit message* = **"Pull request title and commit details"**. El commit de `main` recoge entonces como cuerpo los commits de la rama, que ya siguen el formato. Es un ajuste del repo y lo haces tú (ADR-0007).
 - Un PR no mezcla spec y código; unas 400 líneas de código como máximo, sin contar tests ni lockfiles.
 
+### 5.1 Evaluaciones del plugin antes de quitar el borrador (VIC-51)
+
+Solo en el repo del workflow. Un PR que toca `plugin-sdd/skills/`, `plugin-sdd/agents/` o `plugin-sdd/evals/` no sale de borrador sin sus evaluaciones, igual que sin la CI y sin G4. Es la lección 2 de `historial/retrospectiva-bloque-4.md`: el #55 se dio por listo con ellas pendientes. La CI semanal (`evals.yml`) sigue corriendo todos los casos; esto no la sustituye.
+
+- **Qué casos:** los que cargan lo que cambia (la skill, el subagente o el caso tocado) y los que el cambio más puede romper, con el motivo en el PR.
+- **La orden va en la descripción del PR** y apunta a `refs/pull/<N>/head`, que GitHub guarda aunque se fusione el PR y se borre la rama; `origin/<rama>` desaparece con el squash. Empieza por `cd` al clon con su ruta absoluta: lanzada desde otro directorio, el `git fetch` falla.
+
+  ```bash
+  cd <ruta absoluta del clon> && git fetch origin refs/pull/<N>/head && git worktree add --detach ../sdd-pr-<N> FETCH_HEAD && cd ../sdd-pr-<N>/plugin-sdd && for c in <casos>; do claude plugin eval . --case "$c" --ablation none --no-publish --trust-plugin || break; done
+  ```
+
+  - **Ejemplo real, el #65** (cambia `sdd-review`). Esta orden funcionó lanzada desde el clon:
+
+    ```bash
+    git fetch origin refs/pull/65/head && git worktree add --detach ../sdd-pr-65 FETCH_HEAD && cd ../sdd-pr-65/plugin-sdd && for c in activacion-sdd-review 'g4-*' n8-revisor-sin-contexto-del-autor hook-cuerpo-por-fichero; do claude plugin eval . --case "$c" --ablation none --no-publish --trust-plugin || break; done
+    ```
+
+    Lanzada fuera del clon, falla en el primer paso: `git fetch` no encuentra el repo (`fatal: not a git repository`) y no se evalúa nada. Por eso la orden empieza ahora por `cd`.
+  - `--no-publish` deja los informes en local (`results/` del worktree, que Git ignora). `--trust-plugin` va siempre en las órdenes locales.
+  - Al terminar, desde el clon: `git worktree remove ../sdd-pr-<N>`. Los informes se borran con él, así que el resultado se anota antes. Si hay que repetirlas, primero se quita el worktree, o `worktree add` falla.
+- **El resultado va en el PR** antes de `gh pr ready`, en «Validación»: la versión del plugin, el commit evaluado y una línea por caso, que pasa o falla, con una nota si falla o si el evaluador da ruido. El commit evaluado tiene que ser el último del PR: si después entra otro que toca esas rutas, se repiten.
+- **Quién las lanza:** la persona, mientras el sandbox del agente no llegue a la API. El agente deja la orden y no quita el borrador hasta que el resultado esté anotado. Un caso que falla cuenta como una CI en rojo: se corrige o se explica, y decide la persona.
+
 ## 6. Versiones y notas
 
 - **Etiqueta** `vX.Y.Z` sobre `main` tras cada publicación (semver). Para una PWA:
