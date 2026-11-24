@@ -40,6 +40,10 @@ Comprueba:
   aprobacion    VIC-56 (ADR-0009 §3.4): un PR R2 (el mayor entre el nivel marcado y el que exige lo
                 tocado) falla salvo que la última review de PERSONAS sea una aprobación del commit de
                 la cabeza. Las reviews llegan en PR_REVIEWS (`gh api --paginate …/pulls/N/reviews`).
+  g4            VIC-56 (ADR-0009 §3.1 y §5): falla si el PR no tiene G4, o si su última ronda tiene menos
+                revisores de los que pide `sdd-review` (2 en R2, specs y ADR; 1 en lo demás). No la
+                necesitan los PR de Dependabot ni un R0 que es solo documentación (`es_documentacion`);
+                un R0 que no lo es cuenta como R1.
   cabeza        VIC-56: falla si PR_HEAD_SHA no está en la historia del commit que se prueba (el merge
                 de GitHub puede ser anterior a un push reciente).
 
@@ -209,6 +213,14 @@ class Informe:
 def git(*args: str) -> str | None:
     r = subprocess.run(["git", *args], capture_output=True, text=True)
     return r.stdout if r.returncode == 0 else None
+
+
+def rutas(*args: str) -> list[str] | None:
+    """Una orden de Git que lista rutas, con -z: sin él, Git entrecomilla las rutas no ASCII
+    (`".claude/\\303\\261.md"`) y ningún patrón ni `es_test`/`es_spec` las reconoce (G4 de VIC-56)."""
+    # -z justo tras la suborden: después de `--` sería una ruta.
+    salida = git(args[0], "-z", *args[1:])
+    return None if salida is None else [r for r in salida.split("\0") if r]
 
 
 def es_codigo(ruta: str) -> bool:
@@ -619,8 +631,6 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
               f"- Nivel mínimo según lo tocado: **{minimo}**"]
     lineas += [f"  - {m}" for m in motivos]
     inf.secciones.append("### Nivel de riesgo\n\n" + "\n".join(lineas))
-    if declarado == "R0" and any(es_codigo(f) for f in cambiados):
-        inf.aviso("riesgo", "⚠️ PR R0 que toca código: la revisión IA es opcional. Comprueba que no cambia comportamiento.")
     if declarado and ORDEN[declarado] < ORDEN[minimo]:
         inf.error("riesgo", f"el PR está marcado {declarado} pero lo que toca exige {minimo}. Sube el nivel en el PR (la CI solo puede subirlo).")
     return max(declarado or minimo, minimo, key=ORDEN.get)
@@ -629,11 +639,11 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
 # --- Tests existentes que cambian -----------------------------------------
 
 def check_tests(inf: Informe, base: str) -> None:
-    diff = git("diff", "--name-status", "--no-renames", "--diff-filter=MD", f"{base}...HEAD") or ""
+    # Con -z, `--name-status` alterna el estado y la ruta.
+    campos = rutas("diff", "--name-status", "--no-renames", "--diff-filter=MD", f"{base}...HEAD") or []
     filas = []
-    for linea in diff.splitlines():
-        estado, _, ruta = linea.partition("\t")
-        if ruta and es_test(ruta):
+    for estado, ruta in zip(campos[::2], campos[1::2]):
+        if es_test(ruta):
             filas.append(f"- `{ruta}` ({'borrado' if estado == 'D' else 'modificado'})")
     if filas:
         inf.secciones.append("### Tests existentes que cambian\n\n"
@@ -1333,12 +1343,70 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
         # PR que cambian desde lo que vio cada revisor.
         orden = (git("rev-list", "--topo-order", "--reverse", cabeza, f"^{base}") or "").split()
         lineas += [f"- `{h[:7]}` {texto_del_resumen(nuevos[h])}" for h in orden if h in nuevos]
-        del_pr = set((git("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or "").splitlines())
+        del_pr = set(rutas("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or [])
         ficheros = sorted({f for l in letras
-                           for f in (git("diff", "--name-only", "--no-renames", vistos[(ronda, l)], cabeza) or "").splitlines()} & del_pr)
+                           for f in rutas("diff", "--name-only", "--no-renames", vistos[(ronda, l)], cabeza) or []} & del_pr)
         if ficheros:
             lineas += ["", "Ficheros: " + ", ".join(texto_del_resumen(f) for f in ficheros)]
     inf.secciones.append("### Cambios tras la última ronda\n\n" + "\n".join(lineas))
+
+
+# --- PR sin G4 (VIC-56) ---------------------------------------------------
+
+# ADR-0009 §3.1 y §5: el agente no fusiona solo un PR sin G4, salvo un R0 que checks.py comprueba que es
+# solo documentación. Si no puede comprobarlo, el R0 cuenta como R1 y lleva G4 (aclaración de la decisión 1).
+# Revisores por PR, como en la tabla de `sdd-review` (no la cambia: la comprueba).
+REVISORES_R2_SPEC_ADR, REVISORES_OTROS = 2, 1
+# Instrucciones para agentes en cualquier carpeta (G4-1-B-01; GEMINI.md, G4-2-A-01): Claude Code lee el CLAUDE.md de la carpeta en la
+# que trabaja, y otros agentes, los AGENTS.md anidados. R2_RUTAS solo ve los de la raíz.
+INSTRUCCIONES_AGENTE = {"agents.md", "claude.md", "claude.local.md", "gemini.md"}
+
+
+def es_documentacion(ruta: str, modo: str | None) -> bool:
+    """Solo documentación: un `.md` que es un fichero normal (modo 100644) o que el PR borra (sin modo), sin
+    enlaces ni submódulos. No lo son una spec ni un ADR (suben a R1 y van a CODEOWNERS), las instrucciones de un
+    agente en cualquier carpeta (INSTRUCCIONES_AGENTE) ni nada dentro de una carpeta que empieza por punto
+    (`.claude/`, `.github/`, `.cursor/`…, también anidadas): es configuración. El mismo criterio vale para el R0
+    sin G4 y para lo que entra tras la última ronda. Las rutas sensibles del proyecto las decide el nivel."""
+    partes = ruta.split("/")
+    return (ruta.endswith(".md") and modo in (None, "100644") and not es_spec(ruta) and not es_adr(ruta)
+            and partes[-1].lower() not in INSTRUCCIONES_AGENTE and not any(c.startswith(".") for c in partes[:-1]))
+
+
+def check_g4(inf: Informe, nivel: str, cambiados: list[str], versionados: dict[str, str] | None,
+             comentarios: list[tuple[str, str]], dependabot: bool = False) -> None:
+    """nivel: el efectivo de `check_riesgo`. versionados: los modos del índice (`ficheros_versionados`);
+    sin ellos no se puede comprobar que un R0 sea solo documentación."""
+    # Dependabot no pasa por G4: es R2 y solo entra con la aprobación de la persona (check `aprobacion`).
+    if dependabot:
+        return
+    no_doc = [f for f in cambiados if versionados is None or not es_documentacion(f, versionados.get(f))]
+    if nivel == "R0" and not no_doc:
+        inf.secciones.append("### G4\n\n- R0 comprobado: el PR solo cambia documentación; no necesita G4.")
+        return
+    con_spec_o_adr = any(es_spec(f) or es_adr(f) for f in cambiados)
+    necesarios = REVISORES_R2_SPEC_ADR if nivel == "R2" or con_spec_o_adr else REVISORES_OTROS
+    vistos, revisores = rondas_de_g4(comentarios)
+    ronda = max(revisores, default=0)
+    # Solo cuenta el revisor que dejó el commit que vio: sin él, `cambios` ya falla.
+    letras = sorted(l for l in revisores.get(ronda, ()) if (ronda, l) in vistos)
+    # El texto del nivel en los mensajes: un R0 que llega aquí no se ha podido comprobar y cuenta como R1.
+    como = "R0 sin comprobar, cuenta como R1" if nivel == "R0" else nivel
+    if nivel == "R0":
+        detalle = ", ".join(f"`{texto_del_resumen(f)}`" for f in no_doc[:5]) + (" y más" if len(no_doc) > 5 else "")
+        motivo = ("no he podido leer los modos de los ficheros con Git" if versionados is None
+                  else f"no es solo documentación ({detalle})")
+        inf.aviso("g4", f"PR marcado R0 que {motivo}: cuenta como R1 y necesita G4 (ADR-0009, aclaración de la decisión 1).")
+    linea = (f"Ronda {ronda}: {len(letras)} revisor(es) con su commit ({', '.join(letras) or 'ninguno'})"
+             if ronda else "Ninguna ronda")
+    inf.secciones.append(f"### G4\n\n- Nivel: {como}; revisores necesarios: {necesarios}.\n- {linea}.")
+    if not ronda:
+        inf.error("g4", f"el PR no tiene G4: ningún comentario de {', '.join(f'`{c}`' for c in CUENTAS_G4)} con una ronda. "
+                        f"Un PR {como} no se fusiona sin revisión (ADR-0009 §5); lánzala con `sdd-review`.")
+    elif len(letras) < necesarios:
+        inf.error("g4", f"la última ronda de G4 (la {ronda}) tiene {len(letras)} revisor(es) con `Commit revisado` y este PR "
+                        f"({como}{', con spec o ADR' if con_spec_o_adr else ''}) "
+                        f"necesita {necesarios} (tabla de `sdd-review`).")
 
 
 # --- Aprobación de la persona en R2 (VIC-56) ------------------------------
@@ -1415,18 +1483,17 @@ def main() -> int:
     cuerpo_pr = os.environ.get("PR_BODY", "")
     inf = Informe()
 
-    diff = git("diff", "--name-only", "--no-renames", f"{args.base}...HEAD")
-    if diff is None:
+    cambiados = rutas("diff", "--name-only", "--no-renames", f"{args.base}...HEAD")
+    if cambiados is None:
         print(f"No se puede comparar con {args.base}. ¿Se hizo checkout con fetch-depth: 0?")
         return 2
-    cambiados = [l for l in diff.splitlines() if l]
 
     specs_head_ficheros = {p.relative_to(raiz).as_posix(): p.read_text(encoding="utf-8")
                            for p in sorted((raiz / "docs/specs").glob("*.md"))
                            if not p.name.startswith("_")}
-    base_listado = git("ls-tree", "-r", "--name-only", args.base, "--", "docs/specs") or ""
     specs_base_ficheros = {r: git("show", f"{args.base}:{r}") or ""
-                           for r in base_listado.splitlines() if es_spec(r)}
+                           for r in rutas("ls-tree", "-r", "--name-only", args.base, "--", "docs/specs") or []
+                           if es_spec(r)}
     readme_base = git("show", f"{args.base}:README.md")
     readme_head_p = raiz / "README.md"
     readme_head = readme_head_p.read_text(encoding="utf-8") if readme_head_p.exists() else None
@@ -1476,6 +1543,7 @@ def main() -> int:
     if leidos is not None:
         check_respuestas(inf, cuerpo_pr, leidos, url_del_pr())
     check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr)
+    check_g4(inf, nivel, cambiados, versionados, comentarios or [], dependabot)
     ruta_reviews = os.environ.get("PR_REVIEWS")
     if os.environ.get("PR_HEAD_SHA"):
         check_cabeza(inf, os.environ["PR_HEAD_SHA"])

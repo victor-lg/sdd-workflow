@@ -1344,6 +1344,102 @@ class TestRespuestasBorradasOEditadas(unittest.TestCase):
                 self.assertIsNone(checks.url_del_pr())
 
 
+class TestSinG4(unittest.TestCase):
+    """VIC-56, regla 1 (ADR-0009 §3.1 y §5): un PR sin G4 falla, salvo un R0 que checks.py comprueba
+    que es solo documentación; si no puede, cuenta como R1. Revisores de la última ronda según `sdd-review`."""
+
+    SHA = "a" * 40
+
+    def ronda(self, n: int, *letras: str) -> list[tuple[str, str]]:
+        return [(f"#c{n}{l}", f"Commit revisado: G4-{n}-{l} · {self.SHA}") for l in letras]
+
+    def g4(self, nivel, cambiados, comentarios=(), versionados=None, dependabot=False):
+        if versionados is None:
+            versionados = {f: "100644" for f in cambiados}
+        return ejecutar(checks.check_g4, nivel, list(cambiados), versionados, list(comentarios), dependabot)
+
+    def test_es_documentacion(self):
+        si = (("README.md", "100644"), ("docs/guia.md", "100644"), ("src/notas.md", "100644"),
+              ("docs/borrado.md", None), ("docs/specs/_plantilla.md", "100644"))
+        no = (("app.js", "100644"), ("docs/x.txt", "100644"), ("docs/x.MD", "100644"),
+              ("docs/enlace.md", "120000"), ("vendor/sub.md", "160000"), ("script.md", "100755"),
+              ("docs/specs/SPEC-CALC-001-x.md", "100644"), ("docs/adr/0002-x.md", "100644"),
+              # G4-1-B-01: instrucciones de agentes en cualquier carpeta y lo de carpetas con punto.
+              ("src/CLAUDE.md", "100644"), ("docs/AGENTS.md", "100644"), ("CLAUDE.local.md", "100644"),
+              ("app/Claude.md", "100644"), ("src/.claude/commands/x.md", "100644"), (".cursor/rules/x.md", "100644"),
+              ("docs/.github/x.md", "100644"), ("GEMINI.md", "100644"))
+        for ruta, modo in si:
+            with self.subTest(ruta=ruta):
+                self.assertTrue(checks.es_documentacion(ruta, modo))
+        for ruta, modo in no:
+            with self.subTest(ruta=ruta, modo=modo):
+                self.assertFalse(checks.es_documentacion(ruta, modo))
+
+    def test_r0_de_solo_documentacion_pasa_sin_g4(self):
+        inf = self.g4("R0", ["README.md", "docs/guia.md"])
+        self.assertEqual((inf.errores, inf.avisos), ([], []))
+        self.assertIn("R0 comprobado", inf.secciones[0])
+        # Borrar un .md también es solo documentación.
+        inf = self.g4("R0", ["docs/viejo.md"], versionados={})
+        self.assertEqual(inf.errores, [])
+
+    def test_r0_que_no_es_solo_documentacion_cuenta_como_r1(self):
+        casos = {"código": (["docs/guia.md", "app.js"], None), "enlace": (["docs/x.md"], {"docs/x.md": "120000"}),
+                 "submódulo": (["sub.md"], {"sub.md": "160000"}), "imagen": (["docs/captura.png"], None),
+                 "CLAUDE.md anidado": (["src/CLAUDE.md"], None)}
+        for motivo, (cambiados, modos) in casos.items():
+            with self.subTest(motivo=motivo):
+                inf = self.g4("R0", cambiados, versionados=modos)
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("**g4:** el PR no tiene G4", inf.errores[0])
+                self.assertIn("R0 sin comprobar, cuenta como R1", inf.errores[0])
+                self.assertIn("cuenta como R1 y necesita G4", inf.avisos[0])
+                # Con un revisor, como un R1, pasa.
+                inf = self.g4("R0", cambiados, self.ronda(1, "A"), versionados=modos)
+                self.assertEqual(inf.errores, [])
+
+    def test_sin_modos_no_se_comprueba_el_r0(self):
+        inf = ejecutar(checks.check_g4, "R0", ["docs/guia.md"], None, [], False)
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("no he podido leer los modos", inf.avisos[0])
+
+    def test_r1_necesita_un_revisor(self):
+        inf = self.g4("R1", ["app.js"])
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertIn("**g4:** el PR no tiene G4", inf.errores[0])
+        self.assertIn("Un PR R1 no se fusiona sin revisión", inf.errores[0])
+        self.assertEqual(self.g4("R1", ["app.js"], self.ronda(1, "A")).errores, [])
+        # Un R1 de solo documentación también la necesita: la excepción es solo para R0.
+        self.assertEqual(len(self.g4("R1", ["docs/guia.md"]).errores), 1)
+
+    def test_r2_spec_y_adr_necesitan_dos(self):
+        for nivel, cambiados in (("R2", ["app.js"]), ("R1", ["docs/specs/SPEC-CALC-001-x.md"]),
+                                 ("R1", ["docs/adr/0002-x.md"])):
+            with self.subTest(nivel=nivel, cambiados=cambiados):
+                inf = self.g4(nivel, cambiados, self.ronda(1, "A"))
+                self.assertEqual(len(inf.errores), 1, inf.errores)
+                self.assertIn("tiene 1 revisor(es) con `Commit revisado`", inf.errores[0])
+                self.assertIn("necesita 2", inf.errores[0])
+                # G4-2-A-02: el motivo de los dos revisores sale en el mensaje cuando es la spec o el ADR.
+                self.assertEqual("con spec o ADR" in inf.errores[0], nivel == "R1")
+                self.assertEqual(self.g4(nivel, cambiados, self.ronda(1, "A", "B")).errores, [])
+
+    def test_cuenta_la_ultima_ronda_y_solo_revisores_con_commit(self):
+        # Dos en la ronda 1 y uno en la 2: en R2 no basta.
+        inf = self.g4("R2", ["app.js"], self.ronda(1, "A", "B") + self.ronda(2, "A"))
+        self.assertIn("la última ronda de G4 (la 2) tiene 1", inf.errores[0])
+        # Un revisor que sale por su hallazgo pero sin `Commit revisado` no cuenta (y `cambios` ya falla).
+        inf = self.g4("R1", ["app.js"], [("#c", "<details>\n\n### G4-1-A-01 · menor\n\n</details>")])
+        self.assertIn("tiene 0 revisor(es)", inf.errores[0])
+        # Una ronda solo con su línea de métricas tampoco.
+        inf = self.g4("R1", ["app.js"], [("#c", "Métricas G4: PR #3 · ronda 1 · confirmados 0 · descartados 0 · corregidos 0")])
+        self.assertIn("tiene 0 revisor(es)", inf.errores[0])
+
+    def test_dependabot_no_necesita_g4(self):
+        inf = self.g4("R2", ["package.json"], dependabot=True)
+        self.assertEqual((inf.errores, inf.secciones), ([], []))
+
+
 class TestRondasDeG4(unittest.TestCase):
     """VIC-39: de los comentarios salen el commit que vio cada revisor y los revisores de cada ronda."""
 
@@ -1511,6 +1607,26 @@ class TestCambios(unittest.TestCase):
                 inf = ejecutar(checks.check_cambios, "main", "HEAD", [], reconciliacion(linea))
                 self.assertEqual(inf.errores, [])
 
+    def test_rutas_no_ascii_sin_comillas(self):
+        """G4-3-A-01 y G4-3-B-01: `check_tests` y la lista de ficheros de `cambios` leen con -z."""
+        (self.repo / "tests").mkdir()
+        self.git("switch", "-q", "main")
+        self.commit("tests/cálculo.test.js", "test: base")
+        self.git("switch", "-q", "feat/vic-7-x")
+        self.git("merge", "-q", "--no-edit", "main")
+        visto = self.git("rev-parse", "HEAD")
+        self.commit("tests/cálculo.test.js", "test: cambia")
+        anterior = os.getcwd()
+        os.chdir(self.repo)
+        try:
+            with unittest.mock.patch.dict(os.environ, ENTORNO_GIT):
+                tests = ejecutar(checks.check_tests, "main")
+        finally:
+            os.chdir(anterior)
+        self.assertIn("- `tests/cálculo.test.js` (modificado)", tests.secciones[0])
+        inf = self.comprobar(f"Commit revisado: G4-1-A · {visto}")
+        self.assertIn("Ficheros: tests/cálculo.test.js", inf.secciones[0])
+
     def test_sin_ninguna_ronda_no_hace_nada(self):
         inf = self.comprobar("Un comentario cualquiera.")
         self.assertEqual((inf.errores, inf.secciones), ([], []))
@@ -1537,13 +1653,23 @@ class TestPuntaAPunta(unittest.TestCase):
     def git(self, *args):
         subprocess.run(["git", "-C", str(self.repo), *args], check=True, env=ENTORNO_GIT)
 
-    def correr(self, mensaje: str, referencias: str, **pr):
+    def correr(self, mensaje: str, referencias: str, g4: bool = True, **pr):
+        """g4: añade a los comentarios una ronda con los dos revisores que pide un ADR, sobre la cabeza
+        (VIC-56, check `g4`), para que cada test pruebe solo lo suyo."""
         (self.repo / "docs" / "adr" / "0002-x.md").write_text(adr(referencias), encoding="utf-8")
         self.git("add", "docs/adr/0002-x.md")
         self.git("commit", "-q", "-m", mensaje)
         entorno = {**ENTORNO_GIT, "PR_BRANCH": "adr/vic-7-0002-x", "PR_TITLE": "adr: decide x",
                    "PR_BODY": "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n"}
         entorno.update(pr)
+        ruta = pathlib.Path(entorno.get("PR_COMENTARIOS") or self.repo / ".git" / "comentarios-g4.json")
+        if g4 and (ruta.exists() or "PR_COMENTARIOS" not in pr):
+            cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                                    text=True, env=ENTORNO_GIT).stdout.strip()
+            previos = json.loads(ruta.read_text(encoding="utf-8")) if ruta.exists() else []
+            ronda = [comentario(f"Commit revisado: G4-9-{l} · {cabeza}", n=900 + i) for i, l in enumerate("AB")]
+            ruta.write_text(json.dumps(previos + ronda), encoding="utf-8")
+            entorno["PR_COMENTARIOS"] = str(ruta)
         entorno.pop("GITHUB_STEP_SUMMARY", None)
         return subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo,
                               capture_output=True, text=True, env=entorno)
@@ -1656,15 +1782,16 @@ class TestPuntaAPunta(unittest.TestCase):
         ruta = self.repo / "comentarios.json"
         ruta.write_text(json.dumps([comentario("<details>\n\n### G4-1-A-01 · menor\n\n</details>")]), encoding="utf-8")
         linea = "- G4-1-A-01 · menor · prueba: x · resolución: descartado\n"
-        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', PR_BODY=cuerpo + linea,
+        r = self.correr("adr: decide x\n\nRefs: VIC-7", 'referencias: ["PR #12"]', g4=False, PR_BODY=cuerpo + linea,
                         PR_COMENTARIOS=str(ruta))
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("**cambios:** falta el commit que vio `G4-1-A`", r.stdout)
         visto = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
                                text=True, env=ENTORNO_GIT).stdout.strip()
         ruta.write_text(json.dumps([comentario(f"Commit revisado: G4-1-A · {visto}\n\n<details>\n\n"
-                                               "### G4-1-A-01 · menor\n\n</details>")]), encoding="utf-8")
-        r = self.correr("adr: decide y\n\nRefs: VIC-7", 'referencias: ["PR #13"]', PR_BODY=cuerpo + linea,
+                                               "### G4-1-A-01 · menor\n\n</details>"),
+                                    comentario(f"Commit revisado: G4-1-B · {visto}", n=2)]), encoding="utf-8")
+        r = self.correr("adr: decide y\n\nRefs: VIC-7", 'referencias: ["PR #13"]', g4=False, PR_BODY=cuerpo + linea,
                         PR_COMENTARIOS=str(ruta), PR_HEAD_SHA="")
         self.assertEqual(r.returncode, 0, r.stdout)
         # Con la lista escrita a mano en la descripción, falla aunque la calculada esté bien (PR 2 de VIC-39).
@@ -1675,7 +1802,7 @@ class TestPuntaAPunta(unittest.TestCase):
         self.assertIn("**cambios:** la descripción del PR trae una lista", a_mano.stdout)
         cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
                                 text=True, env=ENTORNO_GIT).stdout.strip()
-        seccion = r.stdout.split("### Cambios tras la última ronda", 1)[1]
+        seccion = r.stdout.split("### Cambios tras la última ronda", 1)[1].split("###", 1)[0]
         self.assertEqual([l for l in seccion.splitlines() if l.startswith("- ")], [f"- `{cabeza[:7]}` adr: decide y"])
         # Como en la CI: HEAD es el merge que prueba GitHub y la cabeza del PR llega en PR_HEAD_SHA.
         self.git("switch", "-q", "--detach", "main")
@@ -1686,7 +1813,7 @@ class TestPuntaAPunta(unittest.TestCase):
         r = subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo,
                            capture_output=True, text=True, env=entorno)
         self.assertEqual(r.returncode, 0, r.stdout)
-        seccion = r.stdout.split("### Cambios tras la última ronda", 1)[1]
+        seccion = r.stdout.split("### Cambios tras la última ronda", 1)[1].split("###", 1)[0]
         self.assertEqual([l for l in seccion.splitlines() if l.startswith("- ")], [f"- `{cabeza[:7]}` adr: decide y"])
 
     def test_sin_rama_ni_titulo_no_comprueba_convenciones(self):
@@ -1894,9 +2021,44 @@ class TestRutasSensibles(unittest.TestCase):
         self.assertIn("de `main` es inválido (línea 2, `src/\\u200bauth/`)", r.stdout)
 
     def test_fichero_valido_sin_tocar_rutas_pasa(self):
-        r = self.correr(self.main_con(README_CON_RUTAS, FICHERO_RUTAS))
+        # R0 de solo documentación: pasa sin G4 (VIC-56, check `g4`).
+        r = self.correr(self.main_con(README_CON_RUTAS, FICHERO_RUTAS), nivel="R0")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertNivel(r, "R0")
+
+    def test_rutas_no_ascii_sin_comillas(self):
+        """G4-2-B, sospecha: sin `-z`, Git entrecomilla las rutas no ASCII y ningún patrón las ve. Una de
+        `.claude/` sube a R2, y un `.md` con tilde es documentación."""
+        r = self.correr(self.main_con(), ".claude/skills/ñ/SKILL.md", nivel="R1")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertNivel(r, "R2")
+        self.assertIn("`.claude/skills/ñ/SKILL.md`", r.stdout)
+        r = self.correr(self.main_con(), "docs/guía.md", nivel="R0")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("R0 comprobado", r.stdout)
+
+    def test_spec_no_ascii_de_main_cuenta(self):
+        """G4-3-B-02: la spec de `main` con tilde en el nombre se lee; su PR no baja su propio riesgo."""
+        base = self.main_con()
+        self.git("switch", "-q", base)
+        ruta = "docs/specs/SPEC-CALC-003-división.md"
+        self.escribir(ruta, SPEC_LIMPIA.replace("riesgo: R1", "riesgo: R2"))
+        self.git("commit", "-q", "-m", "spec: base")
+        self.pr(base)
+        self.escribir(ruta, SPEC_LIMPIA)
+        r = self.correr(base, nivel="R1", nueva=False)
+        self.assertNivel(r, "R2")
+        self.assertIn("**riesgo:** el PR está marcado R1 pero lo que toca exige R2", r.stdout)
+
+    def test_r0_con_codigo_falla_sin_g4(self):
+        """VIC-56, regla 1, con main(): un R0 que toca código cuenta como R1 y falla sin G4."""
+        r = self.correr(self.main_con(), "docs/nota.md", "app.js", nivel="R0")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("**g4:** el PR no tiene G4", r.stdout)
+        self.assertIn("R0 sin comprobar, cuenta como R1", r.stdout)
+        r = self.correr(self.main_con(), "docs/nota.md", nivel="R0")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("R0 comprobado", r.stdout)
 
     def test_fichero_invalido_en_main_falla(self):
         casos = {"lista del README": "- `app/sw.js`", "comillas": "`app/sw.js`", "espacio": "app/mi fichero.js",
