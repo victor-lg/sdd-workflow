@@ -1445,10 +1445,11 @@ class TestRondasDeG4(unittest.TestCase):
 
     def rondas(self, *cuerpos):
         """(vistos, revisores); los repetidos, con `repetidos`."""
-        return checks.rondas_de_g4([(f"#c{n}", c) for n, c in enumerate(cuerpos)])[:2]
+        r = checks.rondas_de_g4([(f"#c{n}", c) for n, c in enumerate(cuerpos)])
+        return r.vistos, r.revisores
 
     def repetidos(self, *cuerpos):
-        return checks.rondas_de_g4([(f"#c{n}", c) for n, c in enumerate(cuerpos)])[2]
+        return checks.rondas_de_g4([(f"#c{n}", c) for n, c in enumerate(cuerpos)]).repetidos
 
     def test_commit_revisado_y_revisores(self):
         a, b = "a" * 40, "b" * 40

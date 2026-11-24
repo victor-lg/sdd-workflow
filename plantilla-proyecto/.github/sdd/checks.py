@@ -57,7 +57,7 @@ Uso local:
 Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta. PR_COMENTARIOS es la ruta
 de los comentarios del PR (`gh api --paginate …/issues/N/comments`); sin ella, el
 check de hallazgos solo lee la descripción. PR_REVIEWS es la ruta de las reviews; sin ella, un PR R2
-falla en el check `aprobacion`. Los enlaces de «Revisión IA» a comentarios borrados
+falla en el check `aprobacion`, y en R0 y R1 la aprobación no desbloquea lo que entra tras la última ronda. Los enlaces de «Revisión IA» a comentarios borrados
 solo se comprueban con GITHUB_SERVER_URL, GITHUB_REPOSITORY y GITHUB_REF (`refs/pull/N/merge`), como en la CI.
 
 Como hook `commit-msg` de lefthook, solo el formato del mensaje:
@@ -76,6 +76,7 @@ import subprocess
 import sys
 import unicodedata
 from pathlib import Path
+from typing import NamedTuple
 
 # --- Convenciones ---------------------------------------------------------
 
@@ -1273,8 +1274,13 @@ RE_LISTA_A_MANO = re.compile(r"^\s*(?:>\s*)*(?:#{1,6}\s+)?(?:[-*+]\s+|\d+[.)]\s+
 RE_RONDA_METRICAS = re.compile(r"^Métricas G4: PR #\d+ · ronda ([1-9]\d*) ·")
 
 
-def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, str], str], dict[int, set[str]],
-                                                               set[tuple[int, str]]]:
+class Rondas(NamedTuple):
+    vistos: dict[tuple[int, str], str]       # (ronda, letra) → el commit que vio ese revisor (el último)
+    revisores: dict[int, set[str]]           # ronda → letras que salen en ella
+    repetidos: set[tuple[int, str]]          # (ronda, letra) con dos commits distintos
+
+
+def rondas_de_g4(comentarios: list[tuple[str, str]]) -> Rondas:
     """De los comentarios de CUENTAS_G4: el commit que vio cada revisor (ronda, letra), el último si
     se repite, los revisores que salen en cada ronda, por sus hallazgos o por su commit, y los revisores
     con dos commits distintos en la misma ronda (`check_cambios` falla por ellos). Una ronda sin hallazgos
@@ -1296,7 +1302,7 @@ def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, st
             elif (h := RE_RESPUESTA_PLEGADA.match(linea)):
                 ronda, letra = h.group(1).split("-")[1:3]
                 revisores.setdefault(int(ronda), set()).add(letra)
-    return vistos, revisores, repetidos
+    return Rondas(vistos, revisores, repetidos)
 
 
 def texto_del_resumen(texto: str) -> str:
@@ -1391,9 +1397,14 @@ def check_solo_documentacion_tras_la_ronda(inf: Informe, nivel: str, ronda: int,
                                            aprobado: bool) -> None:
     """VIC-56, regla 3 (ADR-0009 §5): en R0 y R1, lo que entra tras la última ronda de G4 sin otra ronda solo
     puede ser documentación (`es_documentacion`, el mismo criterio que el R0 sin G4). Se cuenta desde el commit
-    que vio cada revisor, así que un merge de `main` también cuenta. Si no lo es, hace falta otra ronda o, cuando
-    no cabe (tras la ronda 3, o en una aclaración de una sola ronda), la aprobación de la persona sobre la cabeza
-    (`aprobado`; decisión de Víctor del 2026-11-24). Un R2 no pasa por aquí: siempre la necesita (check `aprobacion`)."""
+    que vio cada revisor, así que un merge de `main` también cuenta. Si no lo es, hace falta otra ronda o la
+    aprobación de la persona sobre la cabeza (`aprobado`; decisión de Víctor del 2026-11-24). Lo normal es otra
+    ronda; la aprobación es para cuando no cabe (tras la ronda 3, o en una aclaración de una sola ronda), pero el
+    check no lo distingue. Un R2 no pasa por aquí: siempre la necesita (check `aprobacion`).
+    Límite aceptado hasta VIC-57 (Víctor, 2026-11-24): si la persona aprueba y después pide cambios o retira la
+    aprobación, y el relanzamiento de `sdd-relanzar.yml` no llega a ejecutarse, queda el verde anterior y un R0 o
+    R1 se podría fusionar solo. Si VIC-57 (caso D1) muestra que un «Request changes» no frena el auto-merge por sí
+    solo, este desbloqueo se quita antes de aplicar el ruleset."""
     fuera = sorted(f for f, modo in modos.items() if not es_documentacion(f, modo))
     if not fuera:
         return
@@ -1443,7 +1454,8 @@ def check_g4(inf: Informe, nivel: str, cambiados: list[str], versionados: dict[s
         return
     con_spec_o_adr = any(es_spec(f) or es_adr(f) for f in cambiados)
     necesarios = REVISORES_R2_SPEC_ADR if nivel == "R2" or con_spec_o_adr else REVISORES_OTROS
-    vistos, revisores, _ = rondas_de_g4(comentarios)
+    rondas = rondas_de_g4(comentarios)
+    vistos, revisores = rondas.vistos, rondas.revisores
     ronda = max(revisores, default=0)
     # Solo cuenta el revisor que dejó el commit que vio: sin él, `cambios` ya falla.
     letras = sorted(l for l in revisores.get(ronda, ()) if (ronda, l) in vistos)
@@ -1603,7 +1615,7 @@ def main() -> int:
     reviews = leer_paginas(ruta_reviews) if ruta_reviews else None
     cabeza = os.environ.get("PR_HEAD_SHA") or (git("rev-parse", "HEAD") or "").strip()
     aprobado = reviews is not None and bool(cabeza) and aprobacion_de_la_persona(reviews, cabeza)[0]
-    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr, nivel, aprobado)
+    check_cambios(inf, args.base, cabeza or "HEAD", comentarios or [], cuerpo_pr, nivel, aprobado)
     check_g4(inf, nivel, cambiados, versionados, comentarios or [], dependabot)
     if os.environ.get("PR_HEAD_SHA"):
         check_cabeza(inf, os.environ["PR_HEAD_SHA"])
