@@ -45,6 +45,10 @@ Comprueba:
                 revisores de los que pide `sdd-review` (2 en R2, specs y ADR; 1 en lo demás). No la
                 necesitan los PR de Dependabot ni un R0 que es solo documentación (`es_documentacion`);
                 un R0 que no lo es cuenta como R1.
+  cambios-pedidos  VIC-57 (ADR-0009 §5), en cualquier nivel: falla si la última review decisiva de PERSONAS
+                pide cambios, o si una suya que pedía cambios la descartó una cuenta que no está en PERSONAS
+                (eventos `review_dismissed` de PR_TIMELINE, `gh api --paginate …/issues/N/timeline`), salvo
+                que después la persona apruebe la cabeza. Sin las reviews o la línea de tiempo, falla.
   cabeza        VIC-56: falla si PR_HEAD_SHA no está en la historia del commit que se prueba (el merge
                 de GitHub puede ser anterior a un push reciente).
 
@@ -57,7 +61,8 @@ Uso local:
 Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta. PR_COMENTARIOS es la ruta
 de los comentarios del PR (`gh api --paginate …/issues/N/comments`); sin ella, el
 check de hallazgos solo lee la descripción. PR_REVIEWS es la ruta de las reviews; sin ella, un PR R2
-falla en el check `aprobacion`, y en R0 y R1 la aprobación no desbloquea lo que entra tras la última ronda. Los enlaces de «Revisión IA» a comentarios borrados
+falla en el check `aprobacion`, y en R0 y R1 la aprobación no desbloquea lo que entra tras la última ronda.
+PR_TIMELINE es la ruta de la línea de tiempo del PR; sin ella o sin PR_REVIEWS, falla `cambios-pedidos` en cualquier nivel. Los enlaces de «Revisión IA» a comentarios borrados
 solo se comprueban con GITHUB_SERVER_URL, GITHUB_REPOSITORY y GITHUB_REF (`refs/pull/N/merge`), como en la CI.
 
 Como hook `commit-msg` de lefthook, solo el formato del mensaje:
@@ -1493,11 +1498,18 @@ PERSONAS = {95044073: "victor-lg"}
 ESTADOS_DECISIVOS = {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
 
 
+def es_de_la_persona(review: object) -> bool:
+    return (isinstance(review, dict) and isinstance(review.get("user"), dict)
+            and type(review["user"].get("id")) is int and review["user"]["id"] in PERSONAS)
+
+
+def decisivas_de_la_persona(reviews: list) -> list[dict]:
+    return [r for r in reviews if es_de_la_persona(r) and r.get("state") in ESTADOS_DECISIVOS]
+
+
 def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
     """(aprobado, motivo): la última review decisiva de PERSONAS es APPROVED y sobre `cabeza`."""
-    suyas = [r for r in reviews if isinstance(r, dict) and isinstance(r.get("user"), dict)
-             and type(r["user"].get("id")) is int and r["user"]["id"] in PERSONAS
-             and r.get("state") in ESTADOS_DECISIVOS]
+    suyas = decisivas_de_la_persona(reviews)
     if not suyas:
         return False, "no hay ninguna review de la persona"
     # Por id: es el orden en que se enviaron. Sin id numérico no se sabe cuál es la última.
@@ -1537,6 +1549,73 @@ def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str
                                 f"{', '.join(f'`{p}`' for p in PERSONAS.values())} sobre el último commit (ADR-0009 §3.4); "
                                 "al aprobar, este check se vuelve a lanzar solo (en un PR de un fork, a mano).")
 
+
+
+# --- Peticiones de cambios de la persona (VIC-57) -------------------------
+
+# ADR-0009 §5, prueba D2 de VIC-57 (calculadora-discos#100): con 0 aprobaciones generales, un «Request changes»
+# de la persona frena el PR, pero la cuenta del agente puede descartarlo por la API y el PR queda fusionable;
+# los rulesets no limitan quién descarta reviews. Por eso `checks-sdd` falla, en cualquier nivel, si la última
+# review decisiva de PERSONAS pide cambios, o si una suya que pedía cambios la descartó otra cuenta, hasta que
+# la persona apruebe la cabeza. La lista de reviews solo dice DISMISSED, sin quién la descartó ni qué era: eso
+# sale de los eventos `review_dismissed` de la línea de tiempo del PR (PR_TIMELINE), con `actor` y
+# `dismissed_review` (`review_id` y su estado original, en minúsculas). Al descartar, `sdd-relanzar.yml` vuelve
+# a lanzar `checks-sdd`.
+
+
+def descartes_de_otras_cuentas(reviews: list, eventos: list) -> tuple[list[tuple[str, int]], bool]:
+    """([(cuenta, id de la review)], legible): las reviews de PERSONAS que pedían cambios y descartó una cuenta
+    que no está en PERSONAS. legible es False si un evento `review_dismissed` no tiene la forma esperada.
+    Una review que no está en la lista cuenta como de la persona: sin su autor no se sabe (falla cerrado)."""
+    por_id = {r["id"]: r for r in reviews if isinstance(r, dict) and type(r.get("id")) is int}
+    descartes = []
+    for e in eventos:
+        if not isinstance(e, dict):
+            return [], False
+        if e.get("event") != "review_dismissed":
+            continue
+        descartada, actor = e.get("dismissed_review"), e.get("actor")
+        if (not isinstance(descartada, dict) or type(descartada.get("review_id")) is not int
+                or not isinstance(descartada.get("state"), str) or not (actor is None or isinstance(actor, dict))):
+            return [], False
+        if descartada["state"].lower() != "changes_requested":
+            continue
+        actor = actor or {}  # una cuenta borrada: no es de PERSONAS
+        if type(actor.get("id")) is int and actor["id"] in PERSONAS:
+            continue
+        review = por_id.get(descartada["review_id"])
+        if review is None or es_de_la_persona(review):
+            descartes.append((str(actor.get("login") or "desconocida"), descartada["review_id"]))
+    return descartes, True
+
+
+def check_cambios_pedidos(inf: Informe, reviews: list | None, eventos: list | None, cabeza: str | None) -> None:
+    personas = ", ".join(f"`{p}`" for p in PERSONAS.values())
+    if reviews is None or eventos is None or not cabeza:
+        inf.error("cambios-pedidos", "no he podido leer las reviews del PR (PR_REVIEWS), su línea de tiempo (PR_TIMELINE) "
+                                     "o su cabeza, así que no sé si la persona pidió cambios ni si otra cuenta se los "
+                                     "descartó. Sin eso el PR no se fusiona (ADR-0009 §5).")
+        return
+    suyas = decisivas_de_la_persona(reviews)
+    if not all(type(r.get("id")) is int for r in suyas):
+        inf.error("cambios-pedidos", "una review de la persona no tiene id: no sé cuál es la última (ADR-0009 §5).")
+        return
+    ultima = max(suyas, key=lambda r: r["id"], default=None)
+    if ultima is not None and ultima["state"] == "CHANGES_REQUESTED":
+        inf.error("cambios-pedidos", f"la última review de la persona ({personas}) pide cambios (review {ultima['id']}, "
+                                     f"en `{str(ultima.get('commit_id'))[:12]}`). El PR no se fusiona hasta que la persona "
+                                     "apruebe la cabeza o retire ella su review (ADR-0009 §5); al hacerlo, este check se "
+                                     "vuelve a lanzar solo.")
+    descartes, legible = descartes_de_otras_cuentas(reviews, eventos)
+    if not legible:
+        inf.error("cambios-pedidos", "un evento `review_dismissed` de la línea de tiempo del PR (PR_TIMELINE) no tiene la "
+                                     "forma esperada: no sé quién descartó qué review (ADR-0009 §5).")
+        return
+    if descartes and not aprobacion_de_la_persona(reviews, cabeza)[0]:
+        lista = ", ".join(f"`{cuenta}` la {n}" for cuenta, n in descartes)
+        inf.error("cambios-pedidos", f"otra cuenta descartó una review de la persona que pedía cambios ({lista}). Solo "
+                                     f"la persona quita su freno: el PR no se fusiona hasta que {personas} apruebe la "
+                                     "cabeza (ADR-0009 §5).")
 
 # --- Programa -------------------------------------------------------------
 
@@ -1620,6 +1699,8 @@ def main() -> int:
     if os.environ.get("PR_HEAD_SHA"):
         check_cabeza(inf, os.environ["PR_HEAD_SHA"])
     check_aprobacion(inf, nivel, reviews, cabeza)
+    ruta_timeline = os.environ.get("PR_TIMELINE")
+    check_cambios_pedidos(inf, reviews, leer_paginas(ruta_timeline) if ruta_timeline else None, cabeza)
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]

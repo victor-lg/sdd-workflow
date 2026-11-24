@@ -26,6 +26,8 @@ permissions:
   contents: read
   # Leer los comentarios del PR, donde van las respuestas de los revisores de G4 (VIC-38).
   pull-requests: read
+  # Leer la línea de tiempo del PR (`issues/N/timeline`), que es un endpoint de issues (VIC-57).
+  issues: read
 
 # Una por PR. Una ejecución nueva cancela la que siga en curso o en espera. Un relanzamiento (intento 2 o
 # siguientes, de sdd-relanzar.yml o a mano) no cancela la que está en curso: espera a que termine (VIC-56).
@@ -90,6 +92,16 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/reviews?per_page=100" > "$RUNNER_TEMP/sdd/reviews.json"
 
+      # La línea de tiempo del PR: checks.py busca en sus eventos `review_dismissed` quién descartó una review
+      # de la persona que pedía cambios (VIC-57). La lista de reviews solo dice DISMISSED, sin quién ni qué era.
+      # Descartar lanza sdd-relanzar.yml, que vuelve a lanzar esta ejecución y la vuelve a leer.
+      - name: Línea de tiempo del PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh api --paginate "repos/$REPO/issues/$PR_NUMBER/timeline?per_page=100" > "$RUNNER_TEMP/sdd/linea-de-tiempo.json"
+
       # La descripción, el título, la rama y el autor del PR entran por variables
       # de entorno, nunca interpolados en el script (evita inyección de órdenes).
       # El autor lo pone GitHub: es lo que acota la excepción de Dependabot. La cabeza del
@@ -103,4 +115,5 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_COMENTARIOS: ${{ runner.temp }}/sdd/comentarios.json
           PR_REVIEWS: ${{ runner.temp }}/sdd/reviews.json
+          PR_TIMELINE: ${{ runner.temp }}/sdd/linea-de-tiempo.json
         run: python3 "$RUNNER_TEMP/sdd/checks.py" --base "$BASE"

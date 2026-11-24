@@ -34,6 +34,15 @@ def ejecutar(check, *args):
     return inf
 
 
+def sin_reviews(carpeta: pathlib.Path) -> dict[str, str]:
+    """PR_REVIEWS y PR_TIMELINE vacíos, como en un PR sin reviews: sin ellos falla `cambios-pedidos` (VIC-57)."""
+    rutas = {}
+    for var, nombre in (("PR_REVIEWS", "reviews-vacias.json"), ("PR_TIMELINE", "timeline-vacia.json")):
+        (carpeta / nombre).write_text("[]", encoding="utf-8")
+        rutas[var] = str(carpeta / nombre)
+    return rutas
+
+
 def cuerpo_plantilla(primera: str) -> str:
     """La plantilla de PR real con la línea de `Fixes VIC-<N>` sustituida."""
     texto = (PLANTILLA / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
@@ -1644,10 +1653,8 @@ class TestCambios(unittest.TestCase):
         self.assertEqual((inf.errores, inf.secciones), ([], []))
 
 
-class TestTrasLaRonda(unittest.TestCase):
-    """VIC-56, regla 3 (ADR-0009 §5), con main(): en R0 y R1, lo que entra tras la última ronda de G4 sin
-    otra ronda solo puede ser documentación (`es_documentacion`). Un R2 no falla por esto: lo frena la
-    aprobación de la persona sobre la cabeza."""
+class RepoConRonda:
+    """Un PR de prueba con una ronda de G4 de dos revisores sobre `self.visto`, que se pasa por main()."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -1688,7 +1695,8 @@ class TestTrasLaRonda(unittest.TestCase):
         self.git("commit", "-q", "-m", "docs: tras la ronda\n\nRefs: VIC-7")
 
     def correr(self, nivel: str = "R1", visto: str | None = None, aprobado: bool = False, extra: list | None = None,
-               reviews: list | None = None):
+               reviews: list | None = None, eventos: list | None = ()):
+        """eventos: la línea de tiempo del PR (PR_TIMELINE); vacía por omisión y None para no pasarla."""
         visto = visto or self.visto
         comentarios = self.repo / ".git" / "comentarios.json"
         comentarios.write_text(json.dumps([comentario(f"Commit revisado: G4-1-{l} · {visto}", n=i + 1)
@@ -1699,8 +1707,13 @@ class TestTrasLaRonda(unittest.TestCase):
                                            [review("APPROVED", cabeza)] if aprobado else []), encoding="utf-8")
         cuerpo = (f"Fixes VIC-7\n\n## Qué comportamiento cubre\n\n- AC cubiertos: no aplica (prueba)\n\n"
                   f"## Nivel de riesgo\n\n- [x] {nivel}\n")
-        entorno = {**ENTORNO_GIT, "PR_BODY": cuerpo, "PR_COMENTARIOS": str(comentarios), "PR_REVIEWS": str(ruta_reviews),
-                   "PR_HEAD_SHA": cabeza}
+        entorno = {**ENTORNO_GIT, **sin_reviews(self.repo / ".git"), "PR_BODY": cuerpo, "PR_COMENTARIOS": str(comentarios),
+                   "PR_REVIEWS": str(ruta_reviews), "PR_HEAD_SHA": cabeza}
+        if eventos is None:
+            del entorno["PR_TIMELINE"]
+        elif eventos:
+            (self.repo / ".git" / "timeline.json").write_text(json.dumps(eventos), encoding="utf-8")
+            entorno["PR_TIMELINE"] = str(self.repo / ".git" / "timeline.json")
         for var in ("GITHUB_STEP_SUMMARY", "PR_BRANCH", "PR_TITLE", "PR_AUTHOR"):
             entorno.pop(var, None)
         r = subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo,
@@ -1710,6 +1723,12 @@ class TestTrasLaRonda(unittest.TestCase):
 
     def errores(self, r) -> list[str]:
         return [l for l in r.stdout.split("### Avisos")[0].splitlines() if l.startswith("- **")]
+
+
+class TestTrasLaRonda(RepoConRonda, unittest.TestCase):
+    """VIC-56, regla 3 (ADR-0009 §5), con main(): en R0 y R1, lo que entra tras la última ronda de G4 sin
+    otra ronda solo puede ser documentación (`es_documentacion`). Un R2 no falla por esto: lo frena la
+    aprobación de la persona sobre la cabeza."""
 
     def assertRegla3(self, r, *ficheros: str):
         regla = [e for e in self.errores(r) if "que no son solo documentación" in e]
@@ -1834,6 +1853,166 @@ class TestTrasLaRonda(unittest.TestCase):
 
 # --- De punta a punta: main() en un repo de verdad -------------------------
 
+ID_AGENTE = 345216222  # victor-lg-bot
+
+
+def descarte(review_id: int, estado: str = "changes_requested", login: str = "victor-lg-bot",
+             uid: int | None = ID_AGENTE) -> dict:
+    """Un evento `review_dismissed` de la línea de tiempo, con la forma que dio la API en calculadora-discos#100
+    (prueba D2 de VIC-57): el estado original va en minúsculas y la review no trae su autor."""
+    return {"event": "review_dismissed", "id": 37192222217, "created_at": "2026-11-24T23:36:36Z",
+            "actor": None if uid is None else {"login": login, "id": uid},
+            "dismissed_review": {"state": estado, "review_id": review_id, "dismissal_message": "Prueba VIC-57 (D2)"}}
+
+
+class TestCambiosPedidos(unittest.TestCase):
+    """VIC-57 (ADR-0009 §5, prueba D2): en cualquier nivel, un «Request changes» de la persona frena el PR, y
+    otra cuenta no puede quitarlo descartándolo; solo lo desbloquea su aprobación de la cabeza."""
+
+    def comprobar(self, reviews, eventos=(), cabeza=CABEZA):
+        inf = checks.Informe()
+        checks.check_cambios_pedidos(inf, reviews, None if eventos is None else list(eventos), cabeza)
+        return inf
+
+    def assertFalla(self, inf, texto):
+        self.assertEqual(len(inf.errores), 1, inf.errores)
+        self.assertTrue(inf.errores[0].startswith("**cambios-pedidos:** "), inf.errores[0])
+        self.assertIn(texto, inf.errores[0])
+
+    def test_sin_reviews_pasa(self):
+        self.assertEqual(self.comprobar([]).errores, [])
+        self.assertEqual(self.comprobar([review("COMMENTED", CABEZA)], [{"event": "commented"}]).errores, [])
+
+    def test_la_ultima_pide_cambios_falla(self):
+        for reviews in ([review("CHANGES_REQUESTED", "a" * 40)],
+                        [review("APPROVED", CABEZA, n=1), review("CHANGES_REQUESTED", CABEZA, n=2)],
+                        # Un comentario después no la retira, como en GitHub.
+                        [review("CHANGES_REQUESTED", CABEZA, n=1), review("COMMENTED", CABEZA, n=2)],
+                        # Por id y no por el orden de la lista.
+                        [review("CHANGES_REQUESTED", CABEZA, n=7), review("APPROVED", CABEZA, n=3)]):
+            with self.subTest(reviews=reviews):
+                self.assertFalla(self.comprobar(reviews), "la última review de la persona (`victor-lg`) pide cambios")
+        inf = self.comprobar([review("CHANGES_REQUESTED", "a" * 40, n=4)])
+        self.assertIn("(review 4, en `aaaaaaaaaaaa`)", inf.errores[0])
+
+    def test_solo_cuentan_los_cambios_de_la_persona(self):
+        for login, uid in (("victor-lg-bot", ID_AGENTE), ("victor-lg", 1), ("otra", 2)):
+            with self.subTest(login=login):
+                self.assertEqual(self.comprobar([review("CHANGES_REQUESTED", CABEZA, login=login, uid=uid)]).errores, [])
+
+    def test_su_aprobacion_o_su_propio_descarte_lo_quitan(self):
+        self.assertEqual(self.comprobar([review("CHANGES_REQUESTED", CABEZA, n=1), review("APPROVED", "a" * 40, n=2)]).errores, [])
+        # La persona descarta su propia review: la API la deja DISMISSED y el actor es ella.
+        self.assertEqual(self.comprobar([review("DISMISSED", CABEZA, n=1)],
+                                        [descarte(1, login="victor-lg", uid=ID_PERSONA)]).errores, [])
+
+    def test_descarte_de_otra_cuenta_falla(self):
+        """El caso D2: la cuenta del agente descarta por la API la review de la persona que pedía cambios."""
+        for evento in (descarte(1), descarte(1, login="otra", uid=2),
+                       # Por id y no por login: una cuenta que se llama como la persona no es ella.
+                       descarte(1, login="victor-lg", uid=1), descarte(1, login="victor-lg", uid=str(ID_PERSONA)),
+                       # Una cuenta borrada (actor null) no es de PERSONAS.
+                       descarte(1, uid=None),
+                       descarte(1, estado="CHANGES_REQUESTED")):
+            with self.subTest(evento=evento):
+                self.assertFalla(self.comprobar([review("DISMISSED", CABEZA, n=1)], [evento]),
+                                 "otra cuenta descartó una review de la persona que pedía cambios")
+        inf = self.comprobar([review("DISMISSED", CABEZA, n=6048844613)], [descarte(6048844613)])
+        self.assertIn("(`victor-lg-bot` la 6048844613)", inf.errores[0])
+        inf = self.comprobar([review("DISMISSED", CABEZA, n=1)], [descarte(1, uid=None)])
+        self.assertIn("(`desconocida` la 1)", inf.errores[0])
+
+    def test_solo_la_aprobacion_de_la_cabeza_lo_desbloquea(self):
+        descartada = review("DISMISSED", "a" * 40, n=1)
+        casos = (([descartada, review("APPROVED", CABEZA, n=2)], True),
+                 ([descartada, review("APPROVED", "a" * 40, n=2)], False),
+                 ([descartada, review("APPROVED", CABEZA, n=2, login="victor-lg-bot", uid=ID_AGENTE)], False),
+                 ([descartada, review("COMMENTED", CABEZA, n=2)], False),
+                 # Una aprobación anterior a la review que pedía cambios no la desbloquea.
+                 ([review("APPROVED", CABEZA, n=0), descartada], False))
+        for reviews, pasa in casos:
+            with self.subTest(reviews=reviews):
+                inf = self.comprobar(reviews, [descarte(1)])
+                if pasa:
+                    self.assertEqual(inf.errores, [])
+                else:
+                    self.assertFalla(inf, "otra cuenta descartó")
+
+    def test_otros_descartes_no_cuentan(self):
+        # Descartar una aprobación o un comentario no quita ningún freno; la de otra cuenta no es de la persona.
+        for reviews, evento in (([review("DISMISSED", CABEZA, n=1)], descarte(1, estado="approved")),
+                                ([review("DISMISSED", CABEZA, n=1)], descarte(1, estado="commented")),
+                                ([review("DISMISSED", CABEZA, n=1, login="otra", uid=2)], descarte(1))):
+            with self.subTest(evento=evento, reviews=reviews):
+                self.assertEqual(self.comprobar(reviews, [evento]).errores, [])
+
+    def test_review_que_no_esta_en_la_lista_cuenta_como_de_la_persona(self):
+        """Sin la review no se sabe su autor: falla cerrado, y su aprobación de la cabeza lo desbloquea."""
+        self.assertFalla(self.comprobar([], [descarte(9)]), "otra cuenta descartó")
+        self.assertEqual(self.comprobar([review("APPROVED", CABEZA, n=10)], [descarte(9)]).errores, [])
+
+    def test_sin_datos_falla_cerrado(self):
+        for reviews, eventos, cabeza in ((None, [], CABEZA), ([], None, CABEZA), ([], [], ""), ([], [], None)):
+            with self.subTest(reviews=reviews, eventos=eventos, cabeza=cabeza):
+                self.assertFalla(self.comprobar(reviews, eventos, cabeza), "no he podido leer las reviews del PR")
+
+    def test_evento_mal_formado_falla_cerrado(self):
+        malos = ["review_dismissed", {**descarte(1), "dismissed_review": None},
+                 {**descarte(1), "dismissed_review": {"state": "changes_requested", "review_id": "1"}},
+                 {**descarte(1), "dismissed_review": {"state": "changes_requested", "review_id": True}},
+                 {**descarte(1), "dismissed_review": {"state": None, "review_id": 1}},
+                 {**descarte(1), "actor": "victor-lg"}]
+        for evento in malos:
+            with self.subTest(evento=evento):
+                self.assertFalla(self.comprobar([review("APPROVED", CABEZA, n=5)], [descarte(1, login="victor-lg", uid=ID_PERSONA),
+                                                                                    evento]),
+                                 "no tiene la forma esperada")
+
+    def test_review_de_la_persona_sin_id_falla_cerrado(self):
+        r = review("CHANGES_REQUESTED", CABEZA)
+        del r["id"]
+        self.assertFalla(self.comprobar([r]), "no tiene id")
+
+    def test_los_dos_motivos_a_la_vez(self):
+        inf = self.comprobar([review("DISMISSED", CABEZA, n=1), review("CHANGES_REQUESTED", CABEZA, n=2)], [descarte(1)])
+        self.assertEqual(len(inf.errores), 2, inf.errores)
+
+    def test_lee_la_linea_de_tiempo_de_varias_paginas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = pathlib.Path(tmp) / "timeline.json"
+            ruta.write_text(json.dumps([{"event": "committed"}]) + "\n" + json.dumps([descarte(1)]), encoding="utf-8")
+            eventos = checks.leer_paginas(str(ruta))
+            self.assertEqual(len(eventos), 2)
+            self.assertFalla(self.comprobar([review("DISMISSED", CABEZA, n=1)], eventos), "otra cuenta descartó")
+
+
+class TestCambiosPedidosConMain(RepoConRonda, unittest.TestCase):
+    """VIC-57 con main(): el check `cambios-pedidos` corre en R0, R1 y R2 y lee PR_TIMELINE."""
+
+    def test_en_cualquier_nivel(self):
+        cabeza = self.git("rev-parse", "HEAD")
+        pide = [review("CHANGES_REQUESTED", cabeza, n=1)]
+        descartada = [review("DISMISSED", cabeza, n=1)]
+        for nivel in ("R0", "R1", "R2"):
+            with self.subTest(nivel=nivel):
+                for reviews, eventos, texto in ((pide, [], "pide cambios"), (descartada, [descarte(1)], "otra cuenta descartó")):
+                    r = self.correr(nivel, reviews=reviews, eventos=eventos)
+                    self.assertEqual(r.returncode, 1, r.stdout)
+                    self.assertEqual(len([e for e in self.errores(r) if e.startswith("- **cambios-pedidos:**")]), 1, r.stdout)
+                    self.assertIn(texto, r.stdout)
+                # Con su aprobación de la cabeza, pasa (en R2 la pide también `aprobacion`).
+                r = self.correr(nivel, reviews=descartada + [review("APPROVED", cabeza, n=2)], eventos=[descarte(1)])
+                self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_sin_linea_de_tiempo_falla(self):
+        r = self.correr("R1", reviews=[], eventos=None)
+        entorno_sin = self.errores(r)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertEqual(len(entorno_sin), 1, r.stdout)
+        self.assertIn("**cambios-pedidos:** no he podido leer las reviews del PR (PR_REVIEWS), su línea de tiempo (PR_TIMELINE)",
+                      entorno_sin[0])
+
+
 class TestPuntaAPunta(unittest.TestCase):
     """Que main() lee la rama, el título y los commits y lanza los checks nuevos."""
 
@@ -1859,8 +2038,8 @@ class TestPuntaAPunta(unittest.TestCase):
         (self.repo / "docs" / "adr" / "0002-x.md").write_text(adr(referencias), encoding="utf-8")
         self.git("add", "docs/adr/0002-x.md")
         self.git("commit", "-q", "-m", mensaje)
-        entorno = {**ENTORNO_GIT, "PR_BRANCH": "adr/vic-7-0002-x", "PR_TITLE": "adr: decide x",
-                   "PR_BODY": "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n"}
+        entorno = {**ENTORNO_GIT, **sin_reviews(self.repo / ".git"), "PR_BRANCH": "adr/vic-7-0002-x",
+                   "PR_TITLE": "adr: decide x", "PR_BODY": "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n"}
         entorno.update(pr)
         ruta = pathlib.Path(entorno.get("PR_COMENTARIOS") or self.repo / ".git" / "comentarios-g4.json")
         if g4 and (ruta.exists() or "PR_COMENTARIOS" not in pr):
@@ -2003,7 +2182,8 @@ class TestPuntaAPunta(unittest.TestCase):
         self.assertEqual([l for l in r.stdout.splitlines() if l.startswith("- **")], errores)
         # Con la lista escrita a mano en la descripción, falla aunque la calculada esté bien (PR 2 de VIC-39).
         a_mano = subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo, capture_output=True, text=True,
-                                env={**ENTORNO_GIT, "PR_BODY": cuerpo + linea + "- **Cambios tras la última ronda:** ninguno\n",
+                                env={**ENTORNO_GIT, **sin_reviews(self.repo / ".git"),
+                                     "PR_BODY": cuerpo + linea + "- **Cambios tras la última ronda:** ninguno\n",
                                      "PR_COMENTARIOS": str(ruta), "PR_BRANCH": "adr/vic-7-0002-x", "PR_TITLE": "adr: decide x"})
         self.assertEqual(a_mano.returncode, 1, a_mano.stdout)
         self.assertIn("**cambios:** la descripción del PR trae una lista", a_mano.stdout)
@@ -2014,8 +2194,8 @@ class TestPuntaAPunta(unittest.TestCase):
         # Como en la CI: HEAD es el merge que prueba GitHub y la cabeza del PR llega en PR_HEAD_SHA.
         self.git("switch", "-q", "--detach", "main")
         self.git("merge", "-q", "--no-ff", "--no-edit", cabeza)
-        entorno = {**ENTORNO_GIT, "PR_BRANCH": "adr/vic-7-0002-x", "PR_TITLE": "adr: decide x",
-                   "PR_BODY": cuerpo + linea, "PR_COMENTARIOS": str(ruta), "PR_HEAD_SHA": cabeza}
+        entorno = {**ENTORNO_GIT, **sin_reviews(self.repo / ".git"), "PR_BRANCH": "adr/vic-7-0002-x",
+                   "PR_TITLE": "adr: decide x", "PR_BODY": cuerpo + linea, "PR_COMENTARIOS": str(ruta), "PR_HEAD_SHA": cabeza}
         entorno.pop("GITHUB_STEP_SUMMARY", None)
         r = subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo,
                            capture_output=True, text=True, env=entorno)
@@ -2085,7 +2265,8 @@ class TestPuntaAPunta(unittest.TestCase):
                                 text=True, env=ENTORNO_GIT).stdout.strip()
         reviews = self.repo / "reviews.json"
         reviews.write_text(json.dumps([review("APPROVED", cabeza)]), encoding="utf-8")
-        entorno = {**ENTORNO_GIT, "PR_BRANCH": "dependabot/npm_and_yarn/lodash-4.17.21", "PR_REVIEWS": str(reviews),
+        entorno = {**ENTORNO_GIT, **sin_reviews(self.repo / ".git"), "PR_BRANCH": "dependabot/npm_and_yarn/lodash-4.17.21",
+                   "PR_REVIEWS": str(reviews),
                    "PR_TITLE": "chore(deps): bump lodash from 4.17.15 to 4.17.21",
                    "PR_BODY": "Bumps [lodash](https://github.com/lodash/lodash) from 4.17.15 to 4.17.21.",
                    "PR_AUTHOR": "dependabot[bot]"}
@@ -2185,6 +2366,7 @@ class TestRutasSensibles(unittest.TestCase):
         entorno = {**ENTORNO_GIT, "PR_BODY": f"Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] {nivel}\n"}
         for var in ("GITHUB_STEP_SUMMARY", "PR_HEAD_SHA", "PR_REVIEWS", "PR_COMENTARIOS", "PR_BRANCH", "PR_TITLE"):
             entorno.pop(var, None)
+        entorno.update(sin_reviews(self.repo / ".git"))
         r = subprocess.run([sys.executable, str(RUTA), "--base", base], cwd=self.repo,
                            capture_output=True, text=True, env=entorno)
         self.assertNotIn("Traceback", r.stderr)

@@ -83,6 +83,13 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
                       '"$RUNNER_TEMP/sdd/reviews.json"', texto)
         self.assertIn("PR_REVIEWS: ${{ runner.temp }}/sdd/reviews.json", texto)
 
+    def test_sdd_pasa_la_linea_de_tiempo_a_checks_py(self):
+        """VIC-57: todas las páginas, en el fichero que lee checks.py para el check `cambios-pedidos`."""
+        texto = leer("sdd.yml")
+        self.assertIn('gh api --paginate "repos/$REPO/issues/$PR_NUMBER/timeline?per_page=100" > '
+                      '"$RUNNER_TEMP/sdd/linea-de-tiempo.json"', texto)
+        self.assertIn("PR_TIMELINE: ${{ runner.temp }}/sdd/linea-de-tiempo.json", texto)
+
     def test_relanzar_solo_con_una_review(self):
         """VIC-56: aprobar, pedir cambios o retirar una aprobación relanza `checks-sdd` desde un workflow aparte,
         cuyo job no es un check requerido, sin checkout ni acciones, y sin expresiones dentro del script."""
@@ -144,9 +151,10 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
                     self.assertRegex(uso, r"@[0-9a-f]{40}$")
 
     def test_sin_credenciales_ni_mas_permisos(self):
-        # sdd.yml lee además los comentarios del PR: las respuestas de los revisores de G4 (VIC-38).
+        # sdd.yml lee además los comentarios del PR: las respuestas de los revisores de G4 (VIC-38), y su línea
+        # de tiempo, que es un endpoint de issues (VIC-57).
         # sdd-relanzar.yml solo vuelve a lanzar ejecuciones y lee la cabeza del PR: ni siquiera lee el código (VIC-56).
-        permisos_de = {"sdd.yml": ["contents: read", "pull-requests: read"], "sdd-relanzar.yml": ["actions: write", "pull-requests: read"]}
+        permisos_de = {"sdd.yml": ["contents: read", "pull-requests: read", "issues: read"], "sdd-relanzar.yml": ["actions: write", "pull-requests: read"]}
         for fichero in WORKFLOWS.glob("*.yml"):
             texto = fichero.read_text(encoding="utf-8")
             with self.subTest(fichero=fichero.name):
