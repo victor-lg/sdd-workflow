@@ -16,20 +16,34 @@ on:
     # "edited" vuelve a lanzar los checks cuando cambia el título o la
     # descripción del PR (nivel de riesgo, AC cubiertos o `Fixes`).
     types: [opened, edited, synchronize, reopened, ready_for_review]
+  # Aprobar o retirar una aprobación no lanza este workflow: lo hace sdd-relanzar.yml, que vuelve a
+  # lanzar la última ejecución de `pull_request` de la cabeza (VIC-56, ADR-0009 §3.4). El ruleset
+  # exige en verde la última ejecución de `checks-sdd` de cada evento: con una ejecución propia de
+  # `pull_request_review`, la de `pull_request` se quedaba en rojo tras aprobar y bloqueaba el PR
+  # (prueba en la calculadora, sdd-workflow#72). Así decide un solo evento.
 
 permissions:
   contents: read
   # Leer los comentarios del PR, donde van las respuestas de los revisores de G4 (VIC-38).
   pull-requests: read
 
+# Una por PR. Una ejecución nueva cancela la que siga en curso o en espera. Un relanzamiento (intento 2 o
+# siguientes, de sdd-relanzar.yml o a mano) no cancela la que está en curso: espera a que termine (VIC-56).
+# Si cancelara, el relanzamiento de una ejecución vieja (sdd-relanzar todavía no veía la nueva) tumbaría la
+# más nueva, que es la que toma el ruleset, y el PR quedaría bloqueado con un checks-sdd cancelado
+# (calculadora-discos#87, casos 7 y 10). GitHub deja una sola en espera por grupo: la que entra en espera
+# cancela a la que ya esperaba, sea un relanzamiento o una ejecución nueva. Una ejecución nueva solo espera
+# mientras termina de cancelarse la que estaba en curso; si en ese momento entra un relanzamiento, la cancela
+# y el PR queda bloqueado (nunca abierto) hasta el siguiente evento.
 concurrency:
   group: sdd-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.run_attempt == 1 }}
 
 env:
   # checks.py sale de aquí y compara con esto. Con la ref completa: `origin/main` resolvería
   # antes una etiqueta llamada así (refs/tags/origin/main), que puede empujar la rama.
-  BASE: refs/remotes/origin/${{ github.base_ref }}
+  # Del evento: al volver a lanzar una ejecución (sdd-relanzar.yml), es el mismo que la primera vez.
+  BASE: refs/remotes/origin/${{ github.event.pull_request.base.ref }}
   # Git no sustituye objetos con refs/replace al leer la historia.
   GIT_NO_REPLACE_OBJECTS: "1"
 
@@ -46,10 +60,13 @@ jobs:
 
       # Los checks se ejecutan con la versión de `main`, no con la del PR:
       # así un PR no puede debilitar sus propios checks.
-      # Fuera de un pull_request no hay github.base_ref y BASE se queda en "refs/remotes/origin/".
+      # Fuera de un PR, la base del evento está vacía y BASE se queda en "refs/remotes/origin/".
+      # La rama protegida es `main`: con otra base falla. `branches: [main]` ya lo evita; esto es una
+      # segunda barrera por si el disparador cambia.
       - name: Tomar los checks de la rama base
         run: |
           if [ -z "${BASE#refs/remotes/origin/}" ]; then echo "::error::Sin rama base: sdd.yml solo corre en pull_request"; exit 1; fi
+          if [ "$BASE" != "refs/remotes/origin/main" ]; then echo "::error::La base del PR es ${BASE#refs/remotes/origin/}, no main: checks-sdd solo vale en los PR contra main"; exit 1; fi
           git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "::error::Git no encuentra $BASE"; exit 1; }
           mkdir -p "$RUNNER_TEMP/sdd"
           git show "$BASE:.github/sdd/checks.py" > "$RUNNER_TEMP/sdd/checks.py"
@@ -64,6 +81,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" > "$RUNNER_TEMP/sdd/comentarios.json"
 
+      # Las reviews del PR: en R2, checks.py busca la aprobación de la persona sobre la cabeza (VIC-56).
+      # Se leen en cada ejecución, no del evento: por eso basta con volver a lanzarla (sdd-relanzar.yml).
+      - name: Reviews del PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/reviews?per_page=100" > "$RUNNER_TEMP/sdd/reviews.json"
+
       # La descripción, el título, la rama y el autor del PR entran por variables
       # de entorno, nunca interpolados en el script (evita inyección de órdenes).
       # El autor lo pone GitHub: es lo que acota la excepción de Dependabot. La cabeza del
@@ -72,8 +98,9 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BRANCH: ${{ github.head_ref }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_COMENTARIOS: ${{ runner.temp }}/sdd/comentarios.json
+          PR_REVIEWS: ${{ runner.temp }}/sdd/reviews.json
         run: python3 "$RUNNER_TEMP/sdd/checks.py" --base "$BASE"

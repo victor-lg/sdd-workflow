@@ -35,6 +35,11 @@ Comprueba:
   cambios       M8 (VIC-39): publica los commits que entraron tras la última ronda de G4, desde el
                 que vio cada revisor (`Commit revisado:` en su comentario), y falla si falta o si la
                 descripción trae esa lista escrita a mano.
+  aprobacion    VIC-56 (ADR-0009 §3.4): un PR R2 (el mayor entre el nivel marcado y el que exige lo
+                tocado) falla salvo que la última review de PERSONAS sea una aprobación del commit de
+                la cabeza. Las reviews llegan en PR_REVIEWS (`gh api --paginate …/pulls/N/reviews`).
+  cabeza        VIC-56: falla si PR_HEAD_SHA no está en la historia del commit que se prueba (el merge
+                de GitHub puede ser anterior a un push reciente).
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -44,7 +49,8 @@ Uso local:
     python3 .github/sdd/checks.py --base refs/remotes/origin/main
 Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta. PR_COMENTARIOS es la ruta
 de los comentarios del PR (`gh api --paginate …/issues/N/comments`); sin ella, el
-check de hallazgos solo lee la descripción. Los enlaces de «Revisión IA» a comentarios borrados
+check de hallazgos solo lee la descripción. PR_REVIEWS es la ruta de las reviews; sin ella, un PR R2
+falla en el check `aprobacion`. Los enlaces de «Revisión IA» a comentarios borrados
 solo se comprueban con GITHUB_SERVER_URL, GITHUB_REPOSITORY y GITHUB_REF (`refs/pull/N/merge`), como en la CI.
 
 Como hook `commit-msg` de lefthook, solo el formato del mensaje:
@@ -431,9 +437,10 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
                  readme_base: str | None, readme_head: str | None,
                  specs_head_ficheros: dict[str, str],
                  specs_base_ficheros: dict[str, str], por_defecto: str | None = None,
-                 submodulos: list[str] | None = None) -> None:
+                 submodulos: list[str] | None = None) -> str:
     """por_defecto: el nivel que se toma si el PR no marca ninguno (solo los de Dependabot).
-    submodulos: los gitlinks (modo 160000) que el PR añade o cambia."""
+    submodulos: los gitlinks (modo 160000) que el PR añade o cambia.
+    Devuelve el nivel efectivo: el mayor entre el marcado y el mínimo según lo tocado."""
     marcados = RE_RIESGO_MARCADO.findall(seccion(cuerpo_pr, "Nivel de riesgo"))
     if not marcados and por_defecto:
         declarado = por_defecto
@@ -493,6 +500,7 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         inf.aviso("riesgo", "⚠️ PR R0 que toca código: la revisión IA es opcional. Comprueba que no cambia comportamiento.")
     if declarado and ORDEN[declarado] < ORDEN[minimo]:
         inf.error("riesgo", f"el PR está marcado {declarado} pero lo que toca exige {minimo}. Sube el nivel en el PR (la CI solo puede subirlo).")
+    return max(declarado or minimo, minimo, key=ORDEN.get)
 
 
 # --- Tests existentes que cambian -----------------------------------------
@@ -954,10 +962,9 @@ def gravedades_de_los_revisores(lineas: list[tuple[str, bool]],
     return gravedades
 
 
-def comentarios_de_cuentas(ruta: str) -> list[dict] | None:
-    """Los comentarios del PR que escribieron las cuentas de CUENTAS_G4, tal como los da la API y con
-    `html_url` como texto, de la salida de `gh api --paginate`: una lista por página, una detrás de
-    otra. None si no se puede leer."""
+def leer_paginas(ruta: str) -> list | None:
+    """Los elementos de la salida de `gh api --paginate`: una lista JSON por página, una detrás de
+    otra. None si no se puede leer o no tiene esa forma."""
     lector, paginas, i = json.JSONDecoder(), [], 0
     try:
         texto = Path(ruta).read_text(encoding="utf-8")
@@ -968,8 +975,18 @@ def comentarios_de_cuentas(ruta: str) -> list[dict] | None:
         return None
     if not paginas or not all(isinstance(p, list) for p in paginas):
         return None
+    return [e for p in paginas for e in p]
+
+
+def comentarios_de_cuentas(ruta: str) -> list[dict] | None:
+    """Los comentarios del PR que escribieron las cuentas de CUENTAS_G4, tal como los da la API y con
+    `html_url` como texto, de la salida de `gh api --paginate`: una lista por página, una detrás de
+    otra. None si no se puede leer."""
+    elementos = leer_paginas(ruta)
+    if elementos is None:
+        return None
     comentarios = []
-    for c in (c for p in paginas for c in p):
+    for c in elementos:
         if not isinstance(c, dict):
             return None
         # Sin usuario (una cuenta borrada) no es de CUENTAS_G4: se ignora, no se falla por él.
@@ -1201,6 +1218,66 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
     inf.secciones.append("### Cambios tras la última ronda\n\n" + "\n".join(lineas))
 
 
+# --- Aprobación de la persona en R2 (VIC-56) ------------------------------
+
+# ADR-0009 §3.4 y §5: el agente no fusiona solo un PR R2, toque o no rutas de CODEOWNERS. `checks-sdd`
+# falla en todo R2 hasta que la persona lo aprueba en GitHub, sobre el commit de la cabeza: un push
+# posterior la deja sin valor. Solo cuenta la review de estas cuentas, nunca la del agente (CUENTAS_G4
+# incluye la suya). `sdd.yml` pasa las reviews en PR_REVIEWS, leídas en cada ejecución; al aprobar o retirar
+# una aprobación, `sdd-relanzar.yml` vuelve a lanzar su última ejecución de `pull_request`.
+# Por `user.id` y no por login: si la cuenta cambiara de nombre, otra podría registrar el libre, y en un
+# repo público cualquiera envía reviews. El login solo sirve para los mensajes.
+# Id de una cuenta: `gh api users/<login> --jq .id`.
+PERSONAS = {95044073: "victor-lg"}
+# Los estados que deciden; un COMMENTED no aprueba ni retira nada, como en GitHub.
+ESTADOS_DECISIVOS = {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
+
+
+def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
+    """(aprobado, motivo): la última review decisiva de PERSONAS es APPROVED y sobre `cabeza`."""
+    suyas = [r for r in reviews if isinstance(r, dict) and isinstance(r.get("user"), dict)
+             and type(r["user"].get("id")) is int and r["user"]["id"] in PERSONAS
+             and r.get("state") in ESTADOS_DECISIVOS]
+    if not suyas:
+        return False, "no hay ninguna review de la persona"
+    # Por id: es el orden en que se enviaron. Sin id numérico no se sabe cuál es la última.
+    if not all(isinstance(r.get("id"), int) for r in suyas):
+        return False, "una review de la persona no tiene id"
+    ultima = max(suyas, key=lambda r: r["id"])
+    if ultima["state"] != "APPROVED":
+        return False, {"CHANGES_REQUESTED": "la última review de la persona pide cambios",
+                       "DISMISSED": "la última review de la persona se retiró (dismiss)"}[ultima["state"]]
+    if ultima.get("commit_id") != cabeza:
+        return False, f"la persona aprobó `{str(ultima.get('commit_id'))[:12]}` y la cabeza es `{cabeza[:12]}`"
+    return True, f"aprobado por {PERSONAS[ultima['user']['id']]} en `{cabeza[:12]}`"
+
+
+def check_cabeza(inf: Informe, cabeza: str) -> None:
+    """El merge que prueba GitHub (HEAD) puede ser anterior a un push reciente, por ejemplo en un `edited`
+    lanzado justo después: los checks verían el contenido viejo y la aprobación se compararía con la
+    cabeza nueva. Sin la cabeza del PR en la historia de HEAD, ningún check es fiable, sea cual sea el
+    nivel. Volver a lanzar la ejecución no lo arregla: repite el mismo merge (sdd-relanzar.yml también)."""
+    if git("merge-base", "--is-ancestor", cabeza, "HEAD") is None:
+        inf.error("cabeza", f"la cabeza del PR (`{cabeza[:12]}`) no está en la historia del commit que se prueba: "
+                            "GitHub no había recalculado el merge tras el último push. Volver a lanzar esta ejecución "
+                            "prueba el mismo merge: edita la descripción del PR para que se lance una nueva.")
+
+
+def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str | None) -> None:
+    if nivel != "R2":
+        return
+    if reviews is None or not cabeza:
+        inf.error("aprobacion", "PR R2: no he podido leer las reviews del PR (PR_REVIEWS) o su cabeza, así que no sé si lo "
+                                "aprobó la persona. Un R2 no se fusiona sin su aprobación (ADR-0009 §3.4).")
+        return
+    aprobado, motivo = aprobacion_de_la_persona(reviews, cabeza)
+    inf.secciones.append(f"### Aprobación de la persona (R2)\n\n- {'Sí' if aprobado else 'No'}: {motivo}.")
+    if not aprobado:
+        inf.error("aprobacion", f"PR R2: {motivo}. Un R2 solo se fusiona con la aprobación de "
+                                f"{', '.join(f'`{p}`' for p in PERSONAS.values())} sobre el último commit (ADR-0009 §3.4); "
+                                "al aprobar, este check se vuelve a lanzar solo (en un PR de un fork, a mano).")
+
+
 # --- Programa -------------------------------------------------------------
 
 def main() -> int:
@@ -1243,8 +1320,8 @@ def main() -> int:
                        specs_head, citas_en_tests(raiz), dependabot)
     versionados = ficheros_versionados()
     submodulos = [f for f in cambiados if (versionados or {}).get(f) == "160000"]
-    check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
-                 specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None, submodulos)
+    nivel = check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
+                         specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None, submodulos)
     check_tests(inf, args.base)
 
     rama, titulo = os.environ.get("PR_BRANCH", ""), os.environ.get("PR_TITLE", "")
@@ -1274,6 +1351,11 @@ def main() -> int:
     if leidos is not None:
         check_respuestas(inf, cuerpo_pr, leidos, url_del_pr())
     check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr)
+    ruta_reviews = os.environ.get("PR_REVIEWS")
+    if os.environ.get("PR_HEAD_SHA"):
+        check_cabeza(inf, os.environ["PR_HEAD_SHA"])
+    cabeza = os.environ.get("PR_HEAD_SHA") or (git("rev-parse", "HEAD") or "").strip()
+    check_aprobacion(inf, nivel, leer_paginas(ruta_reviews) if ruta_reviews else None, cabeza)
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]
