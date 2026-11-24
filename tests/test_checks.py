@@ -2009,6 +2009,28 @@ class TestRutasSensibles(unittest.TestCase):
         self.assertEqual(checks.parse_rutas_sensibles("app/configuración.js\n"), (["app/configuración.js"], []))
         self.assertEqual(checks.parse_rutas_sensibles("src/pagos/\r\napp/sw.js\r\n"), (["src/pagos/*", "app/sw.js"], []))
 
+    def test_un_comentario_no_se_traga_las_rutas_de_detras(self):
+        """G4-3-B-01: con un salto que no es `\n` (un `\r` solo, U+2028…), lo que se ve como rutas detrás de
+        un comentario sería parte del comentario. La línea es inválida, también si es un comentario."""
+        for texto in ("# Rutas\rsrc/pagos/\rsrc/auth/\r", "src/pagos/\n# nota\u2028src/auth/\n",
+                      "# nota\x0csrc/auth/\n", "# nota\x85src/auth/\n", "# nota\u2029src/auth/\n"):
+            with self.subTest(texto=texto):
+                self.assertTrue(checks.parse_rutas_sensibles(texto)[1], texto)
+        self.assertEqual(checks.parse_rutas_sensibles("# nota\tcon tabulador\r\nsrc/a/\r\n"), (["src/a/*"], []))
+        r = self.correr(self.main_con(rutas="# Rutas\rsrc/pagos/\r"))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("de `main` es inválido (línea 1", r.stdout)
+
+    def test_quitar_del_readme_una_ruta_con_corchetes_avisa(self):
+        """G4-3-B-02: copiada al fichero, `lib/*.[jt]s` ya no cubre `lib/x.ts`; al vaciar el README, se avisa."""
+        base = self.main_con("## Rutas sensibles\n\n- `lib/*.[jt]s`\n- `app/sw.js`\n", "lib/*.[jt]s\napp/sw.js\n")
+        self.pr(base)
+        self.escribir("README.md", "## Rutas sensibles\n\nEn el fichero.\n")
+        r = self.correr(base, nueva=False)
+        self.assertNivel(r, "R2")
+        self.assertIn("el PR quita `lib/*.[jt]s` de las rutas sensibles del README", r.stdout)
+        self.assertNotIn("quita `app/sw.js`", r.stdout)
+
     def test_check_riesgo_suma_las_dos_listas(self):
         cuerpo = "## Nivel de riesgo\n\n- [x] R1\n"
         readme = "## Rutas sensibles\n\n- `app/sw.js`\n"

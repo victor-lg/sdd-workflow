@@ -16,7 +16,8 @@
 #   - una línea con espacios, caracteres de control o invisibles, comillas
 #     invertidas o barras invertidas, que empiece por / o ./, o con un
 #     tramo .., es inválida y hace fallar el check `riesgo`: nunca se
-#     ignora en silencio.
+#     ignora en silencio. Los saltos de línea son \n o \r\n; otro salto
+#     (\r solo, U+2028…) invalida la línea, aunque sea un comentario.
 #
 # La CI usa la versión de `main`, no la del PR. Cambiar este fichero es R2
 # (está bajo .github/) y lo aprueba la persona (CODEOWNERS): el agente no

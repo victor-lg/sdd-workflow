@@ -434,6 +434,23 @@ def rutas_sensibles(readme: str | None) -> list[str]:
     return [p + "*" if p.endswith("/") else p for p in patrones]
 
 
+def patron_literal(ruta: str) -> str:
+    """El patrón de fnmatch en el que `[`, `]` y `?` son literales y solo `*` es comodín."""
+    return re.sub(r"([\[\]?])", r"[\1]", ruta)
+
+
+def patrones_del_readme(readme: str | None) -> list[str]:
+    """Las rutas del README con su lectura de siempre (`[` y `?` comodines) y, además, la literal, como
+    en el fichero: solo suma rutas (G4-2-B-01)."""
+    rutas = rutas_sensibles(readme)
+    return rutas + [patron_literal(p) for p in rutas if patron_literal(p) != p]
+
+
+# Lo que un editor puede mostrar como salto de línea. Dentro de una línea, también de un comentario, la
+# invalida: si no, un comentario se tragaría en silencio las rutas que se ven detrás (G4-3-B-01).
+SALTOS_RAROS = set("\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029")
+
+
 def parse_rutas_sensibles(texto: str) -> tuple[list[str], list[str]]:
     """Formato de RUTAS_SENSIBLES: una ruta por línea, relativa a la raíz del repo y sin comillas, como
     `app/sw.js`, `src/pagos/` (la carpeta entera) o `src/auth/*.ts` (`*` también cruza carpetas). Se
@@ -442,23 +459,22 @@ def parse_rutas_sensibles(texto: str) -> tuple[list[str], list[str]]:
     `..`, es inválida: no coincidiría con ninguna ruta y la lista tendría un hueco sin que nadie lo
     viera. Un BOM al principio del fichero no cuenta. Solo `*` es comodín: `[`, `]` y `?` son literales,
     como en `app/[id]/route.ts` (G4-2-B-01). Se parte solo por `\n`: `splitlines()` partiría también
-    por caracteres de control, que así llegan a la línea y la invalidan. Devuelve (patrones, errores)."""
+    por caracteres de control, que así llegan a la línea y la invalidan; un salto de otro tipo (`\r` solo,
+    U+2028…) invalida también un comentario. Vale `\r\n`. Devuelve (patrones, errores)."""
     rutas, errores = [], []
     for n, linea in enumerate(texto.removeprefix("\ufeff").split("\n"), 1):
-        ruta = linea.strip()
+        ruta = linea.removesuffix("\r").strip(" \t")
+        if SALTOS_RAROS & set(ruta):
+            errores.append(f"línea {n}, `{ascii(ruta)[1:-1][:80]}`")
+            continue
         if not ruta or ruta.startswith("#"):
             continue
         if (not RE_RUTA_SENSIBLE.fullmatch(ruta) or ruta.startswith(("/", "./"))
                 or ".." in ruta.split("/") or any(unicodedata.category(c)[0] in "CZ" for c in ruta)):
             errores.append(f"línea {n}, `{ascii(ruta)[1:-1][:80]}`")
             continue
-        rutas.append(literal(ruta) + ("*" if ruta.endswith("/") else ""))
+        rutas.append(patron_literal(ruta) + ("*" if ruta.endswith("/") else ""))
     return rutas, errores
-
-
-def literal(ruta: str) -> str:
-    """El patrón de fnmatch en el que `[`, `]` y `?` son literales y solo `*` es comodín."""
-    return re.sub(r"([\[\]?])", r"[\1]", ruta)
 
 
 def leer_rutas_sensibles(base: str) -> tuple[bool, str | None]:
@@ -556,9 +572,7 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         if ORDEN[nivel] > ORDEN[minimo]:
             minimo = nivel
 
-    del_readme = rutas_sensibles(readme_base)
-    # Las del README conservan su lectura (`[` y `?` comodines) y suman la literal, como las del fichero.
-    propias = del_readme + [literal(p) for p in del_readme if literal(p) != p] + (rutas_fichero or [])
+    propias = patrones_del_readme(readme_base) + (rutas_fichero or [])
     # Una ruta sin `/` final que nombra una carpeta también la cubre entera: nunca menos rutas.
     propias += [p + "/*" for p in propias if not p.endswith("*")]
     for f in cambiados:
@@ -574,6 +588,11 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         subir("R2", f"`{f}` (submódulo: su código no lo ve ningún escáner)")
     if "README.md" in cambiados and rutas_sensibles(readme_head) != rutas_sensibles(readme_base):
         subir("R2", "cambia la lista de rutas sensibles del README")
+        # G4-3-B-02: en el fichero, `[` y `?` son literales; al quitar una así del README, se pierde esa lectura.
+        for p in sorted(set(rutas_sensibles(readme_base)) - set(rutas_sensibles(readme_head))):
+            if patron_literal(p) != p:
+                inf.aviso("riesgo", f"⚠️ el PR quita `{p}` de las rutas sensibles del README. En `{RUTAS_SENSIBLES}`, "
+                                    "`[`, `]` y `?` se leen tal cual: comprueba que lo que cubría sigue cubierto.")
     if RUTAS_SENSIBLES in cambiados:
         subir("R2", f"cambia `{RUTAS_SENSIBLES}`, la lista de rutas sensibles")
     for f in cambiados:
