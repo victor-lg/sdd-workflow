@@ -1367,7 +1367,7 @@ class TestSinG4(unittest.TestCase):
               # G4-1-B-01: instrucciones de agentes en cualquier carpeta y lo de carpetas con punto.
               ("src/CLAUDE.md", "100644"), ("docs/AGENTS.md", "100644"), ("CLAUDE.local.md", "100644"),
               ("app/Claude.md", "100644"), ("src/.claude/commands/x.md", "100644"), (".cursor/rules/x.md", "100644"),
-              ("docs/.github/x.md", "100644"))
+              ("docs/.github/x.md", "100644"), ("GEMINI.md", "100644"))
         for ruta, modo in si:
             with self.subTest(ruta=ruta):
                 self.assertTrue(checks.es_documentacion(ruta, modo))
@@ -1420,6 +1420,8 @@ class TestSinG4(unittest.TestCase):
                 self.assertEqual(len(inf.errores), 1, inf.errores)
                 self.assertIn("tiene 1 revisor(es) con `Commit revisado`", inf.errores[0])
                 self.assertIn("necesita 2", inf.errores[0])
+                # G4-2-A-02: el motivo de los dos revisores sale en el mensaje cuando es la spec o el ADR.
+                self.assertEqual("con spec o ADR" in inf.errores[0], nivel == "R1")
                 self.assertEqual(self.g4(nivel, cambiados, self.ronda(1, "A", "B")).errores, [])
 
     def test_cuenta_la_ultima_ronda_y_solo_revisores_con_commit(self):
@@ -2003,6 +2005,17 @@ class TestRutasSensibles(unittest.TestCase):
         r = self.correr(self.main_con(README_CON_RUTAS, FICHERO_RUTAS), nivel="R0")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertNivel(r, "R0")
+
+    def test_rutas_no_ascii_sin_comillas(self):
+        """G4-2-B, sospecha: sin `-z`, Git entrecomilla las rutas no ASCII y ningún patrón las ve. Una de
+        `.claude/` sube a R2, y un `.md` con tilde es documentación."""
+        r = self.correr(self.main_con(), ".claude/skills/ñ/SKILL.md", nivel="R1")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertNivel(r, "R2")
+        self.assertIn("`.claude/skills/ñ/SKILL.md`", r.stdout)
+        r = self.correr(self.main_con(), "docs/guía.md", nivel="R0")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("R0 comprobado", r.stdout)
 
     def test_r0_con_codigo_falla_sin_g4(self):
         """VIC-56, regla 1, con main(): un R0 que toca código cuenta como R1 y falla sin G4."""

@@ -1349,9 +1349,9 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
 # solo documentación. Si no puede comprobarlo, el R0 cuenta como R1 y lleva G4 (aclaración de la decisión 1).
 # Revisores por PR, como en la tabla de `sdd-review` (no la cambia: la comprueba).
 REVISORES_R2_SPEC_ADR, REVISORES_OTROS = 2, 1
-# Instrucciones para agentes en cualquier carpeta (G4-1-B-01): Claude Code lee el CLAUDE.md de la carpeta en la
+# Instrucciones para agentes en cualquier carpeta (G4-1-B-01; GEMINI.md, G4-2-A-01): Claude Code lee el CLAUDE.md de la carpeta en la
 # que trabaja, y otros agentes, los AGENTS.md anidados. R2_RUTAS solo ve los de la raíz.
-INSTRUCCIONES_AGENTE = {"agents.md", "claude.md", "claude.local.md"}
+INSTRUCCIONES_AGENTE = {"agents.md", "claude.md", "claude.local.md", "gemini.md"}
 
 
 def es_documentacion(ruta: str, modo: str | None) -> bool:
@@ -1475,11 +1475,12 @@ def main() -> int:
     cuerpo_pr = os.environ.get("PR_BODY", "")
     inf = Informe()
 
-    diff = git("diff", "--name-only", "--no-renames", f"{args.base}...HEAD")
+    # Con -z: sin él, Git entrecomilla las rutas no ASCII (`".claude/\303\261.md"`) y ningún patrón las ve.
+    diff = git("diff", "--name-only", "--no-renames", "-z", f"{args.base}...HEAD")
     if diff is None:
         print(f"No se puede comparar con {args.base}. ¿Se hizo checkout con fetch-depth: 0?")
         return 2
-    cambiados = [l for l in diff.splitlines() if l]
+    cambiados = [l for l in diff.split("\0") if l]
 
     specs_head_ficheros = {p.relative_to(raiz).as_posix(): p.read_text(encoding="utf-8")
                            for p in sorted((raiz / "docs/specs").glob("*.md"))
