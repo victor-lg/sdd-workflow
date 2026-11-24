@@ -55,16 +55,12 @@ No lo lee la CI: es información para quien abre el repo.
 
 ## Rutas sensibles
 
+Las rutas que hacen R2 un PR, además de las que ya marca el workflow, están en
+[`.github/sdd/rutas-sensibles.txt`](.github/sdd/rutas-sensibles.txt), con su formato al principio.
+Ese fichero está bajo `.github/`: cambiarlo es R2 y lo aprueba la persona.
+
 <!--
-Todo cambio que toque estas rutas es R2, además de las que ya marca el
-workflow (dependencias, .github/, .claude/, AGENTS.md, CLAUDE.md, la
-configuración de lefthook y de los escáneres, .gitattributes, migraciones;
-lista canónica en la línea base, §6). Es la
-forma de decir que un componente es delicado. Cambiar esta lista es R2.
-
-Formato que lee la CI: una ruta por línea, entre comillas invertidas, por
-ejemplo `src/pagos/` (una carpeta entera) o `src/auth/*.ts`. El `*` también
-cruza carpetas. La CI usa la lista que hay en `main`, no la del PR.
+No escribas la lista aquí. Mientras un proyecto migra, `checks.py` sigue leyendo
+también las líneas de esta sección con forma de lista y ruta entre comillas
+invertidas, y suma las dos listas; en un proyecto nuevo, esta sección no lleva ninguna.
 -->
-
-- (ninguna todavía)

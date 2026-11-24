@@ -13,7 +13,7 @@ Ficheros:
 - `package.json`, `package-lock.json`: versiones exactas. El `overrides` fija `playwright-core` en la versión de la imagen: sin él, `@axe-core/playwright` metía otra y el job `versiones` del workflow fallaría (`docs/herramientas.md`);
 - `ejemplo.spec.mjs-snapshots/`: las capturas de referencia, una por captura y navegador.
 
-En un proyecto, `playwright.config.*`, `*-snapshots/` y `__screenshots__/` son R2 (`checks.py` de la plantilla). Si el proyecto cambia la carpeta de las capturas con `snapshotPathTemplate`, añade la nueva a las rutas sensibles de su README. Las tolerancias o máscaras escritas en un fichero de test no las ve `checks.py`: ahí manda la regla de `sdd-implement` y la revisión.
+En un proyecto, `playwright.config.*`, `*-snapshots/` y `__screenshots__/` son R2 (`checks.py` de la plantilla). Si el proyecto cambia la carpeta de las capturas con `snapshotPathTemplate`, añade la nueva a `.github/sdd/rutas-sensibles.txt`. Las tolerancias o máscaras escritas en un fichero de test no las ve `checks.py`: ahí manda la regla de `sdd-implement` y la revisión.
 
 **Con el workflow de tests** (`docs/ejemplos/workflows/tests-node-playwright.yml`): `.nvmrc` fija Node 24, que pide `setup-node`. El workflow corre además `node --test "tests/unit/**/*.test.js"` en el primer trozo: si el proyecto no tiene esos tests, adapta ese paso al copiar. Ajusta también `testDir` en `playwright.config.mjs`: aquí es la carpeta del ejemplo.
 
