@@ -215,6 +215,14 @@ def git(*args: str) -> str | None:
     return r.stdout if r.returncode == 0 else None
 
 
+def rutas(*args: str) -> list[str] | None:
+    """Una orden de Git que lista rutas, con -z: sin él, Git entrecomilla las rutas no ASCII
+    (`".claude/\\303\\261.md"`) y ningún patrón ni `es_test`/`es_spec` las reconoce (G4 de VIC-56)."""
+    # -z justo tras la suborden: después de `--` sería una ruta.
+    salida = git(args[0], "-z", *args[1:])
+    return None if salida is None else [r for r in salida.split("\0") if r]
+
+
 def es_codigo(ruta: str) -> bool:
     return not (ruta.startswith(PREFIJOS_NO_CODIGO) or ruta.endswith(".md")
                 or ruta in NO_CODIGO_SUELTOS)
@@ -631,11 +639,11 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
 # --- Tests existentes que cambian -----------------------------------------
 
 def check_tests(inf: Informe, base: str) -> None:
-    diff = git("diff", "--name-status", "--no-renames", "--diff-filter=MD", f"{base}...HEAD") or ""
+    # Con -z, `--name-status` alterna el estado y la ruta.
+    campos = rutas("diff", "--name-status", "--no-renames", "--diff-filter=MD", f"{base}...HEAD") or []
     filas = []
-    for linea in diff.splitlines():
-        estado, _, ruta = linea.partition("\t")
-        if ruta and es_test(ruta):
+    for estado, ruta in zip(campos[::2], campos[1::2]):
+        if es_test(ruta):
             filas.append(f"- `{ruta}` ({'borrado' if estado == 'D' else 'modificado'})")
     if filas:
         inf.secciones.append("### Tests existentes que cambian\n\n"
@@ -1335,9 +1343,9 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
         # PR que cambian desde lo que vio cada revisor.
         orden = (git("rev-list", "--topo-order", "--reverse", cabeza, f"^{base}") or "").split()
         lineas += [f"- `{h[:7]}` {texto_del_resumen(nuevos[h])}" for h in orden if h in nuevos]
-        del_pr = set((git("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or "").splitlines())
+        del_pr = set(rutas("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or [])
         ficheros = sorted({f for l in letras
-                           for f in (git("diff", "--name-only", "--no-renames", vistos[(ronda, l)], cabeza) or "").splitlines()} & del_pr)
+                           for f in rutas("diff", "--name-only", "--no-renames", vistos[(ronda, l)], cabeza) or []} & del_pr)
         if ficheros:
             lineas += ["", "Ficheros: " + ", ".join(texto_del_resumen(f) for f in ficheros)]
     inf.secciones.append("### Cambios tras la última ronda\n\n" + "\n".join(lineas))
@@ -1475,19 +1483,17 @@ def main() -> int:
     cuerpo_pr = os.environ.get("PR_BODY", "")
     inf = Informe()
 
-    # Con -z: sin él, Git entrecomilla las rutas no ASCII (`".claude/\303\261.md"`) y ningún patrón las ve.
-    diff = git("diff", "--name-only", "--no-renames", "-z", f"{args.base}...HEAD")
-    if diff is None:
+    cambiados = rutas("diff", "--name-only", "--no-renames", f"{args.base}...HEAD")
+    if cambiados is None:
         print(f"No se puede comparar con {args.base}. ¿Se hizo checkout con fetch-depth: 0?")
         return 2
-    cambiados = [l for l in diff.split("\0") if l]
 
     specs_head_ficheros = {p.relative_to(raiz).as_posix(): p.read_text(encoding="utf-8")
                            for p in sorted((raiz / "docs/specs").glob("*.md"))
                            if not p.name.startswith("_")}
-    base_listado = git("ls-tree", "-r", "--name-only", args.base, "--", "docs/specs") or ""
     specs_base_ficheros = {r: git("show", f"{args.base}:{r}") or ""
-                           for r in base_listado.splitlines() if es_spec(r)}
+                           for r in rutas("ls-tree", "-r", "--name-only", args.base, "--", "docs/specs") or []
+                           if es_spec(r)}
     readme_base = git("show", f"{args.base}:README.md")
     readme_head_p = raiz / "README.md"
     readme_head = readme_head_p.read_text(encoding="utf-8") if readme_head_p.exists() else None

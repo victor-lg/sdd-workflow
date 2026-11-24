@@ -1607,6 +1607,26 @@ class TestCambios(unittest.TestCase):
                 inf = ejecutar(checks.check_cambios, "main", "HEAD", [], reconciliacion(linea))
                 self.assertEqual(inf.errores, [])
 
+    def test_rutas_no_ascii_sin_comillas(self):
+        """G4-3-A-01 y G4-3-B-01: `check_tests` y la lista de ficheros de `cambios` leen con -z."""
+        (self.repo / "tests").mkdir()
+        self.git("switch", "-q", "main")
+        self.commit("tests/cálculo.test.js", "test: base")
+        self.git("switch", "-q", "feat/vic-7-x")
+        self.git("merge", "-q", "--no-edit", "main")
+        visto = self.git("rev-parse", "HEAD")
+        self.commit("tests/cálculo.test.js", "test: cambia")
+        anterior = os.getcwd()
+        os.chdir(self.repo)
+        try:
+            with unittest.mock.patch.dict(os.environ, ENTORNO_GIT):
+                tests = ejecutar(checks.check_tests, "main")
+        finally:
+            os.chdir(anterior)
+        self.assertIn("- `tests/cálculo.test.js` (modificado)", tests.secciones[0])
+        inf = self.comprobar(f"Commit revisado: G4-1-A · {visto}")
+        self.assertIn("Ficheros: tests/cálculo.test.js", inf.secciones[0])
+
     def test_sin_ninguna_ronda_no_hace_nada(self):
         inf = self.comprobar("Un comentario cualquiera.")
         self.assertEqual((inf.errores, inf.secciones), ([], []))
@@ -2016,6 +2036,19 @@ class TestRutasSensibles(unittest.TestCase):
         r = self.correr(self.main_con(), "docs/guía.md", nivel="R0")
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertIn("R0 comprobado", r.stdout)
+
+    def test_spec_no_ascii_de_main_cuenta(self):
+        """G4-3-B-02: la spec de `main` con tilde en el nombre se lee; su PR no baja su propio riesgo."""
+        base = self.main_con()
+        self.git("switch", "-q", base)
+        ruta = "docs/specs/SPEC-CALC-003-división.md"
+        self.escribir(ruta, SPEC_LIMPIA.replace("riesgo: R1", "riesgo: R2"))
+        self.git("commit", "-q", "-m", "spec: base")
+        self.pr(base)
+        self.escribir(ruta, SPEC_LIMPIA)
+        r = self.correr(base, nivel="R1", nueva=False)
+        self.assertNivel(r, "R2")
+        self.assertIn("**riesgo:** el PR está marcado R1 pero lo que toca exige R2", r.stdout)
 
     def test_r0_con_codigo_falla_sin_g4(self):
         """VIC-56, regla 1, con main(): un R0 que toca código cuenta como R1 y falla sin G4."""
