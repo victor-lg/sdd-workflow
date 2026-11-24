@@ -68,6 +68,7 @@ import json
 import os
 import re
 import subprocess
+import unicodedata
 import sys
 from pathlib import Path
 
@@ -91,6 +92,7 @@ CAMPOS_OBLIGATORIOS = ["id", "titulo", "estado", "version", "riesgo"]
 RUTAS_SENSIBLES = ".github/sdd/rutas-sensibles.txt"
 # Una ruta relativa a la raíz, sin espacios, comillas invertidas ni barras invertidas.
 RE_RUTA_SENSIBLE = re.compile(r"[^\s`\\]+")
+FORMATO_RUTAS = "Una ruta por línea, relativa a la raíz y sin comillas (formato al principio del fichero)."
 
 # Disparadores de R2 del workflow (linea-base §6). `*` también cruza carpetas.
 R2_RUTAS = [".github/*", ".claude/*", "AGENTS.md", "CLAUDE.md",
@@ -435,17 +437,18 @@ def rutas_sensibles(readme: str | None) -> list[str]:
 def parse_rutas_sensibles(texto: str) -> tuple[list[str], list[str]]:
     """Formato de RUTAS_SENSIBLES: una ruta por línea, relativa a la raíz del repo y sin comillas, como
     `app/sw.js`, `src/pagos/` (la carpeta entera) o `src/auth/*.ts` (`*` también cruza carpetas). Se
-    ignoran las líneas vacías y las que empiezan por `#`. Una línea con espacios, comillas invertidas
-    o barras invertidas, que empiece por `/` o `./`, o con un tramo `..`, es inválida: no coincidiría
-    con ninguna ruta y la lista tendría un hueco sin que nadie lo viera. Devuelve (rutas, errores)."""
+    ignoran las líneas vacías y las que empiezan por `#`. Una línea con espacios, caracteres de control
+    o invisibles, comillas invertidas o barras invertidas, que empiece por `/` o `./`, o con un tramo
+    `..`, es inválida: no coincidiría con ninguna ruta y la lista tendría un hueco sin que nadie lo
+    viera. Un BOM al principio del fichero no cuenta. Devuelve (rutas, errores)."""
     rutas, errores = [], []
-    for n, linea in enumerate(texto.splitlines(), 1):
+    for n, linea in enumerate(texto.removeprefix("\ufeff").splitlines(), 1):
         ruta = linea.strip()
         if not ruta or ruta.startswith("#"):
             continue
         if (not RE_RUTA_SENSIBLE.fullmatch(ruta) or ruta.startswith(("/", "./"))
-                or ".." in ruta.split("/")):
-            errores.append(f"línea {n}, `{linea.strip()[:80]}`")
+                or ".." in ruta.split("/") or any(unicodedata.category(c)[0] in "CZ" for c in ruta)):
+            errores.append(f"línea {n}, `{ascii(ruta)[1:-1][:80]}`")
             continue
         rutas.append(ruta + "*" if ruta.endswith("/") else ruta)
     return rutas, errores
@@ -470,30 +473,38 @@ def leer_rutas_sensibles(base: str) -> tuple[bool, str | None]:
         return True, None
 
 
+def errores_de_rutas(texto: str | None) -> list[str]:
+    return ["no es un fichero normal de texto UTF-8"] if texto is None else parse_rutas_sensibles(texto)[1]
+
+
 def cargar_rutas_sensibles(inf: Informe, base: str, cambiados: list[str],
                            versionados: dict[str, str] | None, raiz: Path) -> list[str]:
     """Las rutas de RUTAS_SENSIBLES en `base` (lo que cuenta para el nivel). Si el PR cambia el fichero,
-    comprueba también su versión: un fichero inválido en `main` haría fallar todos los PR siguientes."""
+    comprueba también su versión: un fichero inválido en `main` haría fallar todos los PR siguientes.
+    Por eso, si el de `main` es inválido y el PR lo deja válido, solo avisa: ese PR es R2 y es el que lo
+    arregla. El PR que lo borra también es R2, y lo avisa: después solo contará el README."""
     existe, texto = leer_rutas_sensibles(base)
-    rutas: list[str] = []
-    if existe and texto is None:
-        inf.error("riesgo", f"no he podido leer `{RUTAS_SENSIBLES}` de `main` como un fichero de texto UTF-8: "
-                            "sin él no sé qué rutas del proyecto son sensibles.")
-    elif existe:
-        rutas, errores = parse_rutas_sensibles(texto)
-        if errores:
-            inf.error("riesgo", f"`{RUTAS_SENSIBLES}` de `main` tiene líneas inválidas ({'; '.join(errores)}): "
-                                "una ruta por línea, relativa a la raíz y sin comillas.")
-    if RUTAS_SENSIBLES in cambiados and (raiz / RUTAS_SENSIBLES).exists():
+    rutas = parse_rutas_sensibles(texto)[0] if texto is not None else []
+    errores_base = errores_de_rutas(texto) if existe else []
+    if RUTAS_SENSIBLES in cambiados:
         modo = (versionados or {}).get(RUTAS_SENSIBLES)
-        try:
-            nuevo = (raiz / RUTAS_SENSIBLES).read_bytes().decode("utf-8") if modo in ("100644", "100755") else None
-        except (OSError, UnicodeDecodeError):
-            nuevo = None
-        errores = ["no es un fichero normal de texto UTF-8"] if nuevo is None else parse_rutas_sensibles(nuevo)[1]
-        if errores:
-            inf.error("riesgo", f"el PR deja `{RUTAS_SENSIBLES}` inválido ({'; '.join(errores)}): "
-                                "una ruta por línea, relativa a la raíz y sin comillas.")
+        if modo is None:
+            inf.aviso("riesgo", f"⚠️ el PR borra `{RUTAS_SENSIBLES}`: después solo contarán las rutas sensibles del README.")
+            errores_pr = []
+        else:
+            try:
+                nuevo = (raiz / RUTAS_SENSIBLES).read_bytes().decode("utf-8") if modo in ("100644", "100755") else None
+            except (OSError, UnicodeDecodeError):
+                nuevo = None
+            errores_pr = errores_de_rutas(nuevo)
+        if errores_pr:
+            inf.error("riesgo", f"el PR deja `{RUTAS_SENSIBLES}` inválido ({'; '.join(errores_pr)}): {FORMATO_RUTAS}")
+        elif errores_base:
+            inf.aviso("riesgo", f"⚠️ `{RUTAS_SENSIBLES}` de `main` es inválido ({'; '.join(errores_base)}) y este PR lo corrige.")
+            errores_base = []
+    if errores_base:
+        inf.error("riesgo", f"`{RUTAS_SENSIBLES}` de `main` es inválido ({'; '.join(errores_base)}): sin él no sé "
+                            f"qué rutas del proyecto son sensibles. {FORMATO_RUTAS}")
     return rutas
 
 
@@ -535,6 +546,8 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
             minimo = nivel
 
     propias = rutas_sensibles(readme_base) + (rutas_fichero or [])
+    # Una ruta sin `/` final que nombra una carpeta también la cubre entera: nunca menos rutas.
+    propias += [p + "/*" for p in propias if not p.endswith("*")]
     for f in cambiados:
         if any(fnmatch.fnmatchcase(f, p) for p in R2_RUTAS):
             subir("R2", f"`{f}` (configuración del agente, CI o migraciones)")
