@@ -1444,7 +1444,11 @@ class TestRondasDeG4(unittest.TestCase):
     """VIC-39: de los comentarios salen el commit que vio cada revisor y los revisores de cada ronda."""
 
     def rondas(self, *cuerpos):
-        return checks.rondas_de_g4([(f"#c{n}", c) for n, c in enumerate(cuerpos)])
+        """(vistos, revisores); los repetidos, con `repetidos`."""
+        return checks.rondas_de_g4([(f"#c{n}", c) for n, c in enumerate(cuerpos)])[:2]
+
+    def repetidos(self, *cuerpos):
+        return checks.rondas_de_g4([(f"#c{n}", c) for n, c in enumerate(cuerpos)])[2]
 
     def test_commit_revisado_y_revisores(self):
         a, b = "a" * 40, "b" * 40
@@ -1464,6 +1468,10 @@ class TestRondasDeG4(unittest.TestCase):
     def test_el_ultimo_commit_del_mismo_revisor_manda(self):
         vistos, _ = self.rondas(f"Commit revisado: G4-1-A · {'a' * 40}", f"Commit revisado: G4-1-A · {'b' * 40}")
         self.assertEqual(vistos, {(1, "A"): "b" * 40})
+        # G4-1-B-03 del PR 4 de VIC-56: dos distintos del mismo revisor y ronda quedan anotados (`cambios` falla).
+        self.assertEqual(self.repetidos(f"Commit revisado: G4-1-A · {'a' * 40}", f"Commit revisado: G4-1-A · {'b' * 40}",
+                                        f"Commit revisado: G4-1-B · {'a' * 40}", f"Commit revisado: G4-1-B · {'a' * 40}"),
+                         {(1, "A")})
 
     def test_una_ronda_sin_hallazgos_sale_por_sus_metricas(self):
         _, revisores = self.rondas("Métricas G4: PR #3 · ronda 2 · confirmados 0 · descartados 0 · corregidos 0")
@@ -1678,17 +1686,19 @@ class TestTrasLaRonda(unittest.TestCase):
             self.escribir(ruta, contenido)
         self.git("commit", "-q", "-m", "docs: tras la ronda\n\nRefs: VIC-7")
 
-    def correr(self, nivel: str = "R1", visto: str | None = None, aprobado: bool = False):
+    def correr(self, nivel: str = "R1", visto: str | None = None, aprobado: bool = False, extra: list | None = None,
+               reviews: list | None = None):
         visto = visto or self.visto
         comentarios = self.repo / ".git" / "comentarios.json"
         comentarios.write_text(json.dumps([comentario(f"Commit revisado: G4-1-{l} · {visto}", n=i + 1)
-                                           for i, l in enumerate("AB")]), encoding="utf-8")
+                                           for i, l in enumerate("AB")] + (extra or [])), encoding="utf-8")
         cabeza = self.git("rev-parse", "HEAD")
-        reviews = self.repo / ".git" / "reviews.json"
-        reviews.write_text(json.dumps([review("APPROVED", cabeza)] if aprobado else []), encoding="utf-8")
+        ruta_reviews = self.repo / ".git" / "reviews.json"
+        ruta_reviews.write_text(json.dumps(reviews if reviews is not None else
+                                           [review("APPROVED", cabeza)] if aprobado else []), encoding="utf-8")
         cuerpo = (f"Fixes VIC-7\n\n## Qué comportamiento cubre\n\n- AC cubiertos: no aplica (prueba)\n\n"
                   f"## Nivel de riesgo\n\n- [x] {nivel}\n")
-        entorno = {**ENTORNO_GIT, "PR_BODY": cuerpo, "PR_COMENTARIOS": str(comentarios), "PR_REVIEWS": str(reviews),
+        entorno = {**ENTORNO_GIT, "PR_BODY": cuerpo, "PR_COMENTARIOS": str(comentarios), "PR_REVIEWS": str(ruta_reviews),
                    "PR_HEAD_SHA": cabeza}
         for var in ("GITHUB_STEP_SUMMARY", "PR_BRANCH", "PR_TITLE", "PR_AUTHOR"):
             entorno.pop(var, None)
@@ -1713,9 +1723,11 @@ class TestTrasLaRonda(unittest.TestCase):
     def test_documentacion_tras_la_ronda_pasa_en_r0_y_r1(self):
         self.tras_la_ronda(("docs/guia.md", "corregida\n"), ("README.md", "# y\n"), ("docs/guía-nueva.md", "ñ\n"),
                            ("docs/vieja.md", None))
-        r = self.correr()
-        self.assertEqual(r.returncode, 0, r.stdout)
-        self.assertIn("docs: tras la ronda", r.stdout)
+        for nivel in ("R1", "R0"):
+            with self.subTest(nivel=nivel):
+                r = self.correr(nivel=nivel)
+                self.assertEqual(r.returncode, 0, r.stdout)
+                self.assertIn("docs: tras la ronda", r.stdout)
 
     def test_codigo_tras_la_ronda_falla_en_r1(self):
         self.tras_la_ronda(("docs/guia.md", "corregida\n"), ("app.js", "tres\n"))
@@ -1724,6 +1736,31 @@ class TestTrasLaRonda(unittest.TestCase):
         self.assertRegla3(r, "app.js")
         self.assertNotIn("`docs/guia.md`", self.errores(r)[0])
         self.assertIn("PR R1 con cambios tras la última ronda de G4 (la 1)", r.stdout)
+
+    def test_la_aprobacion_de_la_persona_lo_desbloquea(self):
+        """Decisión de Víctor (2026-11-24): cuando no cabe otra ronda, su Approve sobre la cabeza deja entrar el cambio."""
+        self.tras_la_ronda(("app.js", "tres\n"))
+        for nivel in ("R1", "R0"):
+            with self.subTest(nivel=nivel):
+                r = self.correr(nivel=nivel, aprobado=True)
+                self.assertEqual(r.returncode, 0, r.stdout)
+                self.assertIn("### Tras la última ronda, aprobado por la persona", r.stdout)
+        # Aprobado un commit anterior: un push después le quita el valor.
+        aprobado_antes = self.git("rev-parse", "HEAD")
+        self.tras_la_ronda(("app.js", "cuatro\n"))
+        r = self.correr(reviews=[review("APPROVED", aprobado_antes)])
+        self.assertRegla3(r, "app.js")
+        # La review de otra cuenta no cuenta.
+        r = self.correr(reviews=[review("APPROVED", self.git("rev-parse", "HEAD"), login="victor-lg-bot", uid=1)])
+        self.assertRegla3(r, "app.js")
+
+    def test_dos_commits_revisados_del_mismo_revisor_fallan(self):
+        """G4-1-B-03: un segundo `Commit revisado` de la misma ronda y letra no mueve el punto de partida."""
+        self.tras_la_ronda(("app.js", "tres\n"))
+        cabeza = self.git("rev-parse", "HEAD")
+        r = self.correr(extra=[comentario(f"Commit revisado: G4-1-A · {cabeza}", n=9)])
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("**cambios:** `G4-1-A` tiene dos `Commit revisado` distintos en la ronda 1", r.stdout)
 
     def test_borrar_codigo_tras_la_ronda_falla(self):
         self.tras_la_ronda(("app.js", None))
@@ -1828,7 +1865,8 @@ class TestPuntaAPunta(unittest.TestCase):
         if g4 and (ruta.exists() or "PR_COMENTARIOS" not in pr):
             cabeza = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
                                     text=True, env=ENTORNO_GIT).stdout.strip()
-            previos = json.loads(ruta.read_text(encoding="utf-8")) if ruta.exists() else []
+            # El fichero propio se rehace en cada llamada: dos rondas 9 en cabezas distintas serían dos commits del mismo revisor.
+            previos = json.loads(ruta.read_text(encoding="utf-8")) if "PR_COMENTARIOS" in pr else []
             ronda = [comentario(f"Commit revisado: G4-9-{l} · {cabeza}", n=900 + i) for i, l in enumerate("AB")]
             ruta.write_text(json.dumps(previos + ronda), encoding="utf-8")
             entorno["PR_COMENTARIOS"] = str(ruta)
@@ -1957,10 +1995,11 @@ class TestPuntaAPunta(unittest.TestCase):
                         PR_COMENTARIOS=str(ruta), PR_HEAD_SHA="")
         # VIC-56, regla 3: en este R1, el ADR que cambia tras la ronda no es solo documentación.
         regla_3 = "**cambios:** PR R1 con cambios tras la última ronda de G4 (la 1) que no son solo documentación: `docs/adr/0002-x.md`"
+        errores = [f"- {regla_3}. Nadie los ha revisado y el PR se fusionaría solo (ADR-0009 §5). Lanza otra ronda sobre la "
+                   "cabeza (`sdd-review`); sin otra ronda solo entran ficheros `.md` de documentación, salvo que la persona "
+                   "apruebe la cabeza (`victor-lg`)."]
         self.assertEqual(r.returncode, 1, r.stdout)
-        self.assertEqual([l for l in r.stdout.splitlines() if l.startswith("- **")], [f"- {regla_3}. Nadie los ha revisado "
-                         "y el PR se fusionaría solo (ADR-0009 §5). Lanza otra ronda sobre la cabeza (`sdd-review`); sin otra "
-                         "ronda solo entran ficheros `.md` de documentación."])
+        self.assertEqual([l for l in r.stdout.splitlines() if l.startswith("- **")], errores)
         # Con la lista escrita a mano en la descripción, falla aunque la calculada esté bien (PR 2 de VIC-39).
         a_mano = subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo, capture_output=True, text=True,
                                 env={**ENTORNO_GIT, "PR_BODY": cuerpo + linea + "- **Cambios tras la última ronda:** ninguno\n",
@@ -1980,7 +2019,7 @@ class TestPuntaAPunta(unittest.TestCase):
         r = subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo,
                            capture_output=True, text=True, env=entorno)
         self.assertEqual(r.returncode, 1, r.stdout)
-        self.assertIn(regla_3, r.stdout)
+        self.assertEqual([l for l in r.stdout.splitlines() if l.startswith("- **")], errores)
         seccion = r.stdout.split("### Cambios tras la última ronda", 1)[1].split("###", 1)[0]
         self.assertEqual([l for l in seccion.splitlines() if l.startswith("- ")], [f"- `{cabeza[:7]}` adr: decide y"])
 

@@ -1253,8 +1253,8 @@ def check_respuestas(inf: Informe, cuerpo_pr: str, comentarios: list[dict], url_
             continue
         cuando = f"el {editado}" if isinstance(editado, str) and editado else "sin fechas en la API"
         inf.error("hallazgos", f"el comentario de G4 {c['html_url']} se editó después de publicarse ({cuando}). Una respuesta "
-                               "de G4 no se edita: publica otro comentario. Si la edición es legítima (por ejemplo, solo el SHA "
-                               "de «Commit revisado»), justifícala en «Revisión IA» con la línea "
+                               "de G4 no se edita: publica otro comentario. Si la edición es legítima (por ejemplo, una errata en "
+                               "el texto; nunca el SHA de «Commit revisado», que se repite en otra ronda), justifícala en «Revisión IA» con la línea "
                                "`Comentario editado: <enlace> · <motivo>`.")
 
 
@@ -1273,17 +1273,22 @@ RE_LISTA_A_MANO = re.compile(r"^\s*(?:>\s*)*(?:#{1,6}\s+)?(?:[-*+]\s+|\d+[.)]\s+
 RE_RONDA_METRICAS = re.compile(r"^Métricas G4: PR #\d+ · ronda ([1-9]\d*) ·")
 
 
-def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, str], str], dict[int, set[str]]]:
+def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, str], str], dict[int, set[str]],
+                                                               set[tuple[int, str]]]:
     """De los comentarios de CUENTAS_G4: el commit que vio cada revisor (ronda, letra), el último si
-    se repite, y los revisores que salen en cada ronda, por sus hallazgos o por su commit. Una ronda
-    sin hallazgos ni commit sale por su línea «Métricas G4», sin revisores."""
-    vistos, revisores = {}, {}
+    se repite, los revisores que salen en cada ronda, por sus hallazgos o por su commit, y los revisores
+    con dos commits distintos en la misma ronda (`check_cambios` falla por ellos). Una ronda sin hallazgos
+    ni commit sale por su línea «Métricas G4», sin revisores."""
+    vistos, revisores, repetidos = {}, {}, set()
     for _, cuerpo in comentarios:
         lineas, _ = lineas_visibles(cuerpo)
         for linea, plegada in lineas:
             m = None if plegada else RE_COMMIT_REVISADO.match(linea)
             if m:
-                vistos[(int(m.group(2)), m.group(3))] = m.group(4)
+                clave = (int(m.group(2)), m.group(3))
+                if vistos.get(clave, m.group(4)) != m.group(4):
+                    repetidos.add(clave)
+                vistos[clave] = m.group(4)
                 revisores.setdefault(int(m.group(2)), set()).add(m.group(3))
             elif (r := RE_RONDA_METRICAS.match(linea)):
                 revisores.setdefault(int(r.group(1)), set())
@@ -1291,7 +1296,7 @@ def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, st
             elif (h := RE_RESPUESTA_PLEGADA.match(linea)):
                 ronda, letra = h.group(1).split("-")[1:3]
                 revisores.setdefault(int(ronda), set()).add(letra)
-    return vistos, revisores
+    return vistos, revisores, repetidos
 
 
 def texto_del_resumen(texto: str) -> str:
@@ -1301,15 +1306,16 @@ def texto_del_resumen(texto: str) -> str:
 
 
 def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[str, str]],
-                  cuerpo_pr: str = "", nivel: str = "R1") -> None:
-    """nivel: el efectivo de `check_riesgo`. Por omisión R1, que es el que falla: nunca se salta la regla 3."""
+                  cuerpo_pr: str = "", nivel: str = "R1", aprobado: bool = False) -> None:
+    """nivel: el efectivo de `check_riesgo`. Por omisión R1, que es el que falla: nunca se salta la regla 3.
+    aprobado: si la última review decisiva de la persona aprueba la cabeza (`aprobacion_de_la_persona`)."""
     # La lista no se escribe a mano (VIC-39): lo que se ve en la descripción, también lo plegado.
     lineas, _ = lineas_visibles(cuerpo_pr)
     if any(RE_LISTA_A_MANO.match(linea) for linea, _ in lineas):
         inf.error("cambios", "la descripción del PR trae una lista de «Cambios tras la última ronda» escrita a mano. Quítala: "
                              "esa lista la calcula la CI desde el commit que vio cada revisor y está en el resumen de `checks-sdd`, "
                              "sección «Cambios tras la última ronda».")
-    vistos, revisores = rondas_de_g4(comentarios)
+    vistos, revisores, repetidos = rondas_de_g4(comentarios)
     # Sin ninguna ronda (R0, Dependabot, antes de G4) no hay nada que calcular.
     if not revisores:
         return
@@ -1321,7 +1327,17 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
         inf.error("cambios", f"falta el commit que vio {quien}: sin él no se pueden calcular los cambios tras la última ronda. "
                              f"Añade al comentario de cada revisor, fuera de `<details>`, la línea `Commit revisado: G4-{ronda}-<letra> · <sha de 40>` (`sdd-review`).")
         return
+    # Un revisor, un commit por ronda (G4-1-B-03 del PR 4): otro `Commit revisado` posterior movería el punto desde
+    # el que se cuenta lo que entra tras la ronda, sin otra ronda.
+    dobles = sorted(l for l in letras if (ronda, l) in repetidos)
+    if dobles:
+        inf.error("cambios", f"{', '.join(f'`G4-{ronda}-{l}`' for l in dobles)} tiene dos `Commit revisado` distintos en la ronda {ronda}. "
+                             "Cada revisor deja uno por ronda, el de la cabeza que vio: lo que entra después se revisa en otra "
+                             "ronda (`sdd-review`), no cambiando el commit.")
+        return
     nuevos: dict[str, str] = {}
+    # Lo que cambia desde lo que vio cada revisor hasta la cabeza, con su modo en la cabeza (unión de todos).
+    modos: dict[str, str | None] = {}
     for letra in letras:
         sha = vistos[(ronda, letra)]
         # Sin el commit en la historia de la cabeza (un rebase o un push forzado) no hay diff fiable.
@@ -1330,12 +1346,14 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
                                  "¿se reescribió la rama? Repite la ronda sobre la cabeza actual (`sdd-review`).")
             return
         salida = git("log", "--topo-order", "--reverse", "--format=%H%x1f%s", cabeza, f"^{sha}", f"^{base}")
-        if salida is None:
-            inf.error("cambios", f"no he podido leer con Git los commits desde `{sha[:12]}`.")
+        desde = modos_desde(sha, cabeza)
+        if salida is None or desde is None:
+            inf.error("cambios", f"no he podido leer con Git los commits o los ficheros desde `{sha[:12]}`.")
             return
         for linea in salida.splitlines():
             h, _, titulo = linea.partition("\x1f")
             nuevos.setdefault(h, titulo)
+        modos.update(desde)
     vio = ", ".join(f"{l} en `{vistos[(ronda, l)][:7]}`" for l in letras)
     lineas = [f"Ronda {ronda}; cada revisor vio: {vio}.", ""]
     if not nuevos:
@@ -1346,13 +1364,12 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
         orden = (git("rev-list", "--topo-order", "--reverse", cabeza, f"^{base}") or "").split()
         lineas += [f"- `{h[:7]}` {texto_del_resumen(nuevos[h])}" for h in orden if h in nuevos]
         del_pr = set(rutas("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or [])
-        ficheros = sorted({f for l in letras
-                           for f in rutas("diff", "--name-only", "--no-renames", vistos[(ronda, l)], cabeza) or []} & del_pr)
+        ficheros = sorted(set(modos) & del_pr)
         if ficheros:
             lineas += ["", "Ficheros: " + ", ".join(texto_del_resumen(f) for f in ficheros)]
     inf.secciones.append("### Cambios tras la última ronda\n\n" + "\n".join(lineas))
     if nuevos and nivel != "R2":
-        check_solo_documentacion_tras_la_ronda(inf, nivel, ronda, [vistos[(ronda, l)] for l in letras], cabeza)
+        check_solo_documentacion_tras_la_ronda(inf, nivel, ronda, modos, aprobado)
 
 
 def modos_desde(visto: str, cabeza: str) -> dict[str, str | None] | None:
@@ -1370,24 +1387,25 @@ def modos_desde(visto: str, cabeza: str) -> dict[str, str | None] | None:
     return modos
 
 
-def check_solo_documentacion_tras_la_ronda(inf: Informe, nivel: str, ronda: int, vistos: list[str], cabeza: str) -> None:
+def check_solo_documentacion_tras_la_ronda(inf: Informe, nivel: str, ronda: int, modos: dict[str, str | None],
+                                           aprobado: bool) -> None:
     """VIC-56, regla 3 (ADR-0009 §5): en R0 y R1, lo que entra tras la última ronda de G4 sin otra ronda solo
-    puede ser documentación (`es_documentacion`, el mismo criterio que el R0 sin G4). Desde el commit que vio
-    cada revisor, así que un merge de `main` también cuenta. Un R2 no pasa por aquí: lo frena la aprobación de
-    la persona sobre la cabeza (check `aprobacion`), que ve esta lista."""
-    fuera: set[str] = set()
-    for visto in vistos:
-        modos = modos_desde(visto, cabeza)
-        if modos is None:
-            inf.error("cambios", f"no he podido leer con Git los ficheros que cambian desde `{visto[:12]}`: sin ellos no sé si "
-                                 "lo que entró tras la última ronda es solo documentación.")
-            return
-        fuera |= {f for f, modo in modos.items() if not es_documentacion(f, modo)}
-    if fuera:
-        lista = ", ".join(f"`{texto_del_resumen(f)}`" for f in sorted(fuera)[:10]) + (" y más" if len(fuera) > 10 else "")
-        inf.error("cambios", f"PR {nivel} con cambios tras la última ronda de G4 (la {ronda}) que no son solo documentación: {lista}. "
-                             "Nadie los ha revisado y el PR se fusionaría solo (ADR-0009 §5). Lanza otra ronda sobre la cabeza "
-                             "(`sdd-review`); sin otra ronda solo entran ficheros `.md` de documentación.")
+    puede ser documentación (`es_documentacion`, el mismo criterio que el R0 sin G4). Se cuenta desde el commit
+    que vio cada revisor, así que un merge de `main` también cuenta. Si no lo es, hace falta otra ronda o, cuando
+    no cabe (tras la ronda 3, o en una aclaración de una sola ronda), la aprobación de la persona sobre la cabeza
+    (`aprobado`; decisión de Víctor del 2026-11-24). Un R2 no pasa por aquí: siempre la necesita (check `aprobacion`)."""
+    fuera = sorted(f for f, modo in modos.items() if not es_documentacion(f, modo))
+    if not fuera:
+        return
+    lista = ", ".join(f"`{texto_del_resumen(f)}`" for f in fuera[:10]) + (" y más" if len(fuera) > 10 else "")
+    if aprobado:
+        inf.secciones.append(f"### Tras la última ronda, aprobado por la persona\n\n- PR {nivel}: lo que no es solo documentación "
+                             f"({lista}) entra con la aprobación de la persona sobre la cabeza.")
+        return
+    inf.error("cambios", f"PR {nivel} con cambios tras la última ronda de G4 (la {ronda}) que no son solo documentación: {lista}. "
+                         "Nadie los ha revisado y el PR se fusionaría solo (ADR-0009 §5). Lanza otra ronda sobre la cabeza "
+                         "(`sdd-review`); sin otra ronda solo entran ficheros `.md` de documentación, salvo que la persona "
+                         f"apruebe la cabeza ({', '.join(f'`{p}`' for p in PERSONAS.values())}).")
 
 
 # --- PR sin G4 (VIC-56) ---------------------------------------------------
@@ -1425,7 +1443,7 @@ def check_g4(inf: Informe, nivel: str, cambiados: list[str], versionados: dict[s
         return
     con_spec_o_adr = any(es_spec(f) or es_adr(f) for f in cambiados)
     necesarios = REVISORES_R2_SPEC_ADR if nivel == "R2" or con_spec_o_adr else REVISORES_OTROS
-    vistos, revisores = rondas_de_g4(comentarios)
+    vistos, revisores, _ = rondas_de_g4(comentarios)
     ronda = max(revisores, default=0)
     # Solo cuenta el revisor que dejó el commit que vio: sin él, `cambios` ya falla.
     letras = sorted(l for l in revisores.get(ronda, ()) if (ronda, l) in vistos)
@@ -1581,13 +1599,15 @@ def main() -> int:
     check_hallazgos(inf, cuerpo_pr, comentarios or [])
     if leidos is not None:
         check_respuestas(inf, cuerpo_pr, leidos, url_del_pr())
-    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr, nivel)
-    check_g4(inf, nivel, cambiados, versionados, comentarios or [], dependabot)
     ruta_reviews = os.environ.get("PR_REVIEWS")
+    reviews = leer_paginas(ruta_reviews) if ruta_reviews else None
+    cabeza = os.environ.get("PR_HEAD_SHA") or (git("rev-parse", "HEAD") or "").strip()
+    aprobado = reviews is not None and bool(cabeza) and aprobacion_de_la_persona(reviews, cabeza)[0]
+    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr, nivel, aprobado)
+    check_g4(inf, nivel, cambiados, versionados, comentarios or [], dependabot)
     if os.environ.get("PR_HEAD_SHA"):
         check_cabeza(inf, os.environ["PR_HEAD_SHA"])
-    cabeza = os.environ.get("PR_HEAD_SHA") or (git("rev-parse", "HEAD") or "").strip()
-    check_aprobacion(inf, nivel, leer_paginas(ruta_reviews) if ruta_reviews else None, cabeza)
+    check_aprobacion(inf, nivel, reviews, cabeza)
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]
