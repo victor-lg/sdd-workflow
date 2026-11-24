@@ -1,0 +1,24 @@
+# Rutas sensibles del proyecto (workflow SDD + IA v1.1, VIC-61).
+#
+# Todo PR que toque una de estas rutas es R2, además de las que ya marca el
+# workflow (dependencias, .github/, .claude/, AGENTS.md, CLAUDE.md, la
+# configuración de lefthook y de los escáneres, .gitattributes, migraciones;
+# lista canónica en la línea base, §6). Es la forma de decir que un componente
+# es delicado (autenticación, pagos, el funcionamiento sin conexión…).
+#
+# Formato que lee .github/sdd/checks.py:
+#   - una ruta por línea, relativa a la raíz del repo y sin comillas;
+#   - `src/pagos/` (acaba en /) es la carpeta entera; `*` también cruza
+#     carpetas, como en `src/auth/*.ts`;
+#   - las líneas vacías y las que empiezan por # no cuentan;
+#   - una línea con espacios, comillas invertidas o barras invertidas, que
+#     empiece por / o ./, o con un tramo .., es inválida y hace fallar el
+#     check `riesgo`: nunca se ignora en silencio.
+#
+# La CI usa la versión de `main`, no la del PR. Cambiar este fichero es R2
+# (está bajo .github/) y lo aprueba la persona (CODEOWNERS): el agente no
+# puede editar la lista que lo protege.
+#
+# Ejemplo:
+# src/pagos/
+# src/auth/*.ts

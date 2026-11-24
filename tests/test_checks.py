@@ -1789,5 +1789,190 @@ class TestPuntaAPunta(unittest.TestCase):
         self.assertNotIn("PR de Dependabot", r.stdout)
 
 
+
+README_CON_RUTAS = "# x\n\n## Rutas sensibles\n\n- `app/sw.js`\n- `app/datos/`\n\n## Otra\n\n- `no/cuenta.js`\n"
+FICHERO_RUTAS = "# Comentario\n\nsrc/pagos/\n  tests/e2e/sin-conexion.spec.js  \nsrc/auth/*.ts\n"
+
+
+class TestRutasSensibles(unittest.TestCase):
+    """VIC-61: las rutas sensibles del proyecto en `.github/sdd/rutas-sensibles.txt`, con el README
+    como respaldo mientras se migra (la unión: nunca menos rutas que antes). Un fichero que no se lee o
+    con una línea inválida hace fallar el check `riesgo`."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.repo = pathlib.Path(self.tmp.name)
+        self.git("init", "-q", "-b", "main")
+
+    def git(self, *args):
+        subprocess.run(["git", "-C", str(self.repo), *args], check=True, env=ENTORNO_GIT, capture_output=True)
+
+    def escribir(self, ruta: str, contenido: str | bytes):
+        f = self.repo / ruta
+        f.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(contenido, bytes):
+            f.write_bytes(contenido)
+        else:
+            f.write_text(contenido, encoding="utf-8")
+        self.git("add", ruta)
+
+    def main_con(self, readme: str = "# x\n", rutas: str | bytes | None = None):
+        """Prepara `main` con ese README y, si se da, el fichero de rutas; deja la rama del PR."""
+        self.escribir("README.md", readme)
+        if rutas is not None:
+            self.escribir(checks.RUTAS_SENSIBLES, rutas)
+        self.git("commit", "-q", "-m", "chore: inicio")
+        self.git("switch", "-q", "-c", "docs/vic-7-x")
+
+    def correr(self, *tocados: str):
+        for ruta in tocados or ("docs/nota.md",):
+            if not (self.repo / ruta).exists():
+                self.escribir(ruta, "x\n")
+        self.git("commit", "-q", "--allow-empty", "-m", "docs: toca\n\nRefs: VIC-7")
+        entorno = {**ENTORNO_GIT, "PR_BODY": "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n"}
+        for var in ("GITHUB_STEP_SUMMARY", "PR_HEAD_SHA", "PR_REVIEWS", "PR_COMENTARIOS", "PR_BRANCH", "PR_TITLE"):
+            entorno.pop(var, None)
+        return subprocess.run([sys.executable, str(RUTA), "--base", "main"], cwd=self.repo,
+                              capture_output=True, text=True, env=entorno)
+
+    def assertNivel(self, r, nivel: str):
+        self.assertNotIn("Traceback", r.stderr)
+        self.assertIn(f"Nivel mínimo según lo tocado: **{nivel}**", r.stdout)
+
+    def test_solo_readme_sigue_como_antes(self):
+        self.main_con(README_CON_RUTAS)
+        for tocado, nivel in (("app/sw.js", "R2"), ("app/datos/a.json", "R2"), ("no/cuenta.js", "R0"),
+                              ("src/pagos/a.js", "R0")):
+            with self.subTest(tocado=tocado):
+                self.git("switch", "-q", "-C", "docs/vic-7-x", "main")
+                r = self.correr(tocado)
+                self.assertNivel(r, nivel)
+                if nivel == "R2":
+                    self.assertIn(f"`{tocado}` (ruta sensible del proyecto) → R2", r.stdout)
+
+    def test_solo_fichero(self):
+        self.main_con(rutas=FICHERO_RUTAS)
+        for tocado, nivel in (("src/pagos/cobro.js", "R2"), ("tests/e2e/sin-conexion.spec.js", "R2"),
+                              ("src/auth/a/b.ts", "R2"), ("src/auth/a.js", "R0"), ("app/sw.js", "R0")):
+            with self.subTest(tocado=tocado):
+                self.git("switch", "-q", "-C", "docs/vic-7-x", "main")
+                self.assertNivel(self.correr(tocado), nivel)
+
+    def test_los_dos_suman(self):
+        """Durante la migración cuenta la unión: ninguna ruta del README se pierde por crear el fichero."""
+        self.main_con(README_CON_RUTAS, FICHERO_RUTAS)
+        for tocado in ("app/sw.js", "app/datos/a.json", "src/pagos/cobro.js", "src/auth/x.ts"):
+            with self.subTest(tocado=tocado):
+                self.git("switch", "-q", "-C", "docs/vic-7-x", "main")
+                self.assertNivel(self.correr(tocado), "R2")
+
+    def test_fichero_valido_sin_tocar_rutas_pasa(self):
+        self.main_con(README_CON_RUTAS, FICHERO_RUTAS)
+        r = self.correr()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNivel(r, "R0")
+
+    def test_fichero_invalido_en_main_falla(self):
+        casos = {"lista del README": "- `app/sw.js`\n", "comillas": "`app/sw.js`\n",
+                 "espacio": "app/mi fichero.js\n", "absoluta": "/app/sw.js\n", "punto": "./app/sw.js\n",
+                 "subir": "app/../sw.js\n", "barra invertida": "app\\sw.js\n"}
+        for n, (motivo, texto) in enumerate(casos.items()):
+            with self.subTest(motivo=motivo):
+                self.git("switch", "-q", "--orphan", f"base-{n}")
+                self.git("rm", "-rq", "--cached", "--ignore-unmatch", ".")
+                self.escribir("README.md", README_CON_RUTAS)
+                self.escribir(checks.RUTAS_SENSIBLES, "src/pagos/\n" + texto)
+                self.git("commit", "-q", "-m", "chore: inicio")
+                self.git("switch", "-q", "-C", "docs/vic-7-x")
+                self.escribir("docs/nota.md", motivo + "\n")
+                self.git("commit", "-q", "-m", "docs: toca\n\nRefs: VIC-7")
+                entorno = {**ENTORNO_GIT, "PR_BODY": "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n"}
+                entorno.pop("GITHUB_STEP_SUMMARY", None)
+                r = subprocess.run([sys.executable, str(RUTA), "--base", f"base-{n}"], cwd=self.repo,
+                                   capture_output=True, text=True, env=entorno)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn("**riesgo:** `.github/sdd/rutas-sensibles.txt` de `main` tiene líneas inválidas (línea 2",
+                              r.stdout)
+                self.assertNotIn("Traceback", r.stderr)
+
+    def test_fichero_ilegible_en_main_falla(self):
+        for n, (motivo, contenido) in enumerate((("no es UTF-8", b"src/pagos/\n\xff\xfe\n"), ("enlace", None))):
+            with self.subTest(motivo=motivo):
+                self.git("switch", "-q", "--orphan", f"base-{n}")
+                self.git("rm", "-rq", "--cached", "--ignore-unmatch", ".")
+                self.escribir("README.md", "# x\n")
+                destino = self.repo / checks.RUTAS_SENSIBLES
+                destino.parent.mkdir(parents=True, exist_ok=True)
+                if destino.exists() or destino.is_symlink():
+                    destino.unlink()
+                if contenido is None:
+                    destino.symlink_to("../../README.md")
+                    self.git("add", checks.RUTAS_SENSIBLES)
+                else:
+                    self.escribir(checks.RUTAS_SENSIBLES, contenido)
+                self.git("commit", "-q", "-m", "chore: inicio")
+                self.git("switch", "-q", "-C", "docs/vic-7-x")
+                self.escribir("docs/nota.md", motivo + "\n")
+                self.git("commit", "-q", "-m", "docs: toca\n\nRefs: VIC-7")
+                entorno = {**ENTORNO_GIT, "PR_BODY": "Fixes VIC-7\n\n## Nivel de riesgo\n\n- [x] R1 normal\n"}
+                entorno.pop("GITHUB_STEP_SUMMARY", None)
+                r = subprocess.run([sys.executable, str(RUTA), "--base", f"base-{n}"], cwd=self.repo,
+                                   capture_output=True, text=True, env=entorno)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn("**riesgo:** no he podido leer `.github/sdd/rutas-sensibles.txt` de `main`", r.stdout)
+                self.assertNotIn("Traceback", r.stderr)
+
+    def test_tocar_el_fichero_es_r2(self):
+        """Cambiar la lista que protege es R2 (está bajo `.github/`), aunque el PR la deje válida."""
+        self.main_con(rutas=FICHERO_RUTAS)
+        self.escribir(checks.RUTAS_SENSIBLES, FICHERO_RUTAS + "src/nueva/\n")
+        r = self.correr()
+        self.assertNivel(r, "R2")
+        self.assertIn("cambia `.github/sdd/rutas-sensibles.txt`, la lista de rutas sensibles → R2", r.stdout)
+        self.assertNotIn("**riesgo:** el PR deja", r.stdout)
+        # También en check_riesgo solo, crearlo o borrarlo: la lista de ficheros basta.
+        inf = riesgo([checks.RUTAS_SENSIBLES])
+        self.assertIn("exige R2", inf.errores[0])
+        self.assertEqual(riesgo([checks.RUTAS_SENSIBLES], "R2").errores, [])
+
+    def test_un_pr_que_deja_el_fichero_invalido_falla(self):
+        """Si se fusionara, el fichero inválido en `main` haría fallar todos los PR siguientes."""
+        self.main_con(rutas=FICHERO_RUTAS)
+        self.escribir(checks.RUTAS_SENSIBLES, FICHERO_RUTAS + "- `src/nueva/`\n")
+        r = self.correr()
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("**riesgo:** el PR deja `.github/sdd/rutas-sensibles.txt` inválido (línea 6", r.stdout)
+
+    def test_cambiar_la_lista_del_readme_sigue_siendo_r2(self):
+        self.main_con(README_CON_RUTAS, FICHERO_RUTAS)
+        self.escribir("README.md", README_CON_RUTAS.replace("- `app/datos/`\n", ""))
+        r = self.correr()
+        self.assertNivel(r, "R2")
+        self.assertIn("cambia la lista de rutas sensibles del README → R2", r.stdout)
+
+    def test_formato(self):
+        rutas, errores = checks.parse_rutas_sensibles(FICHERO_RUTAS + "\n   # sangrado\n")
+        self.assertEqual(rutas, ["src/pagos/*", "tests/e2e/sin-conexion.spec.js", "src/auth/*.ts"])
+        self.assertEqual(errores, [])
+        self.assertEqual(checks.parse_rutas_sensibles(""), ([], []))
+
+    def test_check_riesgo_suma_las_dos_listas(self):
+        cuerpo = "## Nivel de riesgo\n\n- [x] R1\n"
+        readme = "## Rutas sensibles\n\n- `app/sw.js`\n"
+        for cambiados, nivel in ((["app/sw.js"], "R2"), (["src/pagos/a.js"], "R2"), (["src/a.js"], "R1")):
+            with self.subTest(cambiados=cambiados):
+                self.assertEqual(checks.check_riesgo(checks.Informe(), cuerpo, cambiados, readme, readme, {}, {},
+                                                     None, None, ["src/pagos/*"]), nivel)
+
+    def test_plantilla_valida_y_sin_rutas_en_el_readme(self):
+        texto = (PLANTILLA / ".github" / "sdd" / "rutas-sensibles.txt").read_text(encoding="utf-8")
+        self.assertEqual(checks.parse_rutas_sensibles(texto), ([], []))
+        self.assertEqual(checks.rutas_sensibles((PLANTILLA / "README.md").read_text(encoding="utf-8")), [])
+        codeowners = (PLANTILLA / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
+        self.assertIn("\n/.github/ ", codeowners)
+        self.assertNotIn("/README.md", codeowners)
+
+
 if __name__ == "__main__":
     unittest.main()

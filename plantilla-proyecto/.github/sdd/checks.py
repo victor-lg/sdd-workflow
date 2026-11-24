@@ -12,7 +12,9 @@ Comprueba:
                 y algún test lo cita como SPEC-XXX-NNN/AC-NN. Publica la matriz.
   riesgo        que el nivel marcado en el PR no sea menor que el que exigen
                 las rutas tocadas, las specs que implementa y los ADR. La CI
-                solo puede subir el nivel, nunca bajarlo.
+                solo puede subir el nivel, nunca bajarlo. Las rutas sensibles del
+                proyecto salen de RUTAS_SENSIBLES y de la sección del README (VIC-61);
+                falla si el fichero no se puede leer o tiene una línea inválida.
   tests         lista los tests existentes que el PR modifica o borra (no bloquea).
   convenciones  M11: rama `<tipo>/vic-<N>-<descripcion>`, título del PR en formato
                 de commit y descripción que empieza por `Fixes`, `Part of` o `Refs`
@@ -83,6 +85,13 @@ ESTADOS = {"borrador", "en-revision", "aprobada", "sustituida"}
 RIESGOS_SPEC = {"R1", "R2"}
 CAMPOS_OBLIGATORIOS = ["id", "titulo", "estado", "version", "riesgo"]
 
+# Rutas sensibles del proyecto (VIC-61): bajo `.github/`, así que tocarlo ya es R2 y está en
+# CODEOWNERS. Formato en `parse_rutas_sensibles`. Mientras un proyecto migra, también cuenta la
+# sección «Rutas sensibles» del README: se toma la unión, nunca menos rutas que antes.
+RUTAS_SENSIBLES = ".github/sdd/rutas-sensibles.txt"
+# Una ruta relativa a la raíz, sin espacios, comillas invertidas ni barras invertidas.
+RE_RUTA_SENSIBLE = re.compile(r"[^\s`\\]+")
+
 # Disparadores de R2 del workflow (linea-base §6). `*` también cruza carpetas.
 R2_RUTAS = [".github/*", ".claude/*", "AGENTS.md", "CLAUDE.md",
             "*/migrations/*", "migrations/*"]
@@ -109,7 +118,7 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 # Regresión visual (M27): las capturas de referencia las aprueba la persona, y la
                 # configuración de Playwright puede ponerles tolerancias o escribir las que faltan.
                 # Las carpetas por defecto de Playwright; si un proyecto cambia la suya con
-                # `snapshotPathTemplate`, la añade a las rutas sensibles de su README. Las
+                # `snapshotPathTemplate`, la añade a RUTAS_SENSIBLES. Las
                 # tolerancias escritas en un fichero de test no se ven aquí (límite aceptado).
                 "*-snapshots/*", "__screenshots__/*", "*/__screenshots__/*",
                 "playwright.config.*", "*/playwright.config.*",
@@ -416,10 +425,76 @@ def check_mezcla(inf: Informe, cambiados: list[str]) -> None:
 # --- Riesgo ---------------------------------------------------------------
 
 def rutas_sensibles(readme: str | None) -> list[str]:
+    """Las de la sección «Rutas sensibles» del README (el formato anterior a VIC-61)."""
     if not readme:
         return []
     patrones = re.findall(r"^\s*-\s+`([^`]+)`", seccion(readme, "Rutas sensibles"), re.M)
     return [p + "*" if p.endswith("/") else p for p in patrones]
+
+
+def parse_rutas_sensibles(texto: str) -> tuple[list[str], list[str]]:
+    """Formato de RUTAS_SENSIBLES: una ruta por línea, relativa a la raíz del repo y sin comillas, como
+    `app/sw.js`, `src/pagos/` (la carpeta entera) o `src/auth/*.ts` (`*` también cruza carpetas). Se
+    ignoran las líneas vacías y las que empiezan por `#`. Una línea con espacios, comillas invertidas
+    o barras invertidas, que empiece por `/` o `./`, o con un tramo `..`, es inválida: no coincidiría
+    con ninguna ruta y la lista tendría un hueco sin que nadie lo viera. Devuelve (rutas, errores)."""
+    rutas, errores = [], []
+    for n, linea in enumerate(texto.splitlines(), 1):
+        ruta = linea.strip()
+        if not ruta or ruta.startswith("#"):
+            continue
+        if (not RE_RUTA_SENSIBLE.fullmatch(ruta) or ruta.startswith(("/", "./"))
+                or ".." in ruta.split("/")):
+            errores.append(f"línea {n}, `{linea.strip()[:80]}`")
+            continue
+        rutas.append(ruta + "*" if ruta.endswith("/") else ruta)
+    return rutas, errores
+
+
+def leer_rutas_sensibles(base: str) -> tuple[bool, str | None]:
+    """(existe, texto) de RUTAS_SENSIBLES en `base`. Si existe pero no es un fichero normal o no se lee
+    como UTF-8, el texto es None: quien llama falla, nunca sigue con menos rutas."""
+    entrada = git("ls-tree", base, "--", RUTAS_SENSIBLES)
+    if entrada is None:
+        return True, None
+    if not entrada.strip():
+        return False, None
+    if not entrada.startswith(("100644 blob ", "100755 blob ")):
+        return True, None
+    r = subprocess.run(["git", "show", f"{base}:{RUTAS_SENSIBLES}"], capture_output=True)
+    if r.returncode != 0:
+        return True, None
+    try:
+        return True, r.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        return True, None
+
+
+def cargar_rutas_sensibles(inf: Informe, base: str, cambiados: list[str],
+                           versionados: dict[str, str] | None, raiz: Path) -> list[str]:
+    """Las rutas de RUTAS_SENSIBLES en `base` (lo que cuenta para el nivel). Si el PR cambia el fichero,
+    comprueba también su versión: un fichero inválido en `main` haría fallar todos los PR siguientes."""
+    existe, texto = leer_rutas_sensibles(base)
+    rutas: list[str] = []
+    if existe and texto is None:
+        inf.error("riesgo", f"no he podido leer `{RUTAS_SENSIBLES}` de `main` como un fichero de texto UTF-8: "
+                            "sin él no sé qué rutas del proyecto son sensibles.")
+    elif existe:
+        rutas, errores = parse_rutas_sensibles(texto)
+        if errores:
+            inf.error("riesgo", f"`{RUTAS_SENSIBLES}` de `main` tiene líneas inválidas ({'; '.join(errores)}): "
+                                "una ruta por línea, relativa a la raíz y sin comillas.")
+    if RUTAS_SENSIBLES in cambiados and (raiz / RUTAS_SENSIBLES).exists():
+        modo = (versionados or {}).get(RUTAS_SENSIBLES)
+        try:
+            nuevo = (raiz / RUTAS_SENSIBLES).read_bytes().decode("utf-8") if modo in ("100644", "100755") else None
+        except (OSError, UnicodeDecodeError):
+            nuevo = None
+        errores = ["no es un fichero normal de texto UTF-8"] if nuevo is None else parse_rutas_sensibles(nuevo)[1]
+        if errores:
+            inf.error("riesgo", f"el PR deja `{RUTAS_SENSIBLES}` inválido ({'; '.join(errores)}): "
+                                "una ruta por línea, relativa a la raíz y sin comillas.")
+    return rutas
 
 
 def es_manifiesto(ruta: str) -> bool:
@@ -437,9 +512,10 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
                  readme_base: str | None, readme_head: str | None,
                  specs_head_ficheros: dict[str, str],
                  specs_base_ficheros: dict[str, str], por_defecto: str | None = None,
-                 submodulos: list[str] | None = None) -> str:
+                 submodulos: list[str] | None = None, rutas_fichero: list[str] | None = None) -> str:
     """por_defecto: el nivel que se toma si el PR no marca ninguno (solo los de Dependabot).
     submodulos: los gitlinks (modo 160000) que el PR añade o cambia.
+    rutas_fichero: las rutas de RUTAS_SENSIBLES en `main`; se suman a las del README de `main`.
     Devuelve el nivel efectivo: el mayor entre el marcado y el mínimo según lo tocado."""
     marcados = RE_RIESGO_MARCADO.findall(seccion(cuerpo_pr, "Nivel de riesgo"))
     if not marcados and por_defecto:
@@ -458,7 +534,7 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         if ORDEN[nivel] > ORDEN[minimo]:
             minimo = nivel
 
-    propias = rutas_sensibles(readme_base)
+    propias = rutas_sensibles(readme_base) + (rutas_fichero or [])
     for f in cambiados:
         if any(fnmatch.fnmatchcase(f, p) for p in R2_RUTAS):
             subir("R2", f"`{f}` (configuración del agente, CI o migraciones)")
@@ -467,11 +543,13 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         elif es_manifiesto(f):
             subir("R2", f"`{f}` (dependencias)")
         elif any(fnmatch.fnmatchcase(f, p) for p in propias):
-            subir("R2", f"`{f}` (ruta sensible del README)")
+            subir("R2", f"`{f}` (ruta sensible del proyecto)")
     for f in submodulos or []:
         subir("R2", f"`{f}` (submódulo: su código no lo ve ningún escáner)")
-    if "README.md" in cambiados and rutas_sensibles(readme_head) != propias:
-        subir("R2", "cambia la lista de rutas sensibles")
+    if "README.md" in cambiados and rutas_sensibles(readme_head) != rutas_sensibles(readme_base):
+        subir("R2", "cambia la lista de rutas sensibles del README")
+    if RUTAS_SENSIBLES in cambiados:
+        subir("R2", f"cambia `{RUTAS_SENSIBLES}`, la lista de rutas sensibles")
     for f in cambiados:
         if es_spec(f):
             # El mayor entre main y el PR: un PR de spec no puede bajar su propio riesgo.
@@ -1320,8 +1398,10 @@ def main() -> int:
                        specs_head, citas_en_tests(raiz), dependabot)
     versionados = ficheros_versionados()
     submodulos = [f for f in cambiados if (versionados or {}).get(f) == "160000"]
+    rutas_fichero = cargar_rutas_sensibles(inf, args.base, cambiados, versionados, raiz)
     nivel = check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
-                         specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None, submodulos)
+                         specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None, submodulos,
+                         rutas_fichero)
     check_tests(inf, args.base)
 
     rama, titulo = os.environ.get("PR_BRANCH", ""), os.environ.get("PR_TITLE", "")
