@@ -1363,7 +1363,11 @@ class TestSinG4(unittest.TestCase):
               ("docs/borrado.md", None), ("docs/specs/_plantilla.md", "100644"))
         no = (("app.js", "100644"), ("docs/x.txt", "100644"), ("docs/x.MD", "100644"),
               ("docs/enlace.md", "120000"), ("vendor/sub.md", "160000"), ("script.md", "100755"),
-              ("docs/specs/SPEC-CALC-001-x.md", "100644"), ("docs/adr/0002-x.md", "100644"))
+              ("docs/specs/SPEC-CALC-001-x.md", "100644"), ("docs/adr/0002-x.md", "100644"),
+              # G4-1-B-01: instrucciones de agentes en cualquier carpeta y lo de carpetas con punto.
+              ("src/CLAUDE.md", "100644"), ("docs/AGENTS.md", "100644"), ("CLAUDE.local.md", "100644"),
+              ("app/Claude.md", "100644"), ("src/.claude/commands/x.md", "100644"), (".cursor/rules/x.md", "100644"),
+              ("docs/.github/x.md", "100644"))
         for ruta, modo in si:
             with self.subTest(ruta=ruta):
                 self.assertTrue(checks.es_documentacion(ruta, modo))
@@ -1381,7 +1385,8 @@ class TestSinG4(unittest.TestCase):
 
     def test_r0_que_no_es_solo_documentacion_cuenta_como_r1(self):
         casos = {"código": (["docs/guia.md", "app.js"], None), "enlace": (["docs/x.md"], {"docs/x.md": "120000"}),
-                 "submódulo": (["sub.md"], {"sub.md": "160000"}), "imagen": (["docs/captura.png"], None)}
+                 "submódulo": (["sub.md"], {"sub.md": "160000"}), "imagen": (["docs/captura.png"], None),
+                 "CLAUDE.md anidado": (["src/CLAUDE.md"], None)}
         for motivo, (cambiados, modos) in casos.items():
             with self.subTest(motivo=motivo):
                 inf = self.g4("R0", cambiados, versionados=modos)

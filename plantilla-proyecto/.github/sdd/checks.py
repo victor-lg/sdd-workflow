@@ -1349,14 +1349,20 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
 # solo documentación. Si no puede comprobarlo, el R0 cuenta como R1 y lleva G4 (aclaración de la decisión 1).
 # Revisores por PR, como en la tabla de `sdd-review` (no la cambia: la comprueba).
 REVISORES_R2_SPEC_ADR, REVISORES_OTROS = 2, 1
+# Instrucciones para agentes en cualquier carpeta (G4-1-B-01): Claude Code lee el CLAUDE.md de la carpeta en la
+# que trabaja, y otros agentes, los AGENTS.md anidados. R2_RUTAS solo ve los de la raíz.
+INSTRUCCIONES_AGENTE = {"agents.md", "claude.md", "claude.local.md"}
 
 
 def es_documentacion(ruta: str, modo: str | None) -> bool:
     """Solo documentación: un `.md` que es un fichero normal (modo 100644) o que el PR borra (sin modo), sin
-    enlaces ni submódulos, y que no es una spec ni un ADR (suben a R1 y van a CODEOWNERS). El mismo criterio
-    vale para el R0 sin G4 y para lo que entra tras la última ronda. Lo que además es R2 (AGENTS.md, CLAUDE.md,
-    lo de `.github/` y `.claude/`, las rutas sensibles) lo decide el nivel, no esta función."""
-    return ruta.endswith(".md") and modo in (None, "100644") and not es_spec(ruta) and not es_adr(ruta)
+    enlaces ni submódulos. No lo son una spec ni un ADR (suben a R1 y van a CODEOWNERS), las instrucciones de un
+    agente en cualquier carpeta (INSTRUCCIONES_AGENTE) ni nada dentro de una carpeta que empieza por punto
+    (`.claude/`, `.github/`, `.cursor/`…, también anidadas): es configuración. El mismo criterio vale para el R0
+    sin G4 y para lo que entra tras la última ronda. Las rutas sensibles del proyecto las decide el nivel."""
+    partes = ruta.split("/")
+    return (ruta.endswith(".md") and modo in (None, "100644") and not es_spec(ruta) and not es_adr(ruta)
+            and partes[-1].lower() not in INSTRUCCIONES_AGENTE and not any(c.startswith(".") for c in partes[:-1]))
 
 
 def check_g4(inf: Informe, nivel: str, cambiados: list[str], versionados: dict[str, str] | None,
@@ -1370,15 +1376,15 @@ def check_g4(inf: Informe, nivel: str, cambiados: list[str], versionados: dict[s
     if nivel == "R0" and not no_doc:
         inf.secciones.append("### G4\n\n- R0 comprobado: el PR solo cambia documentación; no necesita G4.")
         return
-    necesarios = (REVISORES_R2_SPEC_ADR if nivel == "R2" or any(es_spec(f) or es_adr(f) for f in cambiados)
-                  else REVISORES_OTROS)
+    con_spec_o_adr = any(es_spec(f) or es_adr(f) for f in cambiados)
+    necesarios = REVISORES_R2_SPEC_ADR if nivel == "R2" or con_spec_o_adr else REVISORES_OTROS
     vistos, revisores = rondas_de_g4(comentarios)
     ronda = max(revisores, default=0)
     # Solo cuenta el revisor que dejó el commit que vio: sin él, `cambios` ya falla.
     letras = sorted(l for l in revisores.get(ronda, ()) if (ronda, l) in vistos)
-    como = nivel
+    # El texto del nivel en los mensajes: un R0 que llega aquí no se ha podido comprobar y cuenta como R1.
+    como = "R0 sin comprobar, cuenta como R1" if nivel == "R0" else nivel
     if nivel == "R0":
-        como = "R0 sin comprobar, cuenta como R1"
         detalle = ", ".join(f"`{texto_del_resumen(f)}`" for f in no_doc[:5]) + (" y más" if len(no_doc) > 5 else "")
         motivo = ("no he podido leer los modos de los ficheros con Git" if versionados is None
                   else f"no es solo documentación ({detalle})")
@@ -1391,7 +1397,7 @@ def check_g4(inf: Informe, nivel: str, cambiados: list[str], versionados: dict[s
                         f"Un PR {como} no se fusiona sin revisión (ADR-0009 §5); lánzala con `sdd-review`.")
     elif len(letras) < necesarios:
         inf.error("g4", f"la última ronda de G4 (la {ronda}) tiene {len(letras)} revisor(es) con `Commit revisado` y este PR "
-                        f"({como}{', con spec o ADR' if necesarios == REVISORES_R2_SPEC_ADR and nivel != 'R2' else ''}) "
+                        f"({como}{', con spec o ADR' if con_spec_o_adr else ''}) "
                         f"necesita {necesarios} (tabla de `sdd-review`).")
 
 
