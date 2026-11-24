@@ -68,8 +68,8 @@ import json
 import os
 import re
 import subprocess
-import unicodedata
 import sys
+import unicodedata
 from pathlib import Path
 
 # --- Convenciones ---------------------------------------------------------
@@ -440,9 +440,11 @@ def parse_rutas_sensibles(texto: str) -> tuple[list[str], list[str]]:
     ignoran las líneas vacías y las que empiezan por `#`. Una línea con espacios, caracteres de control
     o invisibles, comillas invertidas o barras invertidas, que empiece por `/` o `./`, o con un tramo
     `..`, es inválida: no coincidiría con ninguna ruta y la lista tendría un hueco sin que nadie lo
-    viera. Un BOM al principio del fichero no cuenta. Devuelve (rutas, errores)."""
+    viera. Un BOM al principio del fichero no cuenta. Solo `*` es comodín: `[`, `]` y `?` son literales,
+    como en `app/[id]/route.ts` (G4-2-B-01). Se parte solo por `\n`: `splitlines()` partiría también
+    por caracteres de control, que así llegan a la línea y la invalidan. Devuelve (patrones, errores)."""
     rutas, errores = [], []
-    for n, linea in enumerate(texto.removeprefix("\ufeff").splitlines(), 1):
+    for n, linea in enumerate(texto.removeprefix("\ufeff").split("\n"), 1):
         ruta = linea.strip()
         if not ruta or ruta.startswith("#"):
             continue
@@ -450,8 +452,13 @@ def parse_rutas_sensibles(texto: str) -> tuple[list[str], list[str]]:
                 or ".." in ruta.split("/") or any(unicodedata.category(c)[0] in "CZ" for c in ruta)):
             errores.append(f"línea {n}, `{ascii(ruta)[1:-1][:80]}`")
             continue
-        rutas.append(ruta + "*" if ruta.endswith("/") else ruta)
+        rutas.append(literal(ruta) + ("*" if ruta.endswith("/") else ""))
     return rutas, errores
+
+
+def literal(ruta: str) -> str:
+    """El patrón de fnmatch en el que `[`, `]` y `?` son literales y solo `*` es comodín."""
+    return re.sub(r"([\[\]?])", r"[\1]", ruta)
 
 
 def leer_rutas_sensibles(base: str) -> tuple[bool, str | None]:
@@ -481,16 +488,20 @@ def cargar_rutas_sensibles(inf: Informe, base: str, cambiados: list[str],
                            versionados: dict[str, str] | None, raiz: Path) -> list[str]:
     """Las rutas de RUTAS_SENSIBLES en `base` (lo que cuenta para el nivel). Si el PR cambia el fichero,
     comprueba también su versión: un fichero inválido en `main` haría fallar todos los PR siguientes.
-    Por eso, si el de `main` es inválido y el PR lo deja válido, solo avisa: ese PR es R2 y es el que lo
-    arregla. El PR que lo borra también es R2, y lo avisa: después solo contará el README."""
+    Por eso, si el de `main` es inválido y el PR lo deja válido o lo borra, solo avisa: ese PR es R2 (lo
+    aprueba la persona) y es el que lo arregla. Borrarlo lo avisa siempre: después solo cuenta el README."""
     existe, texto = leer_rutas_sensibles(base)
     rutas = parse_rutas_sensibles(texto)[0] if texto is not None else []
     errores_base = errores_de_rutas(texto) if existe else []
     if RUTAS_SENSIBLES in cambiados:
-        modo = (versionados or {}).get(RUTAS_SENSIBLES)
-        if modo is None:
-            inf.aviso("riesgo", f"⚠️ el PR borra `{RUTAS_SENSIBLES}`: después solo contarán las rutas sensibles del README.")
-            errores_pr = []
+        modo = None if versionados is None else versionados.get(RUTAS_SENSIBLES)
+        if versionados is None:
+            errores_pr = ["no he podido listar los ficheros del PR con Git"]
+        elif modo is None:
+            inf.aviso("riesgo", f"⚠️ el PR borra `{RUTAS_SENSIBLES}`"
+                                + (" (el de `main` es inválido)" if errores_base else "")
+                                + ": después solo contarán las rutas sensibles del README.")
+            errores_pr, errores_base = [], []
         else:
             try:
                 nuevo = (raiz / RUTAS_SENSIBLES).read_bytes().decode("utf-8") if modo in ("100644", "100755") else None
@@ -545,7 +556,9 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         if ORDEN[nivel] > ORDEN[minimo]:
             minimo = nivel
 
-    propias = rutas_sensibles(readme_base) + (rutas_fichero or [])
+    del_readme = rutas_sensibles(readme_base)
+    # Las del README conservan su lectura (`[` y `?` comodines) y suman la literal, como las del fichero.
+    propias = del_readme + [literal(p) for p in del_readme if literal(p) != p] + (rutas_fichero or [])
     # Una ruta sin `/` final que nombra una carpeta también la cubre entera: nunca menos rutas.
     propias += [p + "/*" for p in propias if not p.endswith("*")]
     for f in cambiados:
@@ -1411,10 +1424,10 @@ def main() -> int:
                        specs_head, citas_en_tests(raiz), dependabot)
     versionados = ficheros_versionados()
     submodulos = [f for f in cambiados if (versionados or {}).get(f) == "160000"]
-    rutas_fichero = cargar_rutas_sensibles(inf, args.base, cambiados, versionados, raiz)
+    rutas_de_main = cargar_rutas_sensibles(inf, args.base, cambiados, versionados, raiz)
     nivel = check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
                          specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None, submodulos,
-                         rutas_fichero)
+                         rutas_de_main)
     check_tests(inf, args.base)
 
     rama, titulo = os.environ.get("PR_BRANCH", ""), os.environ.get("PR_TITLE", "")

@@ -10,6 +10,8 @@
 #   - una ruta por línea, relativa a la raíz del repo y sin comillas;
 #   - `src/pagos/` es la carpeta entera (`src/pagos`, sin /, también);
 #     `*` también cruza carpetas, como en `src/auth/*.ts`;
+#   - `*` es el único comodín: `[`, `]` y `?` se leen tal cual, como en
+#     `app/[id]/route.ts`;
 #   - las líneas vacías y las que empiezan por # no cuentan;
 #   - una línea con espacios, caracteres de control o invisibles, comillas
 #     invertidas o barras invertidas, que empiece por / o ./, o con un

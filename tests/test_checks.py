@@ -1791,7 +1791,8 @@ class TestPuntaAPunta(unittest.TestCase):
 
 README_CON_RUTAS = "# x\n\n## Rutas sensibles\n\n- `app/sw.js`\n- `app/datos/`\n\n## Otra\n\n- `no/cuenta.js`\n"
 FICHERO_RUTAS = "# Comentario\n\nsrc/pagos/\n  tests/e2e/sin-conexion.spec.js  \nsrc/auth/*.ts\n"
-ENLACE = object()  # en `main_con`: el fichero de rutas como enlace simbólico
+ENLACE = object()  # el fichero de rutas como enlace simbólico al README, que existe (G4-2-B-03)
+ENLACE_ROTO = object()  # el fichero de rutas como enlace simbólico a un destino que no existe
 
 
 class TestRutasSensibles(unittest.TestCase):
@@ -1814,8 +1815,8 @@ class TestRutasSensibles(unittest.TestCase):
         f.parent.mkdir(parents=True, exist_ok=True)
         if f.exists() or f.is_symlink():
             f.unlink()
-        if contenido is ENLACE:
-            f.symlink_to("no-existe.txt")
+        if contenido is ENLACE or contenido is ENLACE_ROTO:
+            f.symlink_to("../../README.md" if contenido is ENLACE else "no-existe.txt")
         elif isinstance(contenido, bytes):
             f.write_bytes(contenido)
         else:
@@ -1887,8 +1888,8 @@ class TestRutasSensibles(unittest.TestCase):
 
     def test_bom_al_principio_no_anula_la_primera_ruta(self):
         """G4-1-B-01: un BOM al principio del fichero no cuenta; un carácter invisible en una ruta, sí."""
-        self.assertNiveles(self.main_con(rutas="﻿src/pagos/\n"), (("src/pagos/cobro.js", "R2"),))
-        r = self.correr(self.main_con(rutas="src/pagos/\nsrc/​auth/\n"))
+        self.assertNiveles(self.main_con(rutas="\ufeffsrc/pagos/\n"), (("src/pagos/cobro.js", "R2"),))
+        r = self.correr(self.main_con(rutas="src/pagos/\nsrc/\u200bauth/\n"))
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("de `main` es inválido (línea 2, `src/\\u200bauth/`)", r.stdout)
 
@@ -1900,7 +1901,8 @@ class TestRutasSensibles(unittest.TestCase):
     def test_fichero_invalido_en_main_falla(self):
         casos = {"lista del README": "- `app/sw.js`", "comillas": "`app/sw.js`", "espacio": "app/mi fichero.js",
                  "absoluta": "/app/sw.js", "punto": "./app/sw.js", "subir": "app/../sw.js",
-                 "barra invertida": "app\\sw.js", "tabulador": "app/sw\t.js", "invisible": "app/​sw.js"}
+                 "barra invertida": "app\\sw.js", "tabulador": "app/sw\t.js", "invisible": "app/\u200bsw.js",
+                 "salto de página": "app/sw\x0c.js", "separador de línea": "app/sw\u2028.js"}
         for motivo, linea in casos.items():
             with self.subTest(motivo=motivo):
                 r = self.correr(self.main_con(README_CON_RUTAS, f"src/pagos/\n{linea}\n"))
@@ -1933,7 +1935,7 @@ class TestRutasSensibles(unittest.TestCase):
         """Si se fusionara, el fichero inválido en `main` haría fallar todos los PR siguientes. G4-1-B-02:
         también un enlace roto, que `exists()` no ve."""
         for motivo, contenido, error in (("línea", FICHERO_RUTAS + "- `src/nueva/`\n", "(línea 6"),
-                                         ("enlace roto", ENLACE, "(no es un fichero normal de texto UTF-8)")):
+                                         ("enlace roto", ENLACE_ROTO, "(no es un fichero normal de texto UTF-8)")):
             with self.subTest(motivo=motivo):
                 base = self.main_con(rutas=FICHERO_RUTAS)
                 self.pr(base)
@@ -1956,12 +1958,40 @@ class TestRutasSensibles(unittest.TestCase):
         self.assertIn("sin él no sé", self.correr(base).stdout)
 
     def test_borrar_el_fichero_es_r2_y_avisa(self):
-        base = self.main_con(README_CON_RUTAS, FICHERO_RUTAS)
-        self.pr(base)
-        self.git("rm", "-q", checks.RUTAS_SENSIBLES)
-        r = self.correr(base, nueva=False)
-        self.assertNivel(r, "R2")
-        self.assertIn("el PR borra `.github/sdd/rutas-sensibles.txt`", r.stdout)
+        """G4-2-A-02 y G4-2-B-02: borrar uno inválido de `main` no se presenta como corregirlo."""
+        for rutas, inciso in ((FICHERO_RUTAS, ":"), ("- `src/pagos/`\n", " (el de `main` es inválido):")):
+            with self.subTest(inciso=inciso):
+                base = self.main_con(README_CON_RUTAS, rutas)
+                self.pr(base)
+                self.git("rm", "-q", checks.RUTAS_SENSIBLES)
+                r = self.correr(base, nivel="R2", nueva=False)
+                self.assertNivel(r, "R2")
+                self.assertIn(f"el PR borra `.github/sdd/rutas-sensibles.txt`{inciso} después solo contarán", r.stdout)
+                self.assertNotIn("lo corrige", r.stdout)
+                self.assertNotIn("**riesgo:** `", r.stdout)
+
+    def test_corchetes_e_interrogacion_son_literales(self):
+        """G4-2-B-01: `[id]` es una carpeta de Next.js, no un comodín de un carácter. Las del README
+        conservan además su lectura anterior: nunca menos rutas."""
+        base = self.main_con("## Rutas sensibles\n\n- `web/[slug]/page.ts`\n- `lib/*.[jt]s`\n",
+                             "app/api/pagos/[id]/route.ts\napp/[lang]/\nsrc/a?.js\n")
+        self.assertNiveles(base, (
+            ("app/api/pagos/[id]/route.ts", "R2"), ("app/api/pagos/i/route.ts", "R0"), ("app/[lang]/x.ts", "R2"),
+            ("src/a?.js", "R2"), ("src/ab.js", "R0"), ("web/[slug]/page.ts", "R2"), ("web/s/page.ts", "R2"),
+            ("lib/x.ts", "R2")))
+
+    def test_sin_lista_de_ficheros_del_pr_falla(self):
+        """G4-2-A-01: si Git no lista los ficheros, un PR que toca el de rutas no pasa por borrado."""
+        base = self.main_con(rutas="- `src/pagos/`\n")
+        anterior = os.getcwd()
+        os.chdir(self.repo)
+        try:
+            inf = checks.Informe()
+            checks.cargar_rutas_sensibles(inf, base, [checks.RUTAS_SENSIBLES], None, self.repo)
+        finally:
+            os.chdir(anterior)
+        self.assertTrue(any("no he podido listar los ficheros del PR" in e for e in inf.errores), inf.errores)
+        self.assertFalse(inf.avisos)
 
     def test_cambiar_la_lista_del_readme_sigue_siendo_r2(self):
         base = self.main_con(README_CON_RUTAS, FICHERO_RUTAS)
@@ -1977,6 +2007,7 @@ class TestRutasSensibles(unittest.TestCase):
         self.assertEqual(errores, [])
         self.assertEqual(checks.parse_rutas_sensibles(""), ([], []))
         self.assertEqual(checks.parse_rutas_sensibles("app/configuración.js\n"), (["app/configuración.js"], []))
+        self.assertEqual(checks.parse_rutas_sensibles("src/pagos/\r\napp/sw.js\r\n"), (["src/pagos/*", "app/sw.js"], []))
 
     def test_check_riesgo_suma_las_dos_listas(self):
         cuerpo = "## Nivel de riesgo\n\n- [x] R1\n"
