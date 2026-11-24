@@ -36,7 +36,8 @@ Comprueba:
                 de G4 se editó sin la línea `Comentario editado: <enlace> · <motivo>`.
   cambios       M8 (VIC-39): publica los commits que entraron tras la última ronda de G4, desde el
                 que vio cada revisor (`Commit revisado:` en su comentario), y falla si falta o si la
-                descripción trae esa lista escrita a mano.
+                descripción trae esa lista escrita a mano. VIC-56 (ADR-0009 §5): en R0 y R1, falla también si
+                lo que entró tras la ronda no es solo documentación (`es_documentacion`); R2 lo frena `aprobacion`.
   aprobacion    VIC-56 (ADR-0009 §3.4): un PR R2 (el mayor entre el nivel marcado y el que exige lo
                 tocado) falla salvo que la última review de PERSONAS sea una aprobación del commit de
                 la cabeza. Las reviews llegan en PR_REVIEWS (`gh api --paginate …/pulls/N/reviews`).
@@ -1300,7 +1301,8 @@ def texto_del_resumen(texto: str) -> str:
 
 
 def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[str, str]],
-                  cuerpo_pr: str = "") -> None:
+                  cuerpo_pr: str = "", nivel: str = "R1") -> None:
+    """nivel: el efectivo de `check_riesgo`. Por omisión R1, que es el que falla: nunca se salta la regla 3."""
     # La lista no se escribe a mano (VIC-39): lo que se ve en la descripción, también lo plegado.
     lineas, _ = lineas_visibles(cuerpo_pr)
     if any(RE_LISTA_A_MANO.match(linea) for linea, _ in lineas):
@@ -1349,6 +1351,43 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
         if ficheros:
             lineas += ["", "Ficheros: " + ", ".join(texto_del_resumen(f) for f in ficheros)]
     inf.secciones.append("### Cambios tras la última ronda\n\n" + "\n".join(lineas))
+    if nuevos and nivel != "R2":
+        check_solo_documentacion_tras_la_ronda(inf, nivel, ronda, [vistos[(ronda, l)] for l in letras], cabeza)
+
+
+def modos_desde(visto: str, cabeza: str) -> dict[str, str | None] | None:
+    """Las rutas que cambian de `visto` a `cabeza`, con su modo en `cabeza` (None si se borran). Con
+    `--raw -z`, cada entrada es `:<modo viejo> <modo nuevo> <sha> <sha> <estado>` y la ruta."""
+    campos = rutas("diff", "--raw", "--no-renames", visto, cabeza)
+    if campos is None or len(campos) % 2:
+        return None
+    modos = {}
+    for meta, ruta in zip(campos[::2], campos[1::2]):
+        partes = meta.split(" ")
+        if len(partes) < 2:
+            return None
+        modos[ruta] = None if partes[1] == "000000" else partes[1]
+    return modos
+
+
+def check_solo_documentacion_tras_la_ronda(inf: Informe, nivel: str, ronda: int, vistos: list[str], cabeza: str) -> None:
+    """VIC-56, regla 3 (ADR-0009 §5): en R0 y R1, lo que entra tras la última ronda de G4 sin otra ronda solo
+    puede ser documentación (`es_documentacion`, el mismo criterio que el R0 sin G4). Desde el commit que vio
+    cada revisor, así que un merge de `main` también cuenta. Un R2 no pasa por aquí: lo frena la aprobación de
+    la persona sobre la cabeza (check `aprobacion`), que ve esta lista."""
+    fuera: set[str] = set()
+    for visto in vistos:
+        modos = modos_desde(visto, cabeza)
+        if modos is None:
+            inf.error("cambios", f"no he podido leer con Git los ficheros que cambian desde `{visto[:12]}`: sin ellos no sé si "
+                                 "lo que entró tras la última ronda es solo documentación.")
+            return
+        fuera |= {f for f, modo in modos.items() if not es_documentacion(f, modo)}
+    if fuera:
+        lista = ", ".join(f"`{texto_del_resumen(f)}`" for f in sorted(fuera)[:10]) + (" y más" if len(fuera) > 10 else "")
+        inf.error("cambios", f"PR {nivel} con cambios tras la última ronda de G4 (la {ronda}) que no son solo documentación: {lista}. "
+                             "Nadie los ha revisado y el PR se fusionaría solo (ADR-0009 §5). Lanza otra ronda sobre la cabeza "
+                             "(`sdd-review`); sin otra ronda solo entran ficheros `.md` de documentación.")
 
 
 # --- PR sin G4 (VIC-56) ---------------------------------------------------
@@ -1542,7 +1581,7 @@ def main() -> int:
     check_hallazgos(inf, cuerpo_pr, comentarios or [])
     if leidos is not None:
         check_respuestas(inf, cuerpo_pr, leidos, url_del_pr())
-    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr)
+    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr, nivel)
     check_g4(inf, nivel, cambiados, versionados, comentarios or [], dependabot)
     ruta_reviews = os.environ.get("PR_REVIEWS")
     if os.environ.get("PR_HEAD_SHA"):
