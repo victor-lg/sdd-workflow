@@ -242,3 +242,21 @@ Antes del bloque 4 `plantilla-proyecto/AGENTS.md` había vuelto a crecer con los
 | "Si crees que es un falso positivo, díselo a la persona", en `seguridad` y en gitleaks | Una vez, en la entradilla de "Lo que ya comprueba una máquina" |
 | `calidad`: las prohibiciones de Stryker, knip y jscpd, por herramienta | Juntas, con jscpd en cualquier lenguaje, como `calidad.yml`: no bajar el umbral ni la severidad, ni excluir código (`mutate`, `ignore`, comentarios). `__STRYKER_ACTIVE_MUTANT__` sigue aparte: no lo comprueba ningún control |
 | Entradilla: "los límites los imponen la configuración, los hooks del plugin, la CI y GitHub" | Sale. Es descripción, no una instrucción: la CI y los hooks los nombra "Lo que ya comprueba una máquina"; la aprobación y el merge humanos, "Lo que no te corresponde" |
+
+## `AGENTS.md` y el ADR-0009 (VIC-60)
+
+El agente puede pedir el auto-merge (ADR-0009 §3.1) y la CI tiene checks nuevos de revisión (VIC-56, VIC-57 y VIC-61). Para que quepan sin pasar del tope de ~1548 tokens (`CHANGELOG.md`, decisiones del plan), se acorta lo que ya dice el control que lo comprueba.
+
+| Qué sale o cambia | Dónde queda |
+| --- | --- |
+| REG-38, "La aprobación es el merge humano" y "Fusionar" | "Lo que no te corresponde": aprueba la persona en GitHub; el agente solo pide el auto-merge en un R0 o R1 que no toca rutas de CODEOWNERS, con la CI y G4 en verde y sin checks pendientes, y nunca en R2. Las condiciones y la orden, en `sdd-review` (sección 4) |
+| Nuevo: no descartar reviews de la persona ni cancelar ejecuciones de la CI | "Lo que no te corresponde" y `sdd-review` (sección 4). Decisión de Víctor del 2026-11-24 (calculadora, `docs/reglas-de-main/README.md` §3), con la excepción del plan de prueba. El descarte lo detecta `cambios-pedidos`; la cancelación no la detecta ningún check |
+| `checks-sdd`: `g4`, `aprobacion`, `cambios-pedidos` y `cabeza` | Añadidos por nombre, con `hallazgos` y `cambios` en el grupo de la revisión. `hallazgos` ya falla con `pregunta a la persona` (VIC-56), y `cambios`, con lo que no es documentación tras la última ronda |
+| `riesgo`: la lista de configuración que es R2 | Sale: el mínimo lo calcula `riesgo` y su informe da el motivo de cada fichero, como ya pasó con las capturas en la segunda poda. Entra dónde están las rutas sensibles del proyecto (`.github/sdd/rutas-sensibles.txt`, VIC-61) |
+| `convenciones`: "en la primera línea de la descripción" | "Al empezar la descripción": el detalle lo da el mensaje del check |
+| REG-42: "Usa su ID en la rama, en el pie de los commits y en el PR" | Sale de la línea de la issue: lo comprueban `convenciones` (rama y PR) y `commits` (pie), y "Commits" lo dice |
+| "Commits": "el hook `commit-msg` de `lefthook.json`" | "El hook `commit-msg`": la línea de lefthook lo sitúa |
+| Hooks de Git: "Si te para el formato, repite el commit con el mensaje corregido" | Sale: lo dice la entradilla ("su mensaje dice qué hacer") |
+| Hooks del plugin: la lista de formas de saltar los hooks de Git | Más corta, en una enumeración; la completa está en `guarda-saltos.py` y `plugin-sdd/README.md` |
+
+Contexto fijo, a ~4 caracteres por token y sin comentarios HTML: `AGENTS.md` pasa de ~1494 a ~1516 tokens.

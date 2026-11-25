@@ -82,4 +82,4 @@ Toma la primera opción que funcione del todo:
 - Eliminar o debilitar tests, ni modificar AC, para que la CI pase.
 - Tocar `.github/workflows/`, ajustes de seguridad o secretos.
 - Mezclar en el mismo PR cambios de spec y de código: la CI lo rechaza.
-- Fusionar o empujar a `main`.
+- Empujar a `main` o fusionar. El auto-merge, solo en las condiciones de `sdd-review` (sección 4).
