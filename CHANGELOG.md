@@ -4,6 +4,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **`AGENTS.md` de la plantilla: los ADR del workflow y la excepción del plan de prueba (VIC-60, corrección).** Decisión de Víctor del 2026-11-25.
+  - Las citas a ADR del workflow dicen «del workflow» (ADR-0007 en «Commits», ADR-0009 en «Fusionar»), para no confundirlos con los ADR del proyecto.
+  - Descartar una review de la persona o cancelar la CI vale solo con un plan de prueba en un PR que la persona fusiona, y solo en los PR desechables que el plan nombra (antes: «un plan de prueba que ella apruebe en GitHub, en PR desechables»).
+  - Para no pasar del tope, sale «Cambiar `lefthook.json`, `.gitleaks.toml`, `.gitleaksignore` o `.gitattributes` pide permiso»: lo pregunta `guarda-saltos.py`. Dónde queda cada cosa, en `docs/inventario-reglas.md`. ~1547 → ~1538 tokens (tope ~1548).
+  - **Pendiente:** `sdd-review` (sección 4) aún admite como acto de la persona su *Approve* además del merge del PR del plan.
+
 - **Los límites del check de respuestas de G4, documentados (VIC-47, PR 2). Plugin `sdd` 1.20.0.**
   - **`docs/herramientas.md`,** sección nueva: el límite aceptado (borrar y quitar el enlace, o borrar y publicar otro retocado; ADR-0009), que el verde puede no estar al día (borrar o editar un comentario no relanza `checks-sdd`; lo cubre `ready_for_review`) y que ocultar un comentario cambia `updated_at` y cuenta como edición, que queda como comportamiento aceptado. Con el resultado de la prueba en la calculadora (calculadora-discos#82).
   - **`sdd-review`:** las causas nuevas por las que falla `hallazgos` (respuesta borrada, editada u ocultada), que una respuesta de G4 no se borra, edita ni oculta, y la línea `Comentario editado: <enlace> · <motivo>` para justificar una edición.

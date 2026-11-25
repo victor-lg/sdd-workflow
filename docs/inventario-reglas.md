@@ -260,3 +260,13 @@ El agente puede pedir el auto-merge (ADR-0009 §3.1) y la CI tiene checks nuevos
 | Hooks del plugin: la lista de formas de saltar los hooks de Git | Más corta, en una enumeración; la completa está en `guarda-saltos.py` y `plugin-sdd/README.md` |
 
 Contexto fijo, a ~4 caracteres por token y sin comentarios HTML: `AGENTS.md` pasa de ~1494 a ~1536 tokens.
+
+Corrección posterior (VIC-60, decisión de Víctor del 2026-11-25), con el mismo tope:
+
+| Qué sale o cambia | Dónde queda |
+| --- | --- |
+| Las citas a ADR del workflow: «ADR-0007» en «Commits» y «el ruleset del ADR-0009» en «Fusionar» | Dicen «del workflow», para no confundirlos con los ADR del proyecto (`docs/adr/`) |
+| La excepción para descartar reviews o cancelar la CI: «un plan de prueba que ella apruebe en GitHub, en PR desechables» | Solo con un plan de prueba en un PR que la persona fusiona, y solo en los PR desechables que el plan nombra |
+| Hooks del plugin: «Cambiar `lefthook.json`, `.gitleaks.toml`, `.gitleaksignore` o `.gitattributes` pide permiso» | Sale: es la pregunta de `guarda-saltos.py`, que ya la hace y explica en su mensaje; la línea sigue nombrando los hooks del plugin |
+
+`AGENTS.md` pasa de ~1547 a ~1538 tokens.
