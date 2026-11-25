@@ -129,6 +129,8 @@ Si el PR tiene aclaraciones (paso 3.1), pásalas antes a la spec: con `sdd-spec`
 
 Cuando no quede nada que deba corregirse y la CI esté en verde, comprueba que el título sigue `docs/convenciones.md` del workflow (Conventional Commits, alcance como zona y no como ID) y que la "Guía para el revisor humano" está completa, y quita el estado de borrador con `gh pr ready N`. En el repo del workflow, si el PR toca `plugin-sdd/skills/`, `plugin-sdd/agents/` o `plugin-sdd/evals/`, hace falta además el resultado de sus evaluaciones anotado en el PR, sobre su último commit (`docs/convenciones.md`, §5.1): si no está, deja la orden de §5.1 en la descripción, díselo a la persona y no quites el borrador. El hook comprueba antes que todos los checks del último commit estén en verde, sin ninguno cancelado (M5), y si no lo están lo bloquea: no lo quites por otra vía.
 
+**Si lo único en rojo es la aprobación de la persona** (`aprobacion` en un R2, o `cambios` a la espera de que apruebe la cabeza, como tras el commit de `aprobada` de una spec), no puedes quitar el borrador: díselo en el PR, con el resto en verde. Ella lo marca como listo, lo aprueba y lo fusiona.
+
 **Después de quitar el borrador**, espera a la CI completa y fíjate en los checks de la revisión: `g4`, `hallazgos`, `cambios`, `aprobacion`, `cambios-pedidos` y `cabeza` (sus mensajes dicen qué falta). Luego, una de dos (ADR-0009):
 
 - **Pides el auto-merge** (`gh pr merge N --auto --squash`) solo si se cumple todo:

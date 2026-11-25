@@ -26,7 +26,7 @@ Un cambio R0 (errata, documentación, restaurar dependencias) no necesita spec: 
 
 Propón R0, R1 o R2 con una línea de motivo. La CI recalcula el mínimo y falla si marcas menos. La lista de disparadores es la de la línea base, §6 ("Disparadores que fuerzan R2"). En resumen:
 
-- R2 si toca dependencias, `.github/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, migraciones o las rutas sensibles del proyecto, que están en `.github/sdd/rutas-sensibles.txt` (no en el `README.md`);
+- R2 si toca dependencias, `.github/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, migraciones o las rutas sensibles del proyecto, que están en `.github/sdd/rutas-sensibles.txt` (mientras el proyecto migra, `checks.py` suma también la sección «Rutas sensibles» del `README.md`);
 - un PR de código hereda el `riesgo` de la spec que implementa;
 - un ADR es como mínimo R1.
 

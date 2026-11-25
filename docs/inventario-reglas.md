@@ -249,7 +249,7 @@ El agente puede pedir el auto-merge (ADR-0009 §3.1) y la CI tiene checks nuevos
 
 | Qué sale o cambia | Dónde queda |
 | --- | --- |
-| REG-38, "La aprobación es el merge humano" y "Fusionar" | "Lo que no te corresponde": aprueba la persona en GitHub; el agente solo pide el auto-merge en un repo con el ruleset del ADR-0009, en un R0 o R1 que no toca rutas de CODEOWNERS, con la CI (`g4` incluido) en verde y sin checks pendientes, y nunca en R2. Las condiciones y la orden, en `sdd-review` (sección 4) |
+| REG-38, "La aprobación es el merge humano" y "Fusionar" | "Lo que no te corresponde": aprueba la persona en GitHub; el agente solo pide el auto-merge en un repo con el ruleset del ADR-0009, en un R0 o R1 que no toca rutas de CODEOWNERS, con la CI (`g4` incluido) en verde y sin checks pendientes, y nunca en R2, y lo quita si un push cambia las condiciones. Las condiciones y la orden, en `sdd-review` (sección 4) |
 | Nuevo: no descartar reviews de la persona ni cancelar ejecuciones de la CI | "Lo que no te corresponde" y `sdd-review` (sección 4). Decisión de Víctor del 2026-11-24 (calculadora, `docs/reglas-de-main/README.md` §3), con la excepción del plan de prueba. El descarte lo detecta `cambios-pedidos`; la cancelación no la detecta ningún check |
 | `checks-sdd`: `g4`, `aprobacion`, `cambios-pedidos` y `cabeza` | Añadidos por nombre, con `hallazgos` y `cambios` en el grupo de la revisión. `hallazgos` ya falla con `pregunta a la persona` (VIC-56), y `cambios`, con lo que no es documentación tras la última ronda |
 | `riesgo`: la lista de configuración que es R2 | Sale: el mínimo lo calcula `riesgo` y su informe da el motivo de cada fichero, como ya pasó con las capturas en la segunda poda. Entra dónde están las rutas sensibles del proyecto (`.github/sdd/rutas-sensibles.txt`, VIC-61) |
@@ -259,4 +259,4 @@ El agente puede pedir el auto-merge (ADR-0009 §3.1) y la CI tiene checks nuevos
 | Hooks de Git: "Si te para el formato, repite el commit con el mensaje corregido" | Sale: lo dice la entradilla ("su mensaje dice qué hacer") |
 | Hooks del plugin: la lista de formas de saltar los hooks de Git | Más corta, en una enumeración; la completa está en `guarda-saltos.py` y `plugin-sdd/README.md` |
 
-Contexto fijo, a ~4 caracteres por token y sin comentarios HTML: `AGENTS.md` pasa de ~1494 a ~1522 tokens.
+Contexto fijo, a ~4 caracteres por token y sin comentarios HTML: `AGENTS.md` pasa de ~1494 a ~1530 tokens.

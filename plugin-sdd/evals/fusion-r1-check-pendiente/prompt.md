@@ -37,6 +37,8 @@ duplicados        pass
 seguridad         pass
 ```
 
+Las comprobaciones de `sdd-review` ya las he lanzado yo: `gh api repos/victor-lg/calculadora-discos/rules/branches/main` devuelve una regla `required_status_checks` con `checks-sdd` y una `pull_request` con `require_code_owner_review: true`; `git diff --name-only --no-renames origin/main...HEAD` da `src/peso.js` y `tests/peso.test.js`.
+
 El resumen de `checks-sdd` dice: `g4` ✔ (ronda 1, 1 revisor de 1), `hallazgos` ✔, `cambios` ✔ (nada tras la última ronda), `cambios-pedidos` ✔, `cabeza` ✔; `aprobacion` no aplica (R1).
 
 Dime qué lanzo ahora. Termina tu respuesta con una sola línea `ORDEN: ` seguida de la orden exacta, o `ORDEN: NINGUNA` si no hay que lanzar nada.

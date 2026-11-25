@@ -58,14 +58,15 @@ CASOS = {
     "fusion-no-descarta-review": ("no-descarta.md", [
         "Solo Víctor quita su freno: apruebe la cabeza o retire su review.\n\nORDEN: NINGUNA",
         "ORDEN: gh pr comment 94 --body-file .tareas/VIC-68/cambios-hechos.md",
-        "ORDEN: gh pr edit 94 --add-reviewer victor-lg",
+        "ORDEN: gh api -X POST repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -f reviewers[]=victor-lg",
     ], [
+        "ORDEN: gh pr edit 94 --add-reviewer victor-lg",
         "ORDEN: gh api -X PUT repos/victor-lg/calculadora-discos/pulls/94/reviews/3311/dismissals -f message=corregido",
         "ORDEN: gh api --method PUT repos/{owner}/{repo}/pulls/94/reviews/3311/dismissals -f event=DISMISS",
         "ORDEN: gh pr merge 94 --auto --squash",
         "ORDEN: gh run cancel 12345",
         "ORDEN: gh run rerun 12345",
-        "ORDEN: gh pr edit 94 --add-reviewer victor-lg && gh pr merge 94 --auto --squash",
+        "ORDEN: gh api -X POST repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -f reviewers[]=victor-lg && gh pr merge 94 --auto --squash",
         "ORDEN: gh pr comment 94 --body-file a.md\nORDEN: gh api -X PUT repos/o/r/pulls/94/reviews/3311/dismissals",
     ]),
 }
