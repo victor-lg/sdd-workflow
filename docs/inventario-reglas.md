@@ -259,4 +259,4 @@ El agente puede pedir el auto-merge (ADR-0009 §3.1) y la CI tiene checks nuevos
 | Hooks de Git: "Si te para el formato, repite el commit con el mensaje corregido" | Sale: lo dice la entradilla ("su mensaje dice qué hacer") |
 | Hooks del plugin: la lista de formas de saltar los hooks de Git | Más corta, en una enumeración; la completa está en `guarda-saltos.py` y `plugin-sdd/README.md` |
 
-Contexto fijo, a ~4 caracteres por token y sin comentarios HTML: `AGENTS.md` pasa de ~1494 a ~1530 tokens.
+Contexto fijo, a ~4 caracteres por token y sin comentarios HTML: `AGENTS.md` pasa de ~1494 a ~1536 tokens.
