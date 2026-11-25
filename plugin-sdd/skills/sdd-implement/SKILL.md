@@ -3,7 +3,7 @@ name: sdd-implement
 description: Implementa una entrega ya planificada (F4) a partir de los AC de su spec, con tests que citan los IDs, el cambio más pequeño que resuelve la tarea completa y el progreso registrado en el PR borrador. Úsala después de sdd-plan, con la rama y el PR ya creados.
 ---
 
-<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16; tests con dientes, M26, VIC-21; E2E, capturas y axe, M19 y M27, VIC-22; CI barata en borrador, VIC-33). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail); antipatrones de test de Pocock. -->
+<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16; tests con dientes, M26, VIC-21; E2E, capturas y axe, M19 y M27, VIC-22; CI barata en borrador, VIC-33; una sesión por PR y subagentes con motivo, M20, VIC-60). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail); antipatrones de test de Pocock. -->
 
 # sdd-implement
 
@@ -61,7 +61,8 @@ Toma la primera opción que funcione del todo:
 - **Fallos:** distingue un fallo causado por tu cambio de uno previo o de infraestructura.
 - **Tests intermitentes:** se reportan como tales; no se repiten hasta que pasen.
 - **Tres intentos:** tras 3 intentos fallidos sobre el mismo problema, detente, resume lo probado y pregunta.
-- **Sesiones largas:** si la sesión se interrumpe, guarda el estado en `.tareas/<ID>.md`: objetivo, progreso verificado, ficheros tocados, pruebas y resultados, bloqueos y siguiente paso. Al reanudar, contrasta ese fichero con Git y la CI.
+- **Una sesión por PR (M20),** también cuando la entrega va en varios. Si la entrega va en varios PR (al terminar cada uno) o la sesión se interrumpe, guarda el estado en el fichero de tu PR, `.tareas/<ID>-<rama>.md`, que solo escribe la sesión de ese PR: objetivo, PR en curso y los que faltan, progreso verificado, ficheros tocados, pruebas y resultados, bloqueos y siguiente paso. Es tu estado de trabajo entre sesiones, no la fuente de autoridad: el de la entrega vive en la issue. Una entrega de un solo PR que termina en su sesión no lo necesita. Al empezar el PR siguiente, lee el del anterior (cópialo si está en otra copia del repo) sin escribir en él; al reanudar, lee el tuyo. En los dos casos, contrástalo con Git y la CI antes de actuar.
+- **Subagentes, solo con un motivo explícito,** y dilo al lanzarlos: explorar (buscar en muchos ficheros sin traer su contenido), verificar de forma independiente (los revisores de `sdd-review`) o relevar una sesión larga. No para repartir la implementación de un PR. Un relevo retoma desde el fichero de estado de su PR y devuelve el control antes de `sdd-review`: los revisores los lanza la sesión que ejecuta `sdd-review`, nunca el relevo, y ninguno recibe tu razonamiento ni el del relevo (`sdd-review`, sección 2).
 
 ## Al terminar
 
@@ -75,7 +76,7 @@ Toma la primera opción que funcione del todo:
    - Evidencia de que funciona: comandos y su salida, capturas o pasos de prueba manual, y la salida en rojo de cada test nuevo. Demuestra, no afirmes. Las capturas de evidencia y los ficheros de trabajo van en `.tareas/<ID>/`, que Git ignora; nunca en `/tmp` ni en `$TMPDIR` (M12).
    - Tamaño en líneas de código. Si supera unas 400, explica por qué no se partió.
 4. Pasa a `sdd-review`. No marques el PR como listo para fusionar sin la revisión exigida.
-5. Borra `.tareas/<ID>.md` cuando la tarea se cierre.
+5. Si tienes fichero de estado, no lo borres al terminar: lo lee el PR siguiente. Al empezar un PR, borra los de los PR ya fusionados de la entrega, una vez leídos. Git ignora `.tareas/`, así que el del último no estorba.
 
 ## Lo que nunca haces
 
