@@ -3,7 +3,7 @@ name: sdd-implement
 description: Implementa una entrega ya planificada (F4) a partir de los AC de su spec, con tests que citan los IDs, el cambio más pequeño que resuelve la tarea completa y el progreso registrado en el PR borrador. Úsala después de sdd-plan, con la rama y el PR ya creados.
 ---
 
-<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16; tests con dientes, M26, VIC-21; E2E, capturas y axe, M19 y M27, VIC-22; CI barata en borrador, VIC-33). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail); antipatrones de test de Pocock. -->
+<!-- Workflow SDD + IA v1.1 (métrica de mutación, VIC-16; tests con dientes, M26, VIC-21; E2E, capturas y axe, M19 y M27, VIC-22; CI barata en borrador, VIC-33; una sesión por PR y subagentes con motivo, M20, VIC-60). Reglas de testing, memoria y CI/CD de las notas originales; escalera de "cambio mínimo completo" inspirada en la skill ponytail (MIT, DietrichGebert/ponytail); antipatrones de test de Pocock. -->
 
 # sdd-implement
 
@@ -61,7 +61,8 @@ Toma la primera opción que funcione del todo:
 - **Fallos:** distingue un fallo causado por tu cambio de uno previo o de infraestructura.
 - **Tests intermitentes:** se reportan como tales; no se repiten hasta que pasen.
 - **Tres intentos:** tras 3 intentos fallidos sobre el mismo problema, detente, resume lo probado y pregunta.
-- **Sesiones largas:** si la sesión se interrumpe, guarda el estado en `.tareas/<ID>.md`: objetivo, progreso verificado, ficheros tocados, pruebas y resultados, bloqueos y siguiente paso. Al reanudar, contrasta ese fichero con Git y la CI.
+- **Una sesión por PR (M20),** también cuando la entrega va en varios. El estado de la entrega vive en `.tareas/<ID>.md`: objetivo, PR en curso y los que faltan, progreso verificado, ficheros tocados, pruebas y resultados, bloqueos y siguiente paso. Actualízalo al terminar cada PR y si la sesión se interrumpe. Al empezar el PR siguiente o al reanudar, léelo y contrástalo con Git y la CI antes de actuar.
+- **Subagentes, solo con un motivo explícito,** y dilo al lanzarlos: explorar (buscar en muchos ficheros sin traer su contenido), verificar de forma independiente (los revisores de `sdd-review`) o relevar una sesión larga. No para repartir la implementación de un PR.
 
 ## Al terminar
 
