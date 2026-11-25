@@ -29,4 +29,4 @@ riesgo: R1
 - Decisiones pendientes: ninguna.
 ```
 
-Termina tu respuesta con una sola línea `ENLACE: ` seguida de la primera línea que pondrías en «Por qué existe este cambio» del PR (la que enlaza la issue), aunque en esta sesión no puedas abrirlo.
+Termina tu respuesta con una sola línea `ENLACE: ` seguida solo del enlace a la issue con el que empezarías «Por qué existe este cambio» del PR (`Fixes VIC-N`, `Part of VIC-N` o `Refs VIC-N`, sin más texto), aunque en esta sesión no puedas abrirlo.

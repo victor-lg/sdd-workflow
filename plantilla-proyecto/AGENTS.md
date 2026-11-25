@@ -20,7 +20,7 @@ Instrucciones para cualquier agente que trabaje en este repositorio. Los procedi
 - Nunca elimines tests, relajes controles ni modifiques AC para que la CI pase.
 - No afirmes haber consultado fuentes o ejecutado pruebas que no consultaste o ejecutaste.
 - Al reanudar, contrasta cualquier resumen con el estado real de Git y de la CI antes de actuar.
-- Una sesión por PR. Nunca trabajes en una copia del repo que esté usando otra sesión: si hay trabajo en paralelo, cada sesión usa su propio clon o `git worktree` (el hook `sesion-unica.py` avisa).
+- Una sesión por PR, también en entregas partidas, y nunca en la copia de otra sesión: usa tu clon o `git worktree` (`sesion-unica.py` avisa). Subagentes, solo para explorar, verificar aparte o relevar una sesión larga.
 - **Commits** (ADR-0007; el formato lo comprueban el hook `commit-msg` de `lefthook.json` y la CI): el título, como el del PR, `<tipo>(<alcance>)!: <descripción>`, con el tipo `feat`, `fix`, `spec`, `adr`, `refactor`, `test`, `docs`, `ci` o `chore`; el alcance, la zona del código o del documento, nunca el ID; la descripción, en español, en imperativo y en minúscula, sin punto final y con 72 caracteres como máximo; `!` solo si rompe compatibilidad. El cuerpo, opcional, tras una línea en blanco; el pie, en este orden: `Refs: VIC-N` (siempre), `Spec: SPEC-XXX-NNN/AC-NN` y `BREAKING CHANGE: …` si aplica. Nada de `fixup!`, `squash!` ni el `Revert "…"` que propone `git revert`.
 
 ## Lo que ya comprueba una máquina

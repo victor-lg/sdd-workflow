@@ -61,8 +61,8 @@ Toma la primera opción que funcione del todo:
 - **Fallos:** distingue un fallo causado por tu cambio de uno previo o de infraestructura.
 - **Tests intermitentes:** se reportan como tales; no se repiten hasta que pasen.
 - **Tres intentos:** tras 3 intentos fallidos sobre el mismo problema, detente, resume lo probado y pregunta.
-- **Una sesión por PR (M20),** también cuando la entrega va en varios. El estado de la entrega vive en `.tareas/<ID>.md`: objetivo, PR en curso y los que faltan, progreso verificado, ficheros tocados, pruebas y resultados, bloqueos y siguiente paso. Actualízalo al terminar cada PR y si la sesión se interrumpe. Al empezar el PR siguiente o al reanudar, léelo y contrástalo con Git y la CI antes de actuar.
-- **Subagentes, solo con un motivo explícito,** y dilo al lanzarlos: explorar (buscar en muchos ficheros sin traer su contenido), verificar de forma independiente (los revisores de `sdd-review`) o relevar una sesión larga. No para repartir la implementación de un PR.
+- **Una sesión por PR (M20),** también cuando la entrega va en varios. El estado de tu trabajo entre sesiones vive en `.tareas/<ID>.md` (el de la entrega en Linear sigue en la issue): objetivo, PR en curso y los que faltan, progreso verificado, ficheros tocados, pruebas y resultados, bloqueos y siguiente paso. Actualízalo al terminar cada PR y si la sesión se interrumpe. Al empezar el PR siguiente o al reanudar, léelo y contrástalo con Git y la CI antes de actuar. Hay uno solo: si el PR siguiente va en otro clon o `git worktree`, muévelo allí antes de empezar.
+- **Subagentes, solo con un motivo explícito,** y dilo al lanzarlos: explorar (buscar en muchos ficheros sin traer su contenido), verificar de forma independiente (los revisores de `sdd-review`) o relevar una sesión larga. No para repartir la implementación de un PR. Un relevo retoma desde `.tareas/<ID>.md` y devuelve el control antes de `sdd-review`: los revisores los lanza la sesión principal, nunca el relevo ni el autor del cambio.
 
 ## Al terminar
 
@@ -76,7 +76,7 @@ Toma la primera opción que funcione del todo:
    - Evidencia de que funciona: comandos y su salida, capturas o pasos de prueba manual, y la salida en rojo de cada test nuevo. Demuestra, no afirmes. Las capturas de evidencia y los ficheros de trabajo van en `.tareas/<ID>/`, que Git ignora; nunca en `/tmp` ni en `$TMPDIR` (M12).
    - Tamaño en líneas de código. Si supera unas 400, explica por qué no se partió.
 4. Pasa a `sdd-review`. No marques el PR como listo para fusionar sin la revisión exigida.
-5. Borra `.tareas/<ID>.md` cuando la tarea se cierre.
+5. Borra `.tareas/<ID>.md` cuando se cierre la issue, no al terminar cada PR de la entrega.
 
 ## Lo que nunca haces
 
