@@ -1220,7 +1220,7 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, s
 # «Revisión IA» o que trae un ID de revisor (`G4-1-A`, también en «Commit revisado») o «Métricas G4».
 # Límite aceptado: la misma cuenta puede borrar un comentario y quitar su enlace de «Revisión IA», o
 # borrarlo y publicar otro retocado, y este check no lo ve. Cerrarlo pide que los revisores publiquen
-# desde otra cuenta: es decisión del ADR-0009 del workflow (bloque 5).
+# desde otra cuenta: se resuelve en el bloque 7 con el revisor en la CI (ADR-0009 del workflow, §3.9).
 RE_ENLACE_COMENTARIO = re.compile(r"#issuecomment-([1-9]\d*)\b")
 RE_ES_DE_G4 = re.compile(r"\bG4-[1-9]\d*-[A-Z]\b|^Métricas G4:", re.M)
 # La justificación de una edición, en «Revisión IA» y fuera de <details>: `Comentario editado: <enlace> · <motivo>`.

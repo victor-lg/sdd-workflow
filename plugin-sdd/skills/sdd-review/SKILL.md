@@ -3,7 +3,7 @@ name: sdd-review
 description: Organiza la revisión independiente G4 de un PR de spec o de código y su cierre. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, reconcilia sus hallazgos en el PR y decide cómo se cierra (quitar el borrador, pedir el auto-merge o dejar que la persona apruebe y fusione). Úsala cuando un PR de spec o de código esté listo para revisión, y también para cerrarlo o desbloquearlo después de G4 (auto-merge, checks de la revisión en rojo, una review que pide cambios).
 ---
 
-<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, camino corto para aclaraciones, VIC-40; foco de mantenibilidad con la rúbrica copiada de Pocock y thermos, M23, VIC-41; una línea de métricas por revisor, VIC-48; evaluaciones antes de quitar el borrador en los PR del plugin, VIC-51; checks `g4`, `aprobacion`, `cambios-pedidos` y `cabeza`, auto-merge y regla 3, ADR-0009, VIC-56, VIC-57 y VIC-60). -->
+<!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, camino corto para aclaraciones, VIC-40; foco de mantenibilidad con la rúbrica copiada de Pocock y thermos, M23, VIC-41; una línea de métricas por revisor, VIC-48; evaluaciones antes de quitar el borrador en los PR del plugin, VIC-51; checks `g4`, `aprobacion`, `cambios-pedidos` y `cabeza`, auto-merge y regla 3, ADR-0009, VIC-56, VIC-57 y VIC-60; respuestas de G4 borradas o editadas, VIC-47). -->
 
 # sdd-review
 
@@ -91,7 +91,11 @@ Con las respuestas de todos los revisores:
 
      Mientras no tenga ninguna, escribe `resolución: pendiente`.
 
-   El check `hallazgos` de la CI lee estas líneas de la descripción y las respuestas de los revisores tal cual: en los comentarios de `CUENTAS_G4` (y en lo plegado de la descripción), toda línea que empieza por un ID `G4-…` es un hallazgo, con la gravedad que le sigue. Falla si un hallazgo de una respuesta no tiene línea, si alguna no tiene resolución o si se descarta sin prueba uno que el revisor o tú clasificasteis como *debe corregirse* o *importante*. Falla también mientras alguno tenga `pregunta a la persona`: el PR no se fusiona hasta que conteste y lo resuelvas. En otros comentarios tuyos, no empieces una línea por un ID salvo en esas líneas: contaría como hallazgo.
+   El check `hallazgos` de la CI lee estas líneas de la descripción y las respuestas de los revisores tal cual: en los comentarios de `CUENTAS_G4` (y en lo plegado de la descripción), toda línea que empieza por un ID `G4-…` es un hallazgo, con la gravedad que le sigue. Falla si un hallazgo de una respuesta no tiene línea, si alguna no tiene resolución o si se descarta sin prueba uno que el revisor o tú clasificasteis como *debe corregirse* o *importante*. Falla también mientras alguno tenga `pregunta a la persona`: el PR no se fusiona hasta que conteste y lo resuelvas. Falla también si «Revisión IA» enlaza un comentario de este PR que ya no está (borrado) o si un comentario de G4 se editó después de publicarse; ocultarlo («Hide») cuenta como edición. Una respuesta de G4 no se borra, no se edita ni se oculta: si hay que corregir algo, publica otro comentario y enlázalo. Si una edición es inevitable, justifícala en «Revisión IA», fuera de `<details>`, con una línea por comentario:
+
+   `Comentario editado: <enlace al comentario> · <motivo>`
+
+   En otros comentarios tuyos, no empieces una línea por un ID salvo en esas líneas: contaría como hallazgo.
 
    **La descripción se edita con la API:** `gh api -X PATCH "repos/{owner}/{repo}/pulls/N" -F body=@.tareas/VIC-N/pr.md`. No uses `gh pr edit`: falla en los repos con Projects (classic), y sin mirar el código de salida parece que ha funcionado. Edítala después de publicar las respuestas: un comentario no vuelve a lanzar la CI; la edición, sí.
 6. **Métricas:** el comentario de reconciliación de cada ronda termina con esta línea, sola, sin viñeta ni formato y con números:
