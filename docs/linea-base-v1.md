@@ -228,7 +228,7 @@ El núcleo portable son `AGENTS.md`, `docs/specs/` y `docs/adr/`. El contenido d
 ```
 proyecto/
 │   ── Etapa documental (desde el primer día) ──
-├── README.md              # incluye las rutas sensibles y la etapa
+├── README.md              # incluye la etapa y enlaza las rutas sensibles
 ├── AGENTS.md              # reglas cortas y portables (<= 150 líneas)
 ├── CLAUDE.md              # importa @AGENTS.md + lo específico de Claude Code
 ├── .claude/
@@ -243,6 +243,7 @@ proyecto/
 ├── .github/
 │   ├── workflows/sdd.yml  # checks SDD: specs, mezcla spec/código, AC <-> tests (G3), riesgo
 │   ├── sdd/checks.py      # script de los checks; la CI ejecuta siempre la copia de main
+│   ├── sdd/rutas-sensibles.txt  # rutas sensibles del proyecto (R2); la CI lee la copia de main
 │   ├── CODEOWNERS
 │   └── pull_request_template.md
 │   ── Etapa técnica (cuando un ADR fija la tecnología) ──
@@ -320,9 +321,9 @@ Esta es la **lista canónica**: la implementa `checks.py` y el resto de ficheros
 - la configuración del agente (`.claude/`, `AGENTS.md`, `CLAUDE.md`);
 - la configuración de los controles de seguridad: lefthook, gitleaks, Semgrep, osv-scanner, `.gitattributes`, ESLint y los submódulos (lista en `docs/herramientas.md`, ADR-0008);
 - migraciones;
-- las **rutas sensibles** que el proyecto declara en su README (autenticación, pagos o cualquier componente delicado).
+- las **rutas sensibles** que el proyecto declara en `.github/sdd/rutas-sensibles.txt` (autenticación, pagos o cualquier componente delicado).
 
-Las rutas sensibles se declaran al crear el proyecto (una por línea, entre comillas invertidas, por ejemplo `` `src/pagos/` ``). Cambiar esa lista también es R2. Además, la CI sube el mínimo en tres casos:
+Las rutas sensibles se declaran al crear el proyecto, una por línea, relativa a la raíz y sin comillas (`src/pagos/` o `src/pagos` es la carpeta entera; `*`, el único comodín, también cruza carpetas; `#` empieza un comentario). El formato completo está al principio del fichero de la plantilla. Una línea inválida o un fichero que no se puede leer hace fallar el check `riesgo`: nunca se ignora. Cambiar la lista también es R2, y la aprueba la persona: está bajo `.github/`, en CODEOWNERS, así que el agente no puede editar la lista que lo protege (VIC-61). Un proyecto anterior que aún tenga la lista en la sección «Rutas sensibles» de su README sigue contando con ella: la CI suma las dos listas hasta que la sección se vacíe, nunca usa menos rutas que antes. Además, la CI sube el mínimo en tres casos:
 - un PR de spec toma el `riesgo` mayor entre la spec de `main` y la del PR, así que no puede bajarse a sí mismo;
 - un PR de código toma el `riesgo` (en `main`) de las specs cuyos AC declara cubrir;
 - un PR que toca `docs/adr/` es como mínimo R1. Es la forma de expresar que un proyecto o un componente es delicado: todo lo que las toque es R2, sin encarecer el resto. No existe un "nivel mínimo por proyecto": se descartó porque obligaría a especificar hasta una errata (ADR-0001-M3).

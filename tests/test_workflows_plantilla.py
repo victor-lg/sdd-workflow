@@ -3,6 +3,7 @@ su texto. Que seguridad.yml solo se lance en un PR (con `workflow_dispatch`, el 
 dejar sus checks en verde desde su rama; G4 del PR 3, ronda 2), que los jobs se llamen como los
 checks requeridos y que versiones, sumas y digest sean los de docs/herramientas.md. Y que la base
 sea la ref completa (VIC-26): los pasos que la leen se ejecutan con bash sobre un repo de prueba."""
+import json
 import os
 import pathlib
 import re
@@ -51,8 +52,61 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         self.assertIn("PR_COMENTARIOS: ${{ runner.temp }}/sdd/comentarios.json", texto)
 
     def test_sdd_solo_en_un_pr(self):
-        """Fuera de un PR, github.base_ref está vacío: el paso que toma checks.py falla (BaseConEtiqueta)."""
-        self.assertEqual(disparadores(leer("sdd.yml")), {"pull_request"})
+        """Fuera de un PR, la base está vacía: el paso que toma checks.py falla (BaseConEtiqueta). VIC-56:
+        no con `pull_request_review`; al aprobar, sdd-relanzar.yml vuelve a lanzar la de `pull_request`
+        (con dos eventos, el ruleset exige en verde la última de cada uno y la de `pull_request` bloqueaba)."""
+        texto = leer("sdd.yml")
+        self.assertEqual(disparadores(texto), {"pull_request"})
+        self.assertIn("  pull_request:\n    branches: [main]\n", texto)
+        # La base y la rama, del evento: es lo que se repite al volver a lanzar una ejecución.
+        self.assertNotIn("${{ github.base_ref }}", texto)
+        self.assertNotIn("${{ github.head_ref }}", texto)
+        self.assertIn("  BASE: refs/remotes/origin/${{ github.event.pull_request.base.ref }}\n", texto)
+        self.assertIn("PR_BRANCH: ${{ github.event.pull_request.head.ref }}", texto)
+
+    def test_sdd_una_ejecucion_por_pr(self):
+        """VIC-56, G4-2-B-01 y G4-3-B-01: un grupo por número de PR, así que nunca hay dos a la vez con datos
+        distintos. Una ejecución nueva (intento 1) cancela la que siga en curso; un relanzamiento no, espera
+        (calculadora-discos#87, casos 7 y 10: el relanzamiento de una vieja cancelaba la más nueva, la que toma
+        el ruleset). Que una verde vieja no tape una roja nueva depende de que el ruleset tome la ejecución más
+        nueva de `pull_request`, no la que termina la última (comprobado en la calculadora, sdd-workflow#72),
+        y de que cada ejecución lea las reviews en el momento, no del evento."""
+        texto = leer("sdd.yml")
+        self.assertIn("concurrency:\n  group: sdd-${{ github.event.pull_request.number }}\n"
+                      "  cancel-in-progress: ${{ github.run_attempt == 1 }}\n", texto)
+        self.assertNotIn("event_name", texto)
+
+    def test_sdd_pasa_las_reviews_a_checks_py(self):
+        """VIC-56: todas las páginas, en el fichero que lee checks.py para el check `aprobacion`."""
+        texto = leer("sdd.yml")
+        self.assertIn('gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/reviews?per_page=100" > '
+                      '"$RUNNER_TEMP/sdd/reviews.json"', texto)
+        self.assertIn("PR_REVIEWS: ${{ runner.temp }}/sdd/reviews.json", texto)
+
+    def test_sdd_pasa_la_linea_de_tiempo_a_checks_py(self):
+        """VIC-57: todas las páginas, en el fichero que lee checks.py para el check `cambios-pedidos`."""
+        texto = leer("sdd.yml")
+        self.assertIn('gh api --paginate "repos/$REPO/issues/$PR_NUMBER/timeline?per_page=100" > '
+                      '"$RUNNER_TEMP/sdd/linea-de-tiempo.json"', texto)
+        self.assertIn("PR_TIMELINE: ${{ runner.temp }}/sdd/linea-de-tiempo.json", texto)
+        # Después de las reviews: un descarte entre las dos lecturas deja las reviews en CHANGES_REQUESTED y falla.
+        self.assertLess(texto.index("      - name: Reviews del PR\n"), texto.index("      - name: Línea de tiempo del PR\n"))
+
+    def test_relanzar_solo_con_una_review(self):
+        """VIC-56: aprobar, pedir cambios o retirar una aprobación relanza `checks-sdd` desde un workflow aparte,
+        cuyo job no es un check requerido, sin checkout ni acciones, y sin expresiones dentro del script."""
+        texto = leer("sdd-relanzar.yml")
+        self.assertEqual(disparadores(texto), {"pull_request_review"})
+        self.assertIn("  pull_request_review:\n    types: [submitted, dismissed]\n", texto)
+        self.assertEqual(jobs(texto), {"relanzar-checks-sdd"})
+        self.assertFalse(jobs(texto) & REQUERIDOS)
+        self.assertNotIn("uses:", texto)
+        self.assertNotIn("if:", texto)
+        self.assertIn("concurrency:\n  group: sdd-relanzar-${{ github.event.pull_request.number }}\n"
+                      "  cancel-in-progress: false\n", texto)
+        script, _ = paso(texto, "Volver a lanzar checks-sdd", "main")
+        self.assertNotIn("${{", script)
+        self.assertIn('actions/workflows/sdd.yml/runs?event=pull_request&per_page=100', script)
 
     def test_la_tarea_mensual_no_se_llama_como_un_check_requerido(self):
         texto = leer("osv-mensual.yml")
@@ -99,21 +153,24 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
                     self.assertRegex(uso, r"@[0-9a-f]{40}$")
 
     def test_sin_credenciales_ni_mas_permisos(self):
-        # sdd.yml lee además los comentarios del PR: las respuestas de los revisores de G4 (VIC-38).
-        extra = {"sdd.yml": ["pull-requests: read"]}
+        # sdd.yml lee además los comentarios del PR: las respuestas de los revisores de G4 (VIC-38), y su línea
+        # de tiempo, que es un endpoint de issues (VIC-57).
+        # sdd-relanzar.yml solo vuelve a lanzar ejecuciones y lee la cabeza del PR: ni siquiera lee el código (VIC-56).
+        permisos_de = {"sdd.yml": ["contents: read", "pull-requests: read", "issues: read"], "sdd-relanzar.yml": ["actions: write", "pull-requests: read"]}
         for fichero in WORKFLOWS.glob("*.yml"):
             texto = fichero.read_text(encoding="utf-8")
             with self.subTest(fichero=fichero.name):
                 bloque = re.search(r"^permissions:\n((?:  .*\n)+)", texto, re.M).group(1)
                 permisos = [l.strip() for l in bloque.splitlines() if not l.strip().startswith("#")]
-                self.assertEqual(permisos, ["contents: read", *extra.get(fichero.name, [])])
+                self.assertEqual(permisos, permisos_de.get(fichero.name, ["contents: read"]))
                 self.assertEqual(texto.count("permissions:"), 1)
                 self.assertEqual(texto.count("persist-credentials: false"), texto.count("actions/checkout@"))
 
 
 def paso(texto, nombre, base_ref):
     """El script del paso con ese nombre y su entorno (el `env:` del workflow y el del paso), con
-    `${{ github.base_ref }}` sustituido por base_ref. El resto de expresiones `${{ }}` se quedan fuera."""
+    `${{ github.base_ref }}` y `${{ github.event.pull_request.base.ref }}` sustituidos por base_ref. El resto
+    de expresiones `${{ }}` se quedan fuera."""
     bloque = re.search(rf"\n      - name: {re.escape(nombre)}\n((?:        .*\n|\n)*)", texto).group(1)
     varios = re.search(r"^        run: \|\n((?:          .*\n|\n)+)", bloque, re.M)
     script = textwrap.dedent(varios.group(1)) if varios else re.search(r"^        run: (.+)$", bloque, re.M).group(1)
@@ -123,7 +180,9 @@ def paso(texto, nombre, base_ref):
         lineas += m.group(1) if m else ""
     entorno = {}
     for clave, valor in re.findall(r"^ +([A-Z_]+): (.+)$", lineas, re.M):
-        valor = valor.replace("${{ github.base_ref }}", base_ref).strip('"')
+        for base in ("${{ github.base_ref }}", "${{ github.event.pull_request.base.ref }}"):
+            valor = valor.replace(base, base_ref)
+        valor = valor.strip('"')
         if "${{" not in valor:
             entorno[clave] = valor
     return script, entorno
@@ -194,6 +253,16 @@ class BaseConEtiqueta(unittest.TestCase):
         self.assertEqual(codigo, 0, salida)
         self.assertEqual((self.temporal / "sdd" / "checks.py").read_text(), "# main\n")
 
+    def test_sdd_falla_si_la_base_no_es_main(self):
+        """VIC-56, G4-1-B-01: un PR contra otra rama no puede dejar un `checks-sdd` en verde con el checks.py
+        de esa rama. `branches: [main]` ya lo evita; esta es la segunda barrera."""
+        self.git("branch", "tmp")
+        self.git("update-ref", "refs/remotes/origin/tmp", "tmp")
+        codigo, salida = self.ejecutar("sdd.yml", "Tomar los checks de la rama base", base_ref="tmp")
+        self.assertNotEqual(codigo, 0, salida)
+        self.assertIn("::error::La base del PR es tmp, no main", salida)
+        self.assertFalse((self.temporal / "sdd" / "checks.py").exists())
+
     def test_sdd_pasa_a_checks_py_la_rama_remota(self):
         """En lugar de checks.py, uno que escribe sus argumentos: así se ve qué base le llega."""
         (self.temporal / "sdd").mkdir()
@@ -208,7 +277,7 @@ class BaseConEtiqueta(unittest.TestCase):
         self.resuelve_a_main(re.search(r'add_argument\("--base", default="([^"]+)"', texto).group(1))
 
     def test_sdd_sin_rama_base_falla_con_un_error_claro(self):
-        """Fuera de pull_request no hay github.base_ref: nunca se toma checks.py de otro sitio."""
+        """Fuera de un PR no hay base: nunca se toma checks.py de otro sitio."""
         codigo, salida = self.ejecutar("sdd.yml", "Tomar los checks de la rama base", base_ref="")
         self.assertNotEqual(codigo, 0, salida)
         self.assertIn("::error::Sin rama base: sdd.yml solo corre en pull_request", salida)
@@ -241,6 +310,196 @@ class SinOrigenAbreviado(unittest.TestCase):
                 if not linea.lstrip().startswith("#"):
                     with self.subTest(fichero=fichero.name, linea=numero):
                         self.assertNotRegex(linea, r"(?<!refs/remotes/)origin/")
+
+
+
+
+GH_FALSO = """#!/bin/bash
+# `gh api URL` devuelve la siguiente respuesta de $RESPUESTAS (la última se repite); `gh run rerun` se anota.
+# `gh api .../pulls/N --jq .head.sha` devuelve la siguiente cabeza de $CABEZAS_PR (la última se repite).
+echo "$*" >> "$LLAMADAS"
+if [ "$1" = api ] && [[ "$2" == */pulls/* ]]; then
+  [ -z "${PR_FALLA:-}" ] || { echo "HTTP 502" >&2; exit 1; }
+  read -ra cabezas <<< "$CABEZAS_PR"
+  k=$(cat "$RESPUESTAS/k" 2>/dev/null || echo 0); echo $((k + 1)) > "$RESPUESTAS/k"
+  [ "$k" -lt "${#cabezas[@]}" ] || k=$((${#cabezas[@]} - 1))
+  echo "${cabezas[$k]}"
+elif [ "$1" = api ]; then
+  n=$(cat "$RESPUESTAS/n" 2>/dev/null || echo 0)
+  if [ -e "$RESPUESTAS/$((n + 1))" ]; then n=$((n + 1)); echo $n > "$RESPUESTAS/n"; fi
+  cat "$RESPUESTAS/$n"
+elif [ "$1 $2" = "run rerun" ]; then
+  # Falla las primeras $RERUN_FALLA veces.
+  f=$(cat "$RESPUESTAS/fallos" 2>/dev/null || echo 0); echo $((f + 1)) > "$RESPUESTAS/fallos"
+  [ "$f" -ge "${RERUN_FALLA:-0}" ]
+fi
+"""
+
+# `sleep` no espera: anota cuánto habría esperado, en el mismo registro que `gh`.
+SLEEP_FALSO = """#!/bin/bash
+echo "sleep $*" >> "$LLAMADAS"
+"""
+
+CABEZA = "a" * 40
+
+
+def run(id_, estado="completed", cabeza=CABEZA, pr=7, evento="pull_request"):
+    return {"id": id_, "status": estado, "head_sha": cabeza, "event": evento,
+            "pull_requests": [{"number": pr}] if pr else []}
+
+
+class Relanzar(unittest.TestCase):
+    """VIC-56: el script de sdd-relanzar.yml con un `gh` falso. Que GitHub tome el intento relanzado como la
+    última ejecución de `pull_request` se comprueba en la calculadora, no aquí."""
+
+    def setUp(self):
+        self.temporal = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.temporal)
+        (self.temporal / "bin").mkdir()
+        for nombre, contenido in (("gh", GH_FALSO), ("sleep", SLEEP_FALSO)):
+            (self.temporal / "bin" / nombre).write_text(contenido)
+            (self.temporal / "bin" / nombre).chmod(0o755)
+        self.respuestas = self.temporal / "respuestas"
+        self.respuestas.mkdir()
+        self.llamadas = self.temporal / "llamadas"
+        self.llamadas.write_text("")
+
+    def ejecutar(self, *respuestas, **entorno):
+        for i, runs in enumerate(respuestas, 1):
+            (self.respuestas / str(i)).write_text(json.dumps({"workflow_runs": runs}))
+        script, base = paso(leer("sdd-relanzar.yml"), "Volver a lanzar checks-sdd", "main")
+        env = {**os.environ, **base, "PATH": f"{self.temporal / 'bin'}:{os.environ['PATH']}",
+               "RESPUESTAS": str(self.respuestas), "LLAMADAS": str(self.llamadas), "CABEZAS_PR": CABEZA,
+               "REPO": "victor-lg/proyecto", "PR_NUMBER": "7", "PR_HEAD_SHA": CABEZA,
+               "PR_HEAD_REPO": "victor-lg/proyecto", "PR_BASE": "main", **entorno}
+        r = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
+        return r.returncode, r.stdout + r.stderr, self.llamadas.read_text().splitlines()
+
+    def relanzadas(self, llamadas):
+        return [l for l in llamadas if l.startswith("run rerun")]
+
+    def listados(self, llamadas):
+        return [l for l in llamadas if l.startswith("api ") and "/actions/" in l]
+
+    def test_relanza_la_ultima_del_pr(self):
+        """Ni la de otro PR ni la de otro evento, aunque sean más nuevas."""
+        codigo, salida, llamadas = self.ejecutar([run(10), run(12), run(20, pr=8), run(22, evento="pull_request_review"),
+                                                  run(21, pr=None), run(11)])
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(self.relanzadas(llamadas), ["run rerun 12 --repo victor-lg/proyecto"])
+        self.assertEqual(llamadas[:3], ["sleep 20", "api repos/victor-lg/proyecto/pulls/7 --jq .head.sha",
+                                        "api repos/victor-lg/proyecto/actions/workflows/sdd.yml/runs"
+                                        "?event=pull_request&per_page=100"])
+
+    def test_antes_de_listar_espera_a_que_la_lista_se_ponga_al_dia(self):
+        """Calculadora-discos#87, caso 7: la ejecución de un evento recién llegado tarda unos 7 s en salir en la
+        lista. AL_DIA, del workflow (20 s), antes de la primera consulta; ESPERA (10 s) entre vueltas."""
+        _, base = paso(leer("sdd-relanzar.yml"), "Volver a lanzar checks-sdd", "main")
+        self.assertEqual((base["AL_DIA"], base["ESPERA"], base["LIMITE"]), ("20", "10", "600"))
+        codigo, salida, llamadas = self.ejecutar([run(12, "in_progress")], [run(12)])
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(llamadas[0], "sleep 20")
+        self.assertEqual([l for l in llamadas if l.startswith("sleep")], ["sleep 20", "sleep 10"])
+
+    def test_si_la_cabeza_del_pr_es_otra_no_relanza(self):
+        """G4-4-B-02 y calculadora-discos#87, caso 10: hubo un push tras la review, y su ejecución ya lee las
+        reviews. Lo dice la cabeza actual del PR, no la lista de ejecuciones: la del push puede no salir aún
+        en la lista. También si el push llega mientras espera."""
+        nueva = "b" * 40
+        for respuestas, cabezas in (([[run(12)]], nueva), ([[run(12, "in_progress")]], f"{CABEZA} {nueva}")):
+            with self.subTest(cabezas=cabezas):
+                for f in ("n", "k"):
+                    (self.respuestas / f).unlink(missing_ok=True)
+                self.llamadas.write_text("")
+                codigo, salida, llamadas = self.ejecutar(*respuestas, CABEZAS_PR=cabezas)
+                self.assertEqual(codigo, 0, salida)
+                self.assertIn(f"La cabeza del PR es ahora {nueva[:12]}", salida)
+                self.assertIn("hubo un push después de esta review", salida)
+                self.assertEqual(self.relanzadas(llamadas), [])
+
+    def test_si_la_lista_no_tiene_la_cabeza_del_pr_espera(self):
+        """Un push justo antes de la review: la cabeza del PR ya es la de la review, pero la lista solo muestra la
+        ejecución de la anterior. Espera a que salga la nueva y relanza esa, no la vieja."""
+        codigo, salida, llamadas = self.ejecutar([run(12, cabeza="b" * 40)], [run(12, cabeza="b" * 40), run(13)])
+        self.assertEqual(codigo, 0, salida)
+        self.assertIn("la lista aún no se ha puesto al día", salida)
+        self.assertEqual(self.relanzadas(llamadas), ["run rerun 13 --repo victor-lg/proyecto"])
+
+    def test_si_la_lista_nunca_tiene_la_cabeza_del_pr_falla_sin_relanzar(self):
+        codigo, salida, llamadas = self.ejecutar([run(12, cabeza="b" * 40)], LIMITE="0")
+        self.assertEqual(codigo, 1, salida)
+        self.assertIn("::error::Tras 0 s no aparece ninguna ejecución de checks-sdd (pull_request)", salida)
+        self.assertIn("Relánzala a mano", salida)
+        self.assertEqual(self.relanzadas(llamadas), [])
+
+    def test_si_no_puede_leer_la_cabeza_del_pr_falla(self):
+        """También si la API falla (G4-5-A-01, G4-5-B-01): con el mensaje que pide relanzar a mano."""
+        for cabeza, falla in (("''", ""), ("null", ""), ("$(id)", ""), (CABEZA, "1")):
+            with self.subTest(cabeza=cabeza, falla=falla):
+                (self.respuestas / "k").unlink(missing_ok=True)
+                codigo, salida, llamadas = self.ejecutar([run(12)], CABEZAS_PR=cabeza, PR_FALLA=falla)
+                self.assertEqual(codigo, 1, salida)
+                self.assertIn("::error::No pude leer la cabeza actual del PR", salida)
+                self.assertEqual(self.relanzadas(llamadas), [])
+
+    def test_espera_a_que_termine_la_que_sigue_en_curso(self):
+        """Podría haber leído las reviews antes de esta: se relanza al terminar, no antes."""
+        codigo, salida, llamadas = self.ejecutar([run(12, "queued")], [run(12, "in_progress")], [run(12)])
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(len(self.listados(llamadas)), 3)
+        self.assertEqual(self.relanzadas(llamadas), ["run rerun 12 --repo victor-lg/proyecto"])
+
+    def test_si_mientras_espera_llega_otra_relanza_la_nueva(self):
+        codigo, salida, llamadas = self.ejecutar([run(12, "in_progress")], [run(12, "completed"), run(13, "in_progress")],
+                                                 [run(12), run(13)])
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(self.relanzadas(llamadas), ["run rerun 13 --repo victor-lg/proyecto"])
+
+    def test_sin_ejecucion_todavia_espera(self):
+        codigo, salida, llamadas = self.ejecutar([], [run(12)])
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(self.relanzadas(llamadas), ["run rerun 12 --repo victor-lg/proyecto"])
+
+    def test_si_no_termina_falla_sin_relanzar(self):
+        codigo, salida, llamadas = self.ejecutar([run(12, "in_progress")], LIMITE="0")
+        self.assertEqual(codigo, 1, salida)
+        self.assertIn("sigue en «in_progress» tras 0 s: no la relanzo", salida)
+        self.assertEqual(self.relanzadas(llamadas), [])
+
+    def test_en_un_fork_falla_y_pide_relanzar_a_mano(self):
+        codigo, salida, llamadas = self.ejecutar([run(12)], PR_HEAD_REPO="otro/proyecto")
+        self.assertEqual(codigo, 1, salida)
+        self.assertIn("::error::El PR viene de un fork", salida)
+        self.assertIn("Relánzala a mano", salida)
+        self.assertIn("checks-sdd conserva el resultado de antes de esta review", salida)
+        self.assertEqual(llamadas, [])
+
+    def test_si_github_no_deja_relanzar_pide_hacerlo_a_mano(self):
+        """Tras tres rechazos; y avisa de que mientras tanto vale el resultado anterior (G4-4-B-01)."""
+        codigo, salida, llamadas = self.ejecutar([run(12)], RERUN_FALLA="3")
+        self.assertEqual(codigo, 1, salida)
+        self.assertEqual(len(self.relanzadas(llamadas)), 3)
+        self.assertIn("::error::GitHub no me deja relanzar la ejecución 12 de checks-sdd. Relánzala a mano", salida)
+        self.assertIn("checks-sdd conserva el resultado de antes de esta review", salida)
+
+    def test_un_rechazo_se_reintenta(self):
+        """Otro relanzamiento recién pedido que la API aún no muestra en curso: se vuelve a buscar y se espera."""
+        codigo, salida, llamadas = self.ejecutar([run(12)], [run(12, "in_progress")], [run(12)], RERUN_FALLA="1")
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(self.relanzadas(llamadas), ["run rerun 12 --repo victor-lg/proyecto"] * 2)
+
+    def test_con_otra_base_no_hace_nada(self):
+        codigo, salida, llamadas = self.ejecutar([run(12)], PR_BASE="desarrollo")
+        self.assertEqual(codigo, 0, salida)
+        self.assertEqual(llamadas, [])
+
+    def test_datos_del_evento_con_otro_formato_fallan(self):
+        for clave, valor in (("PR_HEAD_SHA", "a" * 39 + ";"), ("PR_HEAD_SHA", "$(id)"), ("PR_NUMBER", "7 x")):
+            with self.subTest(clave=clave, valor=valor):
+                codigo, salida, llamadas = self.ejecutar([run(12)], **{clave: valor})
+                self.assertEqual(codigo, 1, salida)
+                self.assertIn("no tienen el formato esperado", salida)
+                self.assertEqual(llamadas, [])
 
 
 if __name__ == "__main__":

@@ -12,7 +12,9 @@ Comprueba:
                 y algún test lo cita como SPEC-XXX-NNN/AC-NN. Publica la matriz.
   riesgo        que el nivel marcado en el PR no sea menor que el que exigen
                 las rutas tocadas, las specs que implementa y los ADR. La CI
-                solo puede subir el nivel, nunca bajarlo.
+                solo puede subir el nivel, nunca bajarlo. Las rutas sensibles del
+                proyecto salen de RUTAS_SENSIBLES y de la sección del README (VIC-61);
+                falla si el fichero no se puede leer o tiene una línea inválida.
   tests         lista los tests existentes que el PR modifica o borra (no bloquea).
   convenciones  M11: rama `<tipo>/vic-<N>-<descripcion>`, título del PR en formato
                 de commit y descripción que empieza por `Fixes`, `Part of` o `Refs`
@@ -34,7 +36,22 @@ Comprueba:
                 de G4 se editó sin la línea `Comentario editado: <enlace> · <motivo>`.
   cambios       M8 (VIC-39): publica los commits que entraron tras la última ronda de G4, desde el
                 que vio cada revisor (`Commit revisado:` en su comentario), y falla si falta o si la
-                descripción trae esa lista escrita a mano.
+                descripción trae esa lista escrita a mano. VIC-56 (ADR-0009 §5): en R0 y R1, falla también si
+                lo que entró tras la ronda no es solo documentación (`es_documentacion`); R2 lo frena `aprobacion`.
+  aprobacion    VIC-56 (ADR-0009 §3.4): un PR R2 (el mayor entre el nivel marcado y el que exige lo
+                tocado) falla salvo que la última review de PERSONAS sea una aprobación del commit de
+                la cabeza. Las reviews llegan en PR_REVIEWS (`gh api --paginate …/pulls/N/reviews`).
+  g4            VIC-56 (ADR-0009 §3.1 y §5): falla si el PR no tiene G4, o si su última ronda tiene menos
+                revisores de los que pide `sdd-review` (2 en R2, specs y ADR; 1 en lo demás). No la
+                necesitan los PR de Dependabot ni un R0 que es solo documentación (`es_documentacion`);
+                un R0 que no lo es cuenta como R1.
+  cambios-pedidos  VIC-57 (ADR-0009 §5), en cualquier nivel: falla si la última review decisiva de PERSONAS
+                pide cambios, o si una suya que pedía cambios la descartó una cuenta que no está en PERSONAS
+                (eventos `review_dismissed` de PR_TIMELINE, `gh api --paginate …/issues/N/timeline`), salvo
+                que después la persona apruebe la cabeza. Una review suya en DISMISSED sin su evento cuenta
+                como descartada por otra cuenta. Sin las reviews o la línea de tiempo, falla.
+  cabeza        VIC-56: falla si PR_HEAD_SHA no está en la historia del commit que se prueba (el merge
+                de GitHub puede ser anterior a un push reciente).
 
 Los PR de Dependabot (M38) no siguen las convenciones de nombres ni declaran AC: ver
 `es_de_dependabot`, que la acota al autor del PR y de sus commits y a lo que tocan.
@@ -44,7 +61,9 @@ Uso local:
     python3 .github/sdd/checks.py --base refs/remotes/origin/main
 Sin PR_TITLE ni PR_BRANCH, el check de convenciones no se ejecuta. PR_COMENTARIOS es la ruta
 de los comentarios del PR (`gh api --paginate …/issues/N/comments`); sin ella, el
-check de hallazgos solo lee la descripción. Los enlaces de «Revisión IA» a comentarios borrados
+check de hallazgos solo lee la descripción. PR_REVIEWS es la ruta de las reviews; sin ella, un PR R2
+falla en el check `aprobacion`, y en R0 y R1 la aprobación no desbloquea lo que entra tras la última ronda.
+PR_TIMELINE es la ruta de la línea de tiempo del PR; sin ella o sin PR_REVIEWS, falla `cambios-pedidos` en cualquier nivel. Los enlaces de «Revisión IA» a comentarios borrados
 solo se comprueban con GITHUB_SERVER_URL, GITHUB_REPOSITORY y GITHUB_REF (`refs/pull/N/merge`), como en la CI.
 
 Como hook `commit-msg` de lefthook, solo el formato del mensaje:
@@ -61,7 +80,9 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
+from typing import NamedTuple
 
 # --- Convenciones ---------------------------------------------------------
 
@@ -76,6 +97,14 @@ RE_RIESGO_MARCADO = re.compile(r"^\s*-\s*\[[xX]\]\s*(R[012])\b", re.M)
 ESTADOS = {"borrador", "en-revision", "aprobada", "sustituida"}
 RIESGOS_SPEC = {"R1", "R2"}
 CAMPOS_OBLIGATORIOS = ["id", "titulo", "estado", "version", "riesgo"]
+
+# Rutas sensibles del proyecto (VIC-61): bajo `.github/`, así que tocarlo ya es R2 y está en
+# CODEOWNERS. Formato en `parse_rutas_sensibles`. Mientras un proyecto migra, también cuenta la
+# sección «Rutas sensibles» del README: se toma la unión, nunca menos rutas que antes.
+RUTAS_SENSIBLES = ".github/sdd/rutas-sensibles.txt"
+# Una ruta relativa a la raíz, sin espacios, comillas invertidas ni barras invertidas.
+RE_RUTA_SENSIBLE = re.compile(r"[^\s`\\]+")
+FORMATO_RUTAS = "Una ruta por línea, relativa a la raíz y sin comillas (formato al principio del fichero)."
 
 # Disparadores de R2 del workflow (linea-base §6). `*` también cruza carpetas.
 R2_RUTAS = [".github/*", ".claude/*", "AGENTS.md", "CLAUDE.md",
@@ -103,7 +132,7 @@ R2_CONTROLES = ["lefthook.json", ".lefthook/*", ".lefthook-local/*",
                 # Regresión visual (M27): las capturas de referencia las aprueba la persona, y la
                 # configuración de Playwright puede ponerles tolerancias o escribir las que faltan.
                 # Las carpetas por defecto de Playwright; si un proyecto cambia la suya con
-                # `snapshotPathTemplate`, la añade a las rutas sensibles de su README. Las
+                # `snapshotPathTemplate`, la añade a RUTAS_SENSIBLES. Las
                 # tolerancias escritas en un fichero de test no se ven aquí (límite aceptado).
                 "*-snapshots/*", "__screenshots__/*", "*/__screenshots__/*",
                 "playwright.config.*", "*/playwright.config.*",
@@ -192,6 +221,14 @@ class Informe:
 def git(*args: str) -> str | None:
     r = subprocess.run(["git", *args], capture_output=True, text=True)
     return r.stdout if r.returncode == 0 else None
+
+
+def rutas(*args: str) -> list[str] | None:
+    """Una orden de Git que lista rutas, con -z: sin él, Git entrecomilla las rutas no ASCII
+    (`".claude/\\303\\261.md"`) y ningún patrón ni `es_test`/`es_spec` las reconoce (G4 de VIC-56)."""
+    # -z justo tras la suborden: después de `--` sería una ruta.
+    salida = git(args[0], "-z", *args[1:])
+    return None if salida is None else [r for r in salida.split("\0") if r]
 
 
 def es_codigo(ruta: str) -> bool:
@@ -410,10 +447,112 @@ def check_mezcla(inf: Informe, cambiados: list[str]) -> None:
 # --- Riesgo ---------------------------------------------------------------
 
 def rutas_sensibles(readme: str | None) -> list[str]:
+    """Las de la sección «Rutas sensibles» del README (el formato anterior a VIC-61)."""
     if not readme:
         return []
     patrones = re.findall(r"^\s*-\s+`([^`]+)`", seccion(readme, "Rutas sensibles"), re.M)
     return [p + "*" if p.endswith("/") else p for p in patrones]
+
+
+def patron_literal(ruta: str) -> str:
+    """El patrón de fnmatch en el que `[`, `]` y `?` son literales y solo `*` es comodín."""
+    return re.sub(r"([\[\]?])", r"[\1]", ruta)
+
+
+def patrones_del_readme(readme: str | None) -> list[str]:
+    """Las rutas del README con su lectura de siempre (`[` y `?` comodines) y, además, la literal, como
+    en el fichero: solo suma rutas (G4-2-B-01)."""
+    rutas = rutas_sensibles(readme)
+    return rutas + [patron_literal(p) for p in rutas if patron_literal(p) != p]
+
+
+# Lo que un editor puede mostrar como salto de línea. Dentro de una línea, también de un comentario, la
+# invalida: si no, un comentario se tragaría en silencio las rutas que se ven detrás (G4-3-B-01).
+SALTOS_RAROS = set("\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029")
+
+
+def parse_rutas_sensibles(texto: str) -> tuple[list[str], list[str]]:
+    """Formato de RUTAS_SENSIBLES: una ruta por línea, relativa a la raíz del repo y sin comillas, como
+    `app/sw.js`, `src/pagos/` (la carpeta entera) o `src/auth/*.ts` (`*` también cruza carpetas). Se
+    ignoran las líneas vacías y las que empiezan por `#`. Una línea con espacios, caracteres de control
+    o invisibles, comillas invertidas o barras invertidas, que empiece por `/` o `./`, o con un tramo
+    `..`, es inválida: no coincidiría con ninguna ruta y la lista tendría un hueco sin que nadie lo
+    viera. Un BOM al principio del fichero no cuenta. Solo `*` es comodín: `[`, `]` y `?` son literales,
+    como en `app/[id]/route.ts` (G4-2-B-01). Se parte solo por `\n`: `splitlines()` partiría también
+    por caracteres de control, que así llegan a la línea y la invalidan; un salto de otro tipo (`\r` solo,
+    U+2028…) invalida también un comentario. Vale `\r\n`. Devuelve (patrones, errores)."""
+    rutas, errores = [], []
+    for n, linea in enumerate(texto.removeprefix("\ufeff").split("\n"), 1):
+        ruta = linea.removesuffix("\r").strip(" \t")
+        if SALTOS_RAROS & set(ruta):
+            errores.append(f"línea {n}, `{ascii(ruta)[1:-1][:80]}`")
+            continue
+        if not ruta or ruta.startswith("#"):
+            continue
+        if (not RE_RUTA_SENSIBLE.fullmatch(ruta) or ruta.startswith(("/", "./"))
+                or ".." in ruta.split("/") or any(unicodedata.category(c)[0] in "CZ" for c in ruta)):
+            errores.append(f"línea {n}, `{ascii(ruta)[1:-1][:80]}`")
+            continue
+        rutas.append(patron_literal(ruta) + ("*" if ruta.endswith("/") else ""))
+    return rutas, errores
+
+
+def leer_rutas_sensibles(base: str) -> tuple[bool, str | None]:
+    """(existe, texto) de RUTAS_SENSIBLES en `base`. Si existe pero no es un fichero normal o no se lee
+    como UTF-8, el texto es None: quien llama falla, nunca sigue con menos rutas."""
+    entrada = git("ls-tree", base, "--", RUTAS_SENSIBLES)
+    if entrada is None:
+        return True, None
+    if not entrada.strip():
+        return False, None
+    if not entrada.startswith(("100644 blob ", "100755 blob ")):
+        return True, None
+    r = subprocess.run(["git", "show", f"{base}:{RUTAS_SENSIBLES}"], capture_output=True)
+    if r.returncode != 0:
+        return True, None
+    try:
+        return True, r.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        return True, None
+
+
+def errores_de_rutas(texto: str | None) -> list[str]:
+    return ["no es un fichero normal de texto UTF-8"] if texto is None else parse_rutas_sensibles(texto)[1]
+
+
+def cargar_rutas_sensibles(inf: Informe, base: str, cambiados: list[str],
+                           versionados: dict[str, str] | None, raiz: Path) -> list[str]:
+    """Las rutas de RUTAS_SENSIBLES en `base` (lo que cuenta para el nivel). Si el PR cambia el fichero,
+    comprueba también su versión: un fichero inválido en `main` haría fallar todos los PR siguientes.
+    Por eso, si el de `main` es inválido y el PR lo deja válido o lo borra, solo avisa: ese PR es R2 (lo
+    aprueba la persona) y es el que lo arregla. Borrarlo lo avisa siempre: después solo cuenta el README."""
+    existe, texto = leer_rutas_sensibles(base)
+    rutas = parse_rutas_sensibles(texto)[0] if texto is not None else []
+    errores_base = errores_de_rutas(texto) if existe else []
+    if RUTAS_SENSIBLES in cambiados:
+        modo = None if versionados is None else versionados.get(RUTAS_SENSIBLES)
+        if versionados is None:
+            errores_pr = ["no he podido listar los ficheros del PR con Git"]
+        elif modo is None:
+            inf.aviso("riesgo", f"⚠️ el PR borra `{RUTAS_SENSIBLES}`"
+                                + (" (el de `main` es inválido)" if errores_base else "")
+                                + ": después solo contarán las rutas sensibles del README.")
+            errores_pr, errores_base = [], []
+        else:
+            try:
+                nuevo = (raiz / RUTAS_SENSIBLES).read_bytes().decode("utf-8") if modo in ("100644", "100755") else None
+            except (OSError, UnicodeDecodeError):
+                nuevo = None
+            errores_pr = errores_de_rutas(nuevo)
+        if errores_pr:
+            inf.error("riesgo", f"el PR deja `{RUTAS_SENSIBLES}` inválido ({'; '.join(errores_pr)}): {FORMATO_RUTAS}")
+        elif errores_base:
+            inf.aviso("riesgo", f"⚠️ `{RUTAS_SENSIBLES}` de `main` es inválido ({'; '.join(errores_base)}) y este PR lo corrige.")
+            errores_base = []
+    if errores_base:
+        inf.error("riesgo", f"`{RUTAS_SENSIBLES}` de `main` es inválido ({'; '.join(errores_base)}): sin él no sé "
+                            f"qué rutas del proyecto son sensibles. {FORMATO_RUTAS}")
+    return rutas
 
 
 def es_manifiesto(ruta: str) -> bool:
@@ -431,9 +570,11 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
                  readme_base: str | None, readme_head: str | None,
                  specs_head_ficheros: dict[str, str],
                  specs_base_ficheros: dict[str, str], por_defecto: str | None = None,
-                 submodulos: list[str] | None = None) -> None:
+                 submodulos: list[str] | None = None, rutas_fichero: list[str] | None = None) -> str:
     """por_defecto: el nivel que se toma si el PR no marca ninguno (solo los de Dependabot).
-    submodulos: los gitlinks (modo 160000) que el PR añade o cambia."""
+    submodulos: los gitlinks (modo 160000) que el PR añade o cambia.
+    rutas_fichero: las rutas de RUTAS_SENSIBLES en `main`; se suman a las del README de `main`.
+    Devuelve el nivel efectivo: el mayor entre el marcado y el mínimo según lo tocado."""
     marcados = RE_RIESGO_MARCADO.findall(seccion(cuerpo_pr, "Nivel de riesgo"))
     if not marcados and por_defecto:
         declarado = por_defecto
@@ -451,7 +592,9 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         if ORDEN[nivel] > ORDEN[minimo]:
             minimo = nivel
 
-    propias = rutas_sensibles(readme_base)
+    propias = patrones_del_readme(readme_base) + (rutas_fichero or [])
+    # Una ruta sin `/` final que nombra una carpeta también la cubre entera: nunca menos rutas.
+    propias += [p + "/*" for p in propias if not p.endswith("*")]
     for f in cambiados:
         if any(fnmatch.fnmatchcase(f, p) for p in R2_RUTAS):
             subir("R2", f"`{f}` (configuración del agente, CI o migraciones)")
@@ -460,11 +603,18 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
         elif es_manifiesto(f):
             subir("R2", f"`{f}` (dependencias)")
         elif any(fnmatch.fnmatchcase(f, p) for p in propias):
-            subir("R2", f"`{f}` (ruta sensible del README)")
+            subir("R2", f"`{f}` (ruta sensible del proyecto)")
     for f in submodulos or []:
         subir("R2", f"`{f}` (submódulo: su código no lo ve ningún escáner)")
-    if "README.md" in cambiados and rutas_sensibles(readme_head) != propias:
-        subir("R2", "cambia la lista de rutas sensibles")
+    if "README.md" in cambiados and rutas_sensibles(readme_head) != rutas_sensibles(readme_base):
+        subir("R2", "cambia la lista de rutas sensibles del README")
+        # G4-3-B-02: en el fichero, `[` y `?` son literales; al quitar una así del README, se pierde esa lectura.
+        for p in sorted(set(rutas_sensibles(readme_base)) - set(rutas_sensibles(readme_head))):
+            if patron_literal(p) != p:
+                inf.aviso("riesgo", f"⚠️ el PR quita `{p}` de las rutas sensibles del README. En `{RUTAS_SENSIBLES}`, "
+                                    "`[`, `]` y `?` se leen tal cual: comprueba que lo que cubría sigue cubierto.")
+    if RUTAS_SENSIBLES in cambiados:
+        subir("R2", f"cambia `{RUTAS_SENSIBLES}`, la lista de rutas sensibles")
     for f in cambiados:
         if es_spec(f):
             # El mayor entre main y el PR: un PR de spec no puede bajar su propio riesgo.
@@ -489,20 +639,19 @@ def check_riesgo(inf: Informe, cuerpo_pr: str, cambiados: list[str],
               f"- Nivel mínimo según lo tocado: **{minimo}**"]
     lineas += [f"  - {m}" for m in motivos]
     inf.secciones.append("### Nivel de riesgo\n\n" + "\n".join(lineas))
-    if declarado == "R0" and any(es_codigo(f) for f in cambiados):
-        inf.aviso("riesgo", "⚠️ PR R0 que toca código: la revisión IA es opcional. Comprueba que no cambia comportamiento.")
     if declarado and ORDEN[declarado] < ORDEN[minimo]:
         inf.error("riesgo", f"el PR está marcado {declarado} pero lo que toca exige {minimo}. Sube el nivel en el PR (la CI solo puede subirlo).")
+    return max(declarado or minimo, minimo, key=ORDEN.get)
 
 
 # --- Tests existentes que cambian -----------------------------------------
 
 def check_tests(inf: Informe, base: str) -> None:
-    diff = git("diff", "--name-status", "--no-renames", "--diff-filter=MD", f"{base}...HEAD") or ""
+    # Con -z, `--name-status` alterna el estado y la ruta.
+    campos = rutas("diff", "--name-status", "--no-renames", "--diff-filter=MD", f"{base}...HEAD") or []
     filas = []
-    for linea in diff.splitlines():
-        estado, _, ruta = linea.partition("\t")
-        if ruta and es_test(ruta):
+    for estado, ruta in zip(campos[::2], campos[1::2]):
+        if es_test(ruta):
             filas.append(f"- `{ruta}` ({'borrado' if estado == 'D' else 'modificado'})")
     if filas:
         inf.secciones.append("### Tests existentes que cambian\n\n"
@@ -954,10 +1103,9 @@ def gravedades_de_los_revisores(lineas: list[tuple[str, bool]],
     return gravedades
 
 
-def comentarios_de_cuentas(ruta: str) -> list[dict] | None:
-    """Los comentarios del PR que escribieron las cuentas de CUENTAS_G4, tal como los da la API y con
-    `html_url` como texto, de la salida de `gh api --paginate`: una lista por página, una detrás de
-    otra. None si no se puede leer."""
+def leer_paginas(ruta: str) -> list | None:
+    """Los elementos de la salida de `gh api --paginate`: una lista JSON por página, una detrás de
+    otra. None si no se puede leer o no tiene esa forma."""
     lector, paginas, i = json.JSONDecoder(), [], 0
     try:
         texto = Path(ruta).read_text(encoding="utf-8")
@@ -968,8 +1116,18 @@ def comentarios_de_cuentas(ruta: str) -> list[dict] | None:
         return None
     if not paginas or not all(isinstance(p, list) for p in paginas):
         return None
+    return [e for p in paginas for e in p]
+
+
+def comentarios_de_cuentas(ruta: str) -> list[dict] | None:
+    """Los comentarios del PR que escribieron las cuentas de CUENTAS_G4, tal como los da la API y con
+    `html_url` como texto, de la salida de `gh api --paginate`: una lista por página, una detrás de
+    otra. None si no se puede leer."""
+    elementos = leer_paginas(ruta)
+    if elementos is None:
+        return None
     comentarios = []
-    for c in (c for p in paginas for c in p):
+    for c in elementos:
         if not isinstance(c, dict):
             return None
         # Sin usuario (una cuenta borrada) no es de CUENTAS_G4: se ignora, no se falla por él.
@@ -1045,8 +1203,14 @@ def check_hallazgos(inf: Informe, cuerpo_pr: str, comentarios: list[tuple[str, s
     faltan = sorted(set(del_revisor) - vistos)
     if faltan:
         inf.error("hallazgos", f"los revisores dieron {', '.join(f'`{h}`' for h in faltan)} y la reconciliación no tiene su línea.")
+    # VIC-56 (ADR-0009 §5): con el auto-merge nadie los vería antes de fusionar. Fallan hasta que la
+    # resolución pase a `corregido en <sha>` o `descartado: <prueba>`. Límite aceptado (ADR-0009 §4, «G4
+    # depende del agente»): nada liga la nueva resolución a una respuesta de la persona; la cuenta del
+    # agente puede cambiarla sin que la persona conteste, como ya podía descartar con cualquier prueba.
     if preguntas:
-        inf.aviso("hallazgos", f"hallazgos pendientes de la persona: {', '.join(f'`{h}`' for h in preguntas)}. Respóndelos antes de aprobar.")
+        inf.error("hallazgos", f"hallazgos pendientes de la persona: {', '.join(f'`{h}`' for h in preguntas)}. El PR no se "
+                               f"fusiona hasta que conteste: entonces cambia `{PREGUNTA}` por `corregido en <sha>` o "
+                               "`descartado: <prueba>` (`sdd-review`).")
 
 
 # --- Respuestas borradas o editadas (VIC-47) ------------------------------
@@ -1096,8 +1260,8 @@ def check_respuestas(inf: Informe, cuerpo_pr: str, comentarios: list[dict], url_
             continue
         cuando = f"el {editado}" if isinstance(editado, str) and editado else "sin fechas en la API"
         inf.error("hallazgos", f"el comentario de G4 {c['html_url']} se editó después de publicarse ({cuando}). Una respuesta "
-                               "de G4 no se edita: publica otro comentario. Si la edición es legítima (por ejemplo, solo el SHA "
-                               "de «Commit revisado»), justifícala en «Revisión IA» con la línea "
+                               "de G4 no se edita: publica otro comentario. Si la edición es legítima (por ejemplo, una errata en "
+                               "el texto; nunca el SHA de «Commit revisado», que se repite en otra ronda), justifícala en «Revisión IA» con la línea "
                                "`Comentario editado: <enlace> · <motivo>`.")
 
 
@@ -1116,17 +1280,27 @@ RE_LISTA_A_MANO = re.compile(r"^\s*(?:>\s*)*(?:#{1,6}\s+)?(?:[-*+]\s+|\d+[.)]\s+
 RE_RONDA_METRICAS = re.compile(r"^Métricas G4: PR #\d+ · ronda ([1-9]\d*) ·")
 
 
-def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, str], str], dict[int, set[str]]]:
+class Rondas(NamedTuple):
+    vistos: dict[tuple[int, str], str]       # (ronda, letra) → el commit que vio ese revisor (el último)
+    revisores: dict[int, set[str]]           # ronda → letras que salen en ella
+    repetidos: set[tuple[int, str]]          # (ronda, letra) con dos commits distintos
+
+
+def rondas_de_g4(comentarios: list[tuple[str, str]]) -> Rondas:
     """De los comentarios de CUENTAS_G4: el commit que vio cada revisor (ronda, letra), el último si
-    se repite, y los revisores que salen en cada ronda, por sus hallazgos o por su commit. Una ronda
-    sin hallazgos ni commit sale por su línea «Métricas G4», sin revisores."""
-    vistos, revisores = {}, {}
+    se repite, los revisores que salen en cada ronda, por sus hallazgos o por su commit, y los revisores
+    con dos commits distintos en la misma ronda (`check_cambios` falla por ellos). Una ronda sin hallazgos
+    ni commit sale por su línea «Métricas G4», sin revisores."""
+    vistos, revisores, repetidos = {}, {}, set()
     for _, cuerpo in comentarios:
         lineas, _ = lineas_visibles(cuerpo)
         for linea, plegada in lineas:
             m = None if plegada else RE_COMMIT_REVISADO.match(linea)
             if m:
-                vistos[(int(m.group(2)), m.group(3))] = m.group(4)
+                clave = (int(m.group(2)), m.group(3))
+                if vistos.get(clave, m.group(4)) != m.group(4):
+                    repetidos.add(clave)
+                vistos[clave] = m.group(4)
                 revisores.setdefault(int(m.group(2)), set()).add(m.group(3))
             elif (r := RE_RONDA_METRICAS.match(linea)):
                 revisores.setdefault(int(r.group(1)), set())
@@ -1134,7 +1308,7 @@ def rondas_de_g4(comentarios: list[tuple[str, str]]) -> tuple[dict[tuple[int, st
             elif (h := RE_RESPUESTA_PLEGADA.match(linea)):
                 ronda, letra = h.group(1).split("-")[1:3]
                 revisores.setdefault(int(ronda), set()).add(letra)
-    return vistos, revisores
+    return Rondas(vistos, revisores, repetidos)
 
 
 def texto_del_resumen(texto: str) -> str:
@@ -1144,14 +1318,16 @@ def texto_del_resumen(texto: str) -> str:
 
 
 def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[str, str]],
-                  cuerpo_pr: str = "") -> None:
+                  cuerpo_pr: str = "", nivel: str = "R1", aprobado: bool = False) -> None:
+    """nivel: el efectivo de `check_riesgo`. Por omisión R1, que es el que falla: nunca se salta la regla 3.
+    aprobado: si la última review decisiva de la persona aprueba la cabeza (`aprobacion_de_la_persona`)."""
     # La lista no se escribe a mano (VIC-39): lo que se ve en la descripción, también lo plegado.
     lineas, _ = lineas_visibles(cuerpo_pr)
     if any(RE_LISTA_A_MANO.match(linea) for linea, _ in lineas):
         inf.error("cambios", "la descripción del PR trae una lista de «Cambios tras la última ronda» escrita a mano. Quítala: "
                              "esa lista la calcula la CI desde el commit que vio cada revisor y está en el resumen de `checks-sdd`, "
                              "sección «Cambios tras la última ronda».")
-    vistos, revisores = rondas_de_g4(comentarios)
+    vistos, revisores, repetidos = rondas_de_g4(comentarios)
     # Sin ninguna ronda (R0, Dependabot, antes de G4) no hay nada que calcular.
     if not revisores:
         return
@@ -1163,7 +1339,17 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
         inf.error("cambios", f"falta el commit que vio {quien}: sin él no se pueden calcular los cambios tras la última ronda. "
                              f"Añade al comentario de cada revisor, fuera de `<details>`, la línea `Commit revisado: G4-{ronda}-<letra> · <sha de 40>` (`sdd-review`).")
         return
+    # Un revisor, un commit por ronda (G4-1-B-03 del PR 4): otro `Commit revisado` posterior movería el punto desde
+    # el que se cuenta lo que entra tras la ronda, sin otra ronda.
+    dobles = sorted(l for l in letras if (ronda, l) in repetidos)
+    if dobles:
+        inf.error("cambios", f"{', '.join(f'`G4-{ronda}-{l}`' for l in dobles)} tiene dos `Commit revisado` distintos en la ronda {ronda}. "
+                             "Cada revisor deja uno por ronda, el de la cabeza que vio: lo que entra después se revisa en otra "
+                             "ronda (`sdd-review`), no cambiando el commit.")
+        return
     nuevos: dict[str, str] = {}
+    # Lo que cambia desde lo que vio cada revisor hasta la cabeza, con su modo en la cabeza (unión de todos).
+    modos: dict[str, str | None] = {}
     for letra in letras:
         sha = vistos[(ronda, letra)]
         # Sin el commit en la historia de la cabeza (un rebase o un push forzado) no hay diff fiable.
@@ -1172,12 +1358,14 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
                                  "¿se reescribió la rama? Repite la ronda sobre la cabeza actual (`sdd-review`).")
             return
         salida = git("log", "--topo-order", "--reverse", "--format=%H%x1f%s", cabeza, f"^{sha}", f"^{base}")
-        if salida is None:
-            inf.error("cambios", f"no he podido leer con Git los commits desde `{sha[:12]}`.")
+        desde = modos_desde(sha, cabeza)
+        if salida is None or desde is None:
+            inf.error("cambios", f"no he podido leer con Git los commits o los ficheros desde `{sha[:12]}`.")
             return
         for linea in salida.splitlines():
             h, _, titulo = linea.partition("\x1f")
             nuevos.setdefault(h, titulo)
+        modos.update(desde)
     vio = ", ".join(f"{l} en `{vistos[(ronda, l)][:7]}`" for l in letras)
     lineas = [f"Ronda {ronda}; cada revisor vio: {vio}.", ""]
     if not nuevos:
@@ -1187,13 +1375,259 @@ def check_cambios(inf: Informe, base: str, cabeza: str, comentarios: list[tuple[
         # PR que cambian desde lo que vio cada revisor.
         orden = (git("rev-list", "--topo-order", "--reverse", cabeza, f"^{base}") or "").split()
         lineas += [f"- `{h[:7]}` {texto_del_resumen(nuevos[h])}" for h in orden if h in nuevos]
-        del_pr = set((git("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or "").splitlines())
-        ficheros = sorted({f for l in letras
-                           for f in (git("diff", "--name-only", "--no-renames", vistos[(ronda, l)], cabeza) or "").splitlines()} & del_pr)
+        del_pr = set(rutas("diff", "--name-only", "--no-renames", f"{base}...{cabeza}") or [])
+        ficheros = sorted(set(modos) & del_pr)
         if ficheros:
             lineas += ["", "Ficheros: " + ", ".join(texto_del_resumen(f) for f in ficheros)]
     inf.secciones.append("### Cambios tras la última ronda\n\n" + "\n".join(lineas))
+    if nuevos and nivel != "R2":
+        check_solo_documentacion_tras_la_ronda(inf, nivel, ronda, modos, aprobado)
 
+
+def modos_desde(visto: str, cabeza: str) -> dict[str, str | None] | None:
+    """Las rutas que cambian de `visto` a `cabeza`, con su modo en `cabeza` (None si se borran). Con
+    `--raw -z`, cada entrada es `:<modo viejo> <modo nuevo> <sha> <sha> <estado>` y la ruta."""
+    campos = rutas("diff", "--raw", "--no-renames", visto, cabeza)
+    if campos is None or len(campos) % 2:
+        return None
+    modos = {}
+    for meta, ruta in zip(campos[::2], campos[1::2]):
+        partes = meta.split(" ")
+        if len(partes) < 2:
+            return None
+        modos[ruta] = None if partes[1] == "000000" else partes[1]
+    return modos
+
+
+def check_solo_documentacion_tras_la_ronda(inf: Informe, nivel: str, ronda: int, modos: dict[str, str | None],
+                                           aprobado: bool) -> None:
+    """VIC-56, regla 3 (ADR-0009 §5): en R0 y R1, lo que entra tras la última ronda de G4 sin otra ronda solo
+    puede ser documentación (`es_documentacion`, el mismo criterio que el R0 sin G4). Se cuenta desde el commit
+    que vio cada revisor, así que un merge de `main` también cuenta. Si no lo es, hace falta otra ronda o la
+    aprobación de la persona sobre la cabeza (`aprobado`; decisión de Víctor del 2026-11-24). Lo normal es otra
+    ronda; la aprobación es para cuando no cabe (tras la ronda 3, o en una aclaración de una sola ronda), pero el
+    check no lo distingue. Un R2 no pasa por aquí: siempre la necesita (check `aprobacion`).
+    Límite aceptado hasta VIC-57 (Víctor, 2026-11-24): si la persona aprueba y después pide cambios o retira la
+    aprobación, y el relanzamiento de `sdd-relanzar.yml` no llega a ejecutarse, queda el verde anterior y un R0 o
+    R1 se podría fusionar solo. Si VIC-57 (caso D1) muestra que un «Request changes» no frena el auto-merge por sí
+    solo, este desbloqueo se quita antes de aplicar el ruleset."""
+    fuera = sorted(f for f, modo in modos.items() if not es_documentacion(f, modo))
+    if not fuera:
+        return
+    lista = ", ".join(f"`{texto_del_resumen(f)}`" for f in fuera[:10]) + (" y más" if len(fuera) > 10 else "")
+    if aprobado:
+        inf.secciones.append(f"### Tras la última ronda, aprobado por la persona\n\n- PR {nivel}: lo que no es solo documentación "
+                             f"({lista}) entra con la aprobación de la persona sobre la cabeza.")
+        return
+    inf.error("cambios", f"PR {nivel} con cambios tras la última ronda de G4 (la {ronda}) que no son solo documentación: {lista}. "
+                         "Nadie los ha revisado y el PR se fusionaría solo (ADR-0009 §5). Lanza otra ronda sobre la cabeza "
+                         "(`sdd-review`); sin otra ronda solo entran ficheros `.md` de documentación, salvo que la persona "
+                         f"apruebe la cabeza ({', '.join(f'`{p}`' for p in PERSONAS.values())}).")
+
+
+# --- PR sin G4 (VIC-56) ---------------------------------------------------
+
+# ADR-0009 §3.1 y §5: el agente no fusiona solo un PR sin G4, salvo un R0 que checks.py comprueba que es
+# solo documentación. Si no puede comprobarlo, el R0 cuenta como R1 y lleva G4 (aclaración de la decisión 1).
+# Revisores por PR, como en la tabla de `sdd-review` (no la cambia: la comprueba).
+REVISORES_R2_SPEC_ADR, REVISORES_OTROS = 2, 1
+# Instrucciones para agentes en cualquier carpeta (G4-1-B-01; GEMINI.md, G4-2-A-01): Claude Code lee el CLAUDE.md de la carpeta en la
+# que trabaja, y otros agentes, los AGENTS.md anidados. R2_RUTAS solo ve los de la raíz.
+INSTRUCCIONES_AGENTE = {"agents.md", "claude.md", "claude.local.md", "gemini.md"}
+
+
+def es_documentacion(ruta: str, modo: str | None) -> bool:
+    """Solo documentación: un `.md` que es un fichero normal (modo 100644) o que el PR borra (sin modo), sin
+    enlaces ni submódulos. No lo son una spec ni un ADR (suben a R1 y van a CODEOWNERS), las instrucciones de un
+    agente en cualquier carpeta (INSTRUCCIONES_AGENTE) ni nada dentro de una carpeta que empieza por punto
+    (`.claude/`, `.github/`, `.cursor/`…, también anidadas): es configuración. El mismo criterio vale para el R0
+    sin G4 y para lo que entra tras la última ronda. Las rutas sensibles del proyecto las decide el nivel."""
+    partes = ruta.split("/")
+    return (ruta.endswith(".md") and modo in (None, "100644") and not es_spec(ruta) and not es_adr(ruta)
+            and partes[-1].lower() not in INSTRUCCIONES_AGENTE and not any(c.startswith(".") for c in partes[:-1]))
+
+
+def check_g4(inf: Informe, nivel: str, cambiados: list[str], versionados: dict[str, str] | None,
+             comentarios: list[tuple[str, str]], dependabot: bool = False) -> None:
+    """nivel: el efectivo de `check_riesgo`. versionados: los modos del índice (`ficheros_versionados`);
+    sin ellos no se puede comprobar que un R0 sea solo documentación."""
+    # Dependabot no pasa por G4: es R2 y solo entra con la aprobación de la persona (check `aprobacion`).
+    if dependabot:
+        return
+    no_doc = [f for f in cambiados if versionados is None or not es_documentacion(f, versionados.get(f))]
+    if nivel == "R0" and not no_doc:
+        inf.secciones.append("### G4\n\n- R0 comprobado: el PR solo cambia documentación; no necesita G4.")
+        return
+    con_spec_o_adr = any(es_spec(f) or es_adr(f) for f in cambiados)
+    necesarios = REVISORES_R2_SPEC_ADR if nivel == "R2" or con_spec_o_adr else REVISORES_OTROS
+    rondas = rondas_de_g4(comentarios)
+    vistos, revisores = rondas.vistos, rondas.revisores
+    ronda = max(revisores, default=0)
+    # Solo cuenta el revisor que dejó el commit que vio: sin él, `cambios` ya falla.
+    letras = sorted(l for l in revisores.get(ronda, ()) if (ronda, l) in vistos)
+    # El texto del nivel en los mensajes: un R0 que llega aquí no se ha podido comprobar y cuenta como R1.
+    como = "R0 sin comprobar, cuenta como R1" if nivel == "R0" else nivel
+    if nivel == "R0":
+        detalle = ", ".join(f"`{texto_del_resumen(f)}`" for f in no_doc[:5]) + (" y más" if len(no_doc) > 5 else "")
+        motivo = ("no he podido leer los modos de los ficheros con Git" if versionados is None
+                  else f"no es solo documentación ({detalle})")
+        inf.aviso("g4", f"PR marcado R0 que {motivo}: cuenta como R1 y necesita G4 (ADR-0009, aclaración de la decisión 1).")
+    linea = (f"Ronda {ronda}: {len(letras)} revisor(es) con su commit ({', '.join(letras) or 'ninguno'})"
+             if ronda else "Ninguna ronda")
+    inf.secciones.append(f"### G4\n\n- Nivel: {como}; revisores necesarios: {necesarios}.\n- {linea}.")
+    if not ronda:
+        inf.error("g4", f"el PR no tiene G4: ningún comentario de {', '.join(f'`{c}`' for c in CUENTAS_G4)} con una ronda. "
+                        f"Un PR {como} no se fusiona sin revisión (ADR-0009 §5); lánzala con `sdd-review`.")
+    elif len(letras) < necesarios:
+        inf.error("g4", f"la última ronda de G4 (la {ronda}) tiene {len(letras)} revisor(es) con `Commit revisado` y este PR "
+                        f"({como}{', con spec o ADR' if con_spec_o_adr else ''}) "
+                        f"necesita {necesarios} (tabla de `sdd-review`).")
+
+
+# --- Aprobación de la persona en R2 (VIC-56) ------------------------------
+
+# ADR-0009 §3.4 y §5: el agente no fusiona solo un PR R2, toque o no rutas de CODEOWNERS. `checks-sdd`
+# falla en todo R2 hasta que la persona lo aprueba en GitHub, sobre el commit de la cabeza: un push
+# posterior la deja sin valor. Solo cuenta la review de estas cuentas, nunca la del agente (CUENTAS_G4
+# incluye la suya). `sdd.yml` pasa las reviews en PR_REVIEWS, leídas en cada ejecución; al aprobar o retirar
+# una aprobación, `sdd-relanzar.yml` vuelve a lanzar su última ejecución de `pull_request`.
+# Por `user.id` y no por login: si la cuenta cambiara de nombre, otra podría registrar el libre, y en un
+# repo público cualquiera envía reviews. El login solo sirve para los mensajes.
+# Id de una cuenta: `gh api users/<login> --jq .id`.
+PERSONAS = {95044073: "victor-lg"}
+# Los estados que deciden; un COMMENTED no aprueba ni retira nada, como en GitHub.
+ESTADOS_DECISIVOS = {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
+
+
+def es_de_la_persona(review: object) -> bool:
+    return (isinstance(review, dict) and isinstance(review.get("user"), dict)
+            and type(review["user"].get("id")) is int and review["user"]["id"] in PERSONAS)
+
+
+def decisivas_de_la_persona(reviews: list) -> list[dict]:
+    return [r for r in reviews if es_de_la_persona(r) and r.get("state") in ESTADOS_DECISIVOS]
+
+
+def ultima_decisiva_de_la_persona(reviews: list) -> tuple[dict | None, bool]:
+    """(última, legible): la última review decisiva de PERSONAS, o None si no hay. Por id: es el orden en que
+    se enviaron. legible es False si alguna no tiene id numérico (un booleano no lo es): no se sabe cuál es."""
+    suyas = decisivas_de_la_persona(reviews)
+    if not all(type(r.get("id")) is int for r in suyas):
+        return None, False
+    return max(suyas, key=lambda r: r["id"], default=None), True
+
+
+def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
+    """(aprobado, motivo): la última review decisiva de PERSONAS es APPROVED y sobre `cabeza`."""
+    ultima, legible = ultima_decisiva_de_la_persona(reviews)
+    if not legible:
+        return False, "una review de la persona no tiene id"
+    if ultima is None:
+        return False, "no hay ninguna review de la persona"
+    if ultima["state"] != "APPROVED":
+        return False, {"CHANGES_REQUESTED": "la última review de la persona pide cambios",
+                       "DISMISSED": "la última review de la persona se retiró (dismiss)"}[ultima["state"]]
+    if ultima.get("commit_id") != cabeza:
+        return False, f"la persona aprobó `{str(ultima.get('commit_id'))[:12]}` y la cabeza es `{cabeza[:12]}`"
+    return True, f"aprobado por {PERSONAS[ultima['user']['id']]} en `{cabeza[:12]}`"
+
+
+def check_cabeza(inf: Informe, cabeza: str) -> None:
+    """El merge que prueba GitHub (HEAD) puede ser anterior a un push reciente, por ejemplo en un `edited`
+    lanzado justo después: los checks verían el contenido viejo y la aprobación se compararía con la
+    cabeza nueva. Sin la cabeza del PR en la historia de HEAD, ningún check es fiable, sea cual sea el
+    nivel. Volver a lanzar la ejecución no lo arregla: repite el mismo merge (sdd-relanzar.yml también)."""
+    if git("merge-base", "--is-ancestor", cabeza, "HEAD") is None:
+        inf.error("cabeza", f"la cabeza del PR (`{cabeza[:12]}`) no está en la historia del commit que se prueba: "
+                            "GitHub no había recalculado el merge tras el último push. Volver a lanzar esta ejecución "
+                            "prueba el mismo merge: edita la descripción del PR para que se lance una nueva.")
+
+
+def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str | None) -> None:
+    if nivel != "R2":
+        return
+    if reviews is None or not cabeza:
+        inf.error("aprobacion", "PR R2: no he podido leer las reviews del PR (PR_REVIEWS) o su cabeza, así que no sé si lo "
+                                "aprobó la persona. Un R2 no se fusiona sin su aprobación (ADR-0009 §3.4).")
+        return
+    aprobado, motivo = aprobacion_de_la_persona(reviews, cabeza)
+    inf.secciones.append(f"### Aprobación de la persona (R2)\n\n- {'Sí' if aprobado else 'No'}: {motivo}.")
+    if not aprobado:
+        inf.error("aprobacion", f"PR R2: {motivo}. Un R2 solo se fusiona con la aprobación de "
+                                f"{', '.join(f'`{p}`' for p in PERSONAS.values())} sobre el último commit (ADR-0009 §3.4); "
+                                "al aprobar, este check se vuelve a lanzar solo (en un PR de un fork, a mano).")
+
+
+
+# --- Peticiones de cambios de la persona (VIC-57) -------------------------
+
+# ADR-0009 §5, prueba D2 de VIC-57 (calculadora-discos#100): con 0 aprobaciones generales, un «Request changes»
+# de la persona frena el PR, pero la cuenta del agente puede descartarlo por la API y el PR queda fusionable;
+# los rulesets no limitan quién descarta reviews. Por eso `checks-sdd` falla, en cualquier nivel, si la última
+# review decisiva de PERSONAS pide cambios, o si una suya que pedía cambios la descartó otra cuenta, hasta que
+# la persona apruebe la cabeza. La lista de reviews solo dice DISMISSED, sin quién la descartó ni qué era: eso
+# sale de los eventos `review_dismissed` de la línea de tiempo del PR (PR_TIMELINE), con `actor` y
+# `dismissed_review` (`review_id` y su estado original, en minúsculas). Al descartar, `sdd-relanzar.yml` vuelve
+# a lanzar `checks-sdd`.
+
+
+def descartes_de_otras_cuentas(reviews: list, eventos: list) -> tuple[list[tuple[str | None, int]], bool]:
+    """([(cuenta, id de la review)], legible): las reviews de PERSONAS que pedían cambios y descartó una cuenta
+    que no está en PERSONAS. legible es False si un evento `review_dismissed` no tiene la forma esperada.
+    Una review que no está en la lista cuenta como de la persona: sin su autor no se sabe (falla cerrado).
+    Una review de PERSONAS en DISMISSED sin su evento cuenta como descartada por otra cuenta (cuenta None): sin
+    él no se sabe quién la descartó ni qué pedía, por ejemplo si la línea de tiempo va por detrás de las reviews."""
+    por_id = {r["id"]: r for r in reviews if isinstance(r, dict) and type(r.get("id")) is int}
+    descartes, con_evento = [], set()
+    for e in eventos:
+        if not isinstance(e, dict):
+            return [], False
+        if e.get("event") != "review_dismissed":
+            continue
+        descartada, actor = e.get("dismissed_review"), e.get("actor")
+        if (not isinstance(descartada, dict) or type(descartada.get("review_id")) is not int
+                or not isinstance(descartada.get("state"), str) or not (actor is None or isinstance(actor, dict))):
+            return [], False
+        con_evento.add(descartada["review_id"])
+        if descartada["state"].lower() != "changes_requested":
+            continue
+        actor = actor or {}  # una cuenta borrada: no es de PERSONAS
+        if type(actor.get("id")) is int and actor["id"] in PERSONAS:
+            continue
+        review = por_id.get(descartada["review_id"])
+        if review is None or es_de_la_persona(review):
+            descartes.append((str(actor.get("login") or "desconocida"), descartada["review_id"]))
+    descartes += [(None, r["id"]) for r in decisivas_de_la_persona(reviews)
+                  if r["state"] == "DISMISSED" and type(r.get("id")) is int and r["id"] not in con_evento]
+    return descartes, True
+
+
+def check_cambios_pedidos(inf: Informe, reviews: list | None, eventos: list | None, cabeza: str | None) -> None:
+    personas = ", ".join(f"`{p}`" for p in PERSONAS.values())
+    if reviews is None or eventos is None or not cabeza:
+        inf.error("cambios-pedidos", "no he podido leer las reviews del PR (PR_REVIEWS), su línea de tiempo (PR_TIMELINE) "
+                                     "o su cabeza, así que no sé si la persona pidió cambios ni si otra cuenta se los "
+                                     "descartó. Sin eso el PR no se fusiona (ADR-0009 §5).")
+        return
+    ultima, legible = ultima_decisiva_de_la_persona(reviews)
+    if not legible:
+        inf.error("cambios-pedidos", "una review de la persona no tiene id: no sé cuál es la última (ADR-0009 §5).")
+        return
+    if ultima is not None and ultima["state"] == "CHANGES_REQUESTED":
+        inf.error("cambios-pedidos", f"la última review de la persona ({personas}) pide cambios (review {ultima['id']}, "
+                                     f"en `{str(ultima.get('commit_id'))[:12]}`). El PR no se fusiona hasta que la persona "
+                                     "apruebe la cabeza o retire ella su review (ADR-0009 §5); al hacerlo, este check se "
+                                     "vuelve a lanzar solo.")
+    descartes, legible = descartes_de_otras_cuentas(reviews, eventos)
+    if not legible:
+        inf.error("cambios-pedidos", "un evento `review_dismissed` de la línea de tiempo del PR (PR_TIMELINE) no tiene la "
+                                     "forma esperada: no sé quién descartó qué review (ADR-0009 §5).")
+        return
+    if descartes and not aprobacion_de_la_persona(reviews, cabeza)[0]:
+        lista = ", ".join(f"`{cuenta}` la {n}" if cuenta else f"la {n}, sin evento que diga quién" for cuenta, n in descartes)
+        inf.error("cambios-pedidos", f"otra cuenta descartó una review de la persona que pedía cambios ({lista}). Solo "
+                                     f"la persona quita su freno: el PR no se fusiona hasta que {personas} apruebe la "
+                                     "cabeza (ADR-0009 §5).")
 
 # --- Programa -------------------------------------------------------------
 
@@ -1209,18 +1643,17 @@ def main() -> int:
     cuerpo_pr = os.environ.get("PR_BODY", "")
     inf = Informe()
 
-    diff = git("diff", "--name-only", "--no-renames", f"{args.base}...HEAD")
-    if diff is None:
+    cambiados = rutas("diff", "--name-only", "--no-renames", f"{args.base}...HEAD")
+    if cambiados is None:
         print(f"No se puede comparar con {args.base}. ¿Se hizo checkout con fetch-depth: 0?")
         return 2
-    cambiados = [l for l in diff.splitlines() if l]
 
     specs_head_ficheros = {p.relative_to(raiz).as_posix(): p.read_text(encoding="utf-8")
                            for p in sorted((raiz / "docs/specs").glob("*.md"))
                            if not p.name.startswith("_")}
-    base_listado = git("ls-tree", "-r", "--name-only", args.base, "--", "docs/specs") or ""
     specs_base_ficheros = {r: git("show", f"{args.base}:{r}") or ""
-                           for r in base_listado.splitlines() if es_spec(r)}
+                           for r in rutas("ls-tree", "-r", "--name-only", args.base, "--", "docs/specs") or []
+                           if es_spec(r)}
     readme_base = git("show", f"{args.base}:README.md")
     readme_head_p = raiz / "README.md"
     readme_head = readme_head_p.read_text(encoding="utf-8") if readme_head_p.exists() else None
@@ -1237,8 +1670,10 @@ def main() -> int:
                        specs_head, citas_en_tests(raiz), dependabot)
     versionados = ficheros_versionados()
     submodulos = [f for f in cambiados if (versionados or {}).get(f) == "160000"]
-    check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
-                 specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None, submodulos)
+    rutas_de_main = cargar_rutas_sensibles(inf, args.base, cambiados, versionados, raiz)
+    nivel = check_riesgo(inf, cuerpo_pr, cambiados, readme_base, readme_head,
+                         specs_head_ficheros, specs_base_ficheros, "R2" if dependabot else None, submodulos,
+                         rutas_de_main)
     check_tests(inf, args.base)
 
     rama, titulo = os.environ.get("PR_BRANCH", ""), os.environ.get("PR_TITLE", "")
@@ -1267,7 +1702,17 @@ def main() -> int:
     check_hallazgos(inf, cuerpo_pr, comentarios or [])
     if leidos is not None:
         check_respuestas(inf, cuerpo_pr, leidos, url_del_pr())
-    check_cambios(inf, args.base, os.environ.get("PR_HEAD_SHA") or "HEAD", comentarios or [], cuerpo_pr)
+    ruta_reviews = os.environ.get("PR_REVIEWS")
+    reviews = leer_paginas(ruta_reviews) if ruta_reviews else None
+    cabeza = os.environ.get("PR_HEAD_SHA") or (git("rev-parse", "HEAD") or "").strip()
+    aprobado = reviews is not None and bool(cabeza) and aprobacion_de_la_persona(reviews, cabeza)[0]
+    check_cambios(inf, args.base, cabeza or "HEAD", comentarios or [], cuerpo_pr, nivel, aprobado)
+    check_g4(inf, nivel, cambiados, versionados, comentarios or [], dependabot)
+    if os.environ.get("PR_HEAD_SHA"):
+        check_cabeza(inf, os.environ["PR_HEAD_SHA"])
+    check_aprobacion(inf, nivel, reviews, cabeza)
+    ruta_timeline = os.environ.get("PR_TIMELINE")
+    check_cambios_pedidos(inf, reviews, leer_paginas(ruta_timeline) if ruta_timeline else None, cabeza)
 
     partes = ["## Checks SDD", ""]
     partes += ["### Errores", ""] + [f"- {e}" for e in inf.errores] + [""] if inf.errores else ["Sin errores.", ""]

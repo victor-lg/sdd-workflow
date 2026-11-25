@@ -66,7 +66,7 @@ El agente propone el nivel; la CI puede subirlo, nunca bajarlo. Una aclaración 
 - **Clasificación de hallazgos:** *debe corregirse* (bloquea), *importante* (se corrige o se descarta con prueba) y *menor* (opcional). Cada hallazgo lleva un ID (`G4-<ronda>-<revisor>-NN`) y una prueba: un test, una línea o una cita.
 - **Reconciliación:** el agente contrasta los hallazgos con el código, corrige y lo explica en el PR, con una línea por hallazgo y su resolución: corregido en un commit, descartado con prueba o pregunta a la persona. El check `hallazgos` de la CI comprueba que ninguno queda sin resolver. Las respuestas de los revisores van en comentarios del PR, y el check solo lee los de las cuentas autorizadas (`CUENTAS_G4` en `checks.py`).
 - **Aclaración:** la lectura de un requisito que decide la persona cuando dos revisores lo leen de forma distinta y la spec no lo zanja. Se anota en el PR («Revisión IA») y pasa a la spec en un PR de spec antes de cerrar la issue.
-- **Cambios tras la última ronda:** lo que entra después sin otro revisor. Lo calcula el check `cambios` de la CI desde el commit que vio cada revisor (`Commit revisado:` en su comentario) y lo publica en el resumen de `checks-sdd`, para que lo leas. Escrita a mano en la descripción del PR, el check falla.
+- **Cambios tras la última ronda:** lo que entra después sin otro revisor. Lo calcula el check `cambios` de la CI desde el commit que vio cada revisor (`Commit revisado:` en su comentario) y lo publica en el resumen de `checks-sdd`, para que lo leas. Escrita a mano en la descripción del PR, el check falla. En R0 y R1 solo puede ser documentación (`.md` normales que no son specs, ADR ni instrucciones de agentes, fuera de carpetas que empiezan por punto): si no, el check falla y hace falta otra ronda o tu aprobación sobre la cabeza, pensada para cuando no cabe otra ronda (VIC-56). En R2 siempre la frena tu aprobación.
 
 ## La CI (`checks-sdd` y `tests`)
 
@@ -91,7 +91,7 @@ Pruebas de que el sistema frena lo que debe:
 ## Linear
 
 - **Estados:** *Inbox* (recién creada), *Discovery*, *Ready* (lista para implementar, G2), *In Progress*, *In Review*, *Done*, *Canceled*.
-- **"Fixes VIC-N"** en el PR cierra la issue al fusionar. **"Refs VIC-N"** la enlaza sin cerrarla: se usa cuando hay prueba en el iPhone después de publicar, y la cierras tú.
+- **"Fixes VIC-N"** en el PR cierra la issue al fusionar. **"Refs VIC-N"** la enlaza sin cerrarla: es lo habitual cuando la entrega tiene una prueba manual (en el iPhone, tras publicar…) o no consta si la tiene, y la cierras tú después de probar (M4).
 
 ## Herramientas y piezas
 

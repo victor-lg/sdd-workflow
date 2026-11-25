@@ -9,8 +9,9 @@
 # protegidas aunque algún día se delegue la revisión del resto del código.
 /docs/specs/    @victor-lg
 /docs/adr/      @victor-lg
+# Incluye .github/sdd/rutas-sensibles.txt, la lista de rutas sensibles del
+# proyecto (VIC-61): por eso README.md ya no hace falta aquí.
 /.github/       @victor-lg
 /.claude/       @victor-lg
 /AGENTS.md      @victor-lg
 /CLAUDE.md      @victor-lg
-/README.md      @victor-lg

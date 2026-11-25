@@ -1,0 +1,126 @@
+# Vuelve a lanzar `checks-sdd` al aprobar, pedir cambios o retirar una aprobación (VIC-56, ADR-0009 §3.4).
+#
+# En R2, `checks-sdd` solo pasa con la aprobación de la persona sobre la cabeza del PR. El ruleset exige
+# en verde la última ejecución de `checks-sdd` de cada evento: si `pull_request_review` lo ejecutara por
+# su cuenta, tras aprobar seguiría en rojo la última de `pull_request` y el PR quedaría bloqueado (prueba
+# en la calculadora, sdd-workflow#72). Por eso sdd.yml solo corre con `pull_request`, y este workflow
+# vuelve a lanzar su última ejecución para la cabeza: checks.py vuelve a leer las reviews en ese momento.
+#
+# No hace checkout ni ejecuta nada del PR. Los datos del evento entran por variables de entorno y se
+# validan antes de usarlos. Sus permisos: `actions: write`, el que pide volver a lanzar una ejecución, y
+# `pull-requests: read`, para leer la cabeza actual del PR.
+# El job no se llama `checks-sdd`: no es un check requerido. Si falla tras un Approve, el PR sigue bloqueado.
+# Si falla tras pedir cambios o retirar una aprobación, `checks-sdd` conserva el verde anterior hasta que
+# alguien lo relance: por eso el job falla en rojo y lo dice.
+#
+# En un PR de un fork, el token de `pull_request_review` es de solo lectura: falla y pide relanzarlo a mano.
+#
+# Límite aceptado: la lista de ejecuciones llega tarde (unos 7 s en calculadora-discos#87). Si un evento
+# `pull_request` llega justo antes de la review, su ejecución puede haber leído las reviews antes que esta y
+# no aparecer todavía en la lista: se relanzaría una anterior, que no cuenta, y este job no falla. La espera
+# inicial (AL_DIA) reduce esa ventana, pero no la cierra: pasa si la lista tarda más de AL_DIA segundos.
+# - Tras un Approve, el PR queda bloqueado: checks-sdd sigue en rojo.
+# - Tras «Request changes» o un dismiss, queda el verde anterior: el PR queda abierto con la aprobación
+#   retirada. Hay que revisarlo antes de que el agente pueda fusionar algún PR con aprobación previa de la
+#   persona (ADR-0009 §3.4, el paso de R2). Hasta entonces queda aceptado.
+# En los dos casos se arregla con el siguiente evento o relanzando a mano la última ejecución de checks-sdd.
+
+name: sdd-relanzar
+
+on:
+  # «Changes requested» es un `submitted`: también relanza, y el check vuelve a rojo.
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  actions: write
+  pull-requests: read
+
+# Una por PR y sin cancelar: si llegan dos reviews seguidas, la segunda espera a que la primera relance y
+# vuelve a relanzar, así que la última ejecución lee la última review.
+concurrency:
+  group: sdd-relanzar-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  relanzar-checks-sdd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Espera AL_DIA segundos a que la lista de ejecuciones muestre las de eventos anteriores a la review. Luego,
+      # en cada vuelta, lee la cabeza actual del PR (la API del PR no llega tarde, la lista sí). Si no es la de la
+      # review, hubo un push después: su ejecución ya lee las reviews, así que no hace nada. Si lo es, busca la
+      # última ejecución de `pull_request` del PR; si aún no hay ninguna de esa cabeza, la lista no se ha puesto
+      # al día y espera. Si sigue en curso, espera a que termine: relanzarla antes podría dejar una que leyó las
+      # reviews antes de esta. Luego la relanza siempre, aunque haya terminado después de la review: no se sabe
+      # cuándo las leyó. El relanzamiento no cancela la ejecución en curso (`concurrency` de sdd.yml), aunque sí
+      # sustituye a la que espere en el grupo: si aun así relanza una que no es la más nueva, eso no cambia lo
+      # que toma el ruleset. Si GitHub rechaza el
+      # relanzamiento (por ejemplo, porque otro acaba de pedirlo y la API aún no lo muestra en curso), vuelve a
+      # buscar y lo reintenta hasta tres veces.
+      - name: Volver a lanzar checks-sdd
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          AL_DIA: "20"
+          ESPERA: "10"
+          LIMITE: "600"
+        run: |
+          set -euo pipefail
+          a_mano="Relánzala a mano (pestaña Checks del PR, la última ejecución de checks-sdd del evento pull_request, «Re-run all jobs»). Hasta entonces, checks-sdd conserva el resultado de antes de esta review."
+          if [ "$PR_BASE" != "main" ]; then echo "La base del PR no es main: sdd.yml no corre en él y no hay nada que relanzar."; exit 0; fi
+          if [ "$PR_HEAD_REPO" != "$REPO" ]; then
+            echo "::error::El PR viene de un fork: con pull_request_review el token es de solo lectura y no puedo relanzar checks-sdd. $a_mano"
+            exit 1
+          fi
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ && "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::El número o la cabeza del PR no tienen el formato esperado"; exit 1; fi
+          echo "Espero ${AL_DIA} s a que la lista de ejecuciones se ponga al día."
+          sleep "$AL_DIA"
+          limite=$((SECONDS + LIMITE))
+          rechazos=0
+          while :; do
+            cabeza_pr=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha) || cabeza_pr=""
+            if ! [[ "$cabeza_pr" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::No pude leer la cabeza actual del PR. $a_mano"; exit 1; fi
+            if [ "$cabeza_pr" != "$PR_HEAD_SHA" ]; then
+              echo "La cabeza del PR es ahora ${cabeza_pr:0:12}, no ${PR_HEAD_SHA:0:12}: hubo un push después de esta review y su ejecución ya lee las reviews. No relanzo nada."
+              exit 0
+            fi
+            ultima=$(gh api "repos/$REPO/actions/workflows/sdd.yml/runs?event=pull_request&per_page=100" | python3 -I -c '
+          import json, os, sys
+          pr = int(os.environ["PR_NUMBER"])
+          runs = [r for r in json.load(sys.stdin)["workflow_runs"]
+                  if r.get("event") == "pull_request" and any(p.get("number") == pr for p in r.get("pull_requests") or [])]
+          if runs:
+              r = max(runs, key=lambda r: r["id"])
+              print(r["id"], r["status"], r["head_sha"])
+          ')
+            if [ -n "$ultima" ]; then read -r id estado cabeza <<< "$ultima"; else id=""; estado="ninguna"; cabeza=""; fi
+            if [ "$cabeza" != "$PR_HEAD_SHA" ]; then
+              if [ "$SECONDS" -ge "$limite" ]; then
+                echo "::error::Tras ${LIMITE} s no aparece ninguna ejecución de checks-sdd (pull_request) para ${PR_HEAD_SHA:0:12}: no relanzo nada. $a_mano"
+                exit 1
+              fi
+              echo "La última ejecución de checks-sdd que muestra la lista (${id:-ninguna}) no es de ${PR_HEAD_SHA:0:12}, la cabeza del PR: la lista aún no se ha puesto al día. Espero ${ESPERA} s."
+            elif [ "$estado" = "completed" ]; then
+              if gh run rerun "$id" --repo "$REPO"; then
+                echo "Relanzada la ejecución $id de checks-sdd para ${PR_HEAD_SHA:0:12}."
+                exit 0
+              fi
+              rechazos=$((rechazos + 1))
+              if [ "$rechazos" -ge 3 ]; then
+                echo "::error::GitHub no me deja relanzar la ejecución $id de checks-sdd. $a_mano"
+                exit 1
+              fi
+              echo "GitHub rechazó el relanzamiento de la ejecución $id. Espero ${ESPERA} s y vuelvo a buscar."
+            elif [ "$SECONDS" -ge "$limite" ]; then
+              echo "::error::La última ejecución de checks-sdd (pull_request) para ${PR_HEAD_SHA:0:12} sigue en «$estado» tras ${LIMITE} s: no la relanzo. $a_mano"
+              exit 1
+            else
+              echo "Última ejecución de checks-sdd para ${PR_HEAD_SHA:0:12}: $id ($estado). Espero ${ESPERA} s."
+            fi
+            sleep "$ESPERA"
+          done
