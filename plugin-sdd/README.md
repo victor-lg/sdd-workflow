@@ -25,7 +25,7 @@ Mitad "plugin" de la distribución del núcleo (ADR-0004, Q05). La otra mitad es
   - **Son una segunda capa contra errores del agente, no seguridad.** Leen el texto de la orden, así que `bash -c`, `eval`, variables, alias, `gh api` o scripts los esquivan (los tests lo fijan en `SE_ESQUIVA`). Lo que protege es el sandbox, los ajustes gestionados, el ruleset y la CI. Tampoco miran `git branch <nueva> origin/…`, `git branch -t`, `git worktree add` ni el `git switch <rama>` que crea sola una rama remota. En un repo sin `origin/main`, REG-83 no deja crear ramas: primero hay que tener el remoto y hacer `git fetch origin`. Las guardas siguen el `cd` en línea, pero no saben de subshells: tras `(cd otro && …)`, creen que la orden sigue en `otro`.
   - El consentimiento con caducidad (X-10) está diseñado, sin activar: `docs/consentimiento-con-caducidad.md`.
 
-Flujo normal: `sdd-discover` → `sdd-spec` → `sdd-review` (spec) → *merge humano* → `sdd-plan` → `sdd-implement` → `sdd-review` (código) → *merge humano*. `sdd-context` se usa dentro de los demás.
+Flujo normal: `sdd-discover` → `sdd-spec` → `sdd-review` (spec) → *merge humano* → `sdd-plan` → `sdd-implement` → `sdd-review` (código) → *merge humano*, o auto-merge en un R0 o R1 que no toca rutas de CODEOWNERS, en un repo con el ruleset del ADR-0009 (condiciones en `sdd-review`). `sdd-context` se usa dentro de los demás.
 
 ## Qué no contiene
 

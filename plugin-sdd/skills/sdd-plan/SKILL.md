@@ -3,7 +3,7 @@ name: sdd-plan
 description: Comprueba la Definition of Ready (G2) de una entrega, fija su nivel de riesgo, crea la rama y abre el PR borrador con el plan. Úsala justo antes de empezar a implementar una issue de Linear.
 ---
 
-<!-- Workflow SDD + IA v1.0 (G2, R0–R2, ADR-0003, ADR-0004 Q09). -->
+<!-- Workflow SDD + IA v1.1 (G2, R0–R2, ADR-0003, ADR-0004 Q09; rutas sensibles en su fichero, VIC-61; R0 sin G4 y auto-merge, ADR-0009, VIC-60). -->
 
 # sdd-plan
 
@@ -26,7 +26,7 @@ Un cambio R0 (errata, documentación, restaurar dependencias) no necesita spec: 
 
 Propón R0, R1 o R2 con una línea de motivo. La CI recalcula el mínimo y falla si marcas menos. La lista de disparadores es la de la línea base, §6 ("Disparadores que fuerzan R2"). En resumen:
 
-- R2 si toca dependencias, `.github/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, migraciones o las rutas sensibles del `README.md`;
+- R2 si toca dependencias, `.github/`, `.claude/`, `AGENTS.md`, `CLAUDE.md`, migraciones o las rutas sensibles del proyecto, que están en `.github/sdd/rutas-sensibles.txt` (mientras el proyecto migra, `checks.py` suma también la sección «Rutas sensibles» del `README.md`);
 - un PR de código hereda el `riesgo` de la spec que implementa;
 - un ADR es como mínimo R1.
 
@@ -44,10 +44,10 @@ Ante la duda, elige el nivel más alto. Nunca bajes un nivel para ahorrar reviso
    - un solo nivel de riesgo marcado;
    - los AC de la entrega en formato `SPEC-XXX-NNN/AC-NN` (la CI los contrasta con la spec de `main` y con los tests);
    - en "Plan y progreso", una lista de pasos verificables, proporcional al cambio. Cada paso dice qué AC cubre o qué comprueba.
-4. **Cambios R0:** el plan puede ser una línea. También se abren en borrador; con la CI en verde, `gh pr ready N` lo quita. Si no hubo `sdd-review`, el hook pregunta a la persona antes de quitarlo, porque no encuentra la línea «Métricas G4»: es lo esperado.
+4. **Cambios R0:** el plan puede ser una línea. También se abren en borrador; con la CI en verde, `gh pr ready N` lo quita. Solo van sin `sdd-review` si son solo documentación (el criterio está en `sdd-review`, sección 1); si no, cuentan como R1 y el check `g4` falla sin revisor. Sin `sdd-review`, el hook pregunta a la persona antes de quitar el borrador, porque no encuentra la línea «Métricas G4»: es lo esperado.
 
 ## Lo que no haces
 
 - No modificas la spec. La issue de Linear solo la lees y, si hace falta, la comentas: su estado, su descripción y sus etiquetas los cambia la persona.
 - No empiezas a implementar en esta skill: eso es `sdd-implement`.
-- No fusionas ni pides que se salten las reglas de rama.
+- No fusionas ni pides que se salten las reglas de rama. El auto-merge, solo en las condiciones de `sdd-review` (sección 4).
