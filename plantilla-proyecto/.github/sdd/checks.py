@@ -48,7 +48,8 @@ Comprueba:
   cambios-pedidos  VIC-57 (ADR-0009 §5), en cualquier nivel: falla si la última review decisiva de PERSONAS
                 pide cambios, o si una suya que pedía cambios la descartó una cuenta que no está en PERSONAS
                 (eventos `review_dismissed` de PR_TIMELINE, `gh api --paginate …/issues/N/timeline`), salvo
-                que después la persona apruebe la cabeza. Sin las reviews o la línea de tiempo, falla.
+                que después la persona apruebe la cabeza. Una review suya en DISMISSED sin su evento cuenta
+                como descartada por otra cuenta. Sin las reviews o la línea de tiempo, falla.
   cabeza        VIC-56: falla si PR_HEAD_SHA no está en la historia del commit que se prueba (el merge
                 de GitHub puede ser anterior a un push reciente).
 
@@ -1570,12 +1571,14 @@ def check_aprobacion(inf: Informe, nivel: str, reviews: list | None, cabeza: str
 # a lanzar `checks-sdd`.
 
 
-def descartes_de_otras_cuentas(reviews: list, eventos: list) -> tuple[list[tuple[str, int]], bool]:
+def descartes_de_otras_cuentas(reviews: list, eventos: list) -> tuple[list[tuple[str | None, int]], bool]:
     """([(cuenta, id de la review)], legible): las reviews de PERSONAS que pedían cambios y descartó una cuenta
     que no está en PERSONAS. legible es False si un evento `review_dismissed` no tiene la forma esperada.
-    Una review que no está en la lista cuenta como de la persona: sin su autor no se sabe (falla cerrado)."""
+    Una review que no está en la lista cuenta como de la persona: sin su autor no se sabe (falla cerrado).
+    Una review de PERSONAS en DISMISSED sin su evento cuenta como descartada por otra cuenta (cuenta None): sin
+    él no se sabe quién la descartó ni qué pedía, por ejemplo si la línea de tiempo va por detrás de las reviews."""
     por_id = {r["id"]: r for r in reviews if isinstance(r, dict) and type(r.get("id")) is int}
-    descartes = []
+    descartes, con_evento = [], set()
     for e in eventos:
         if not isinstance(e, dict):
             return [], False
@@ -1585,6 +1588,7 @@ def descartes_de_otras_cuentas(reviews: list, eventos: list) -> tuple[list[tuple
         if (not isinstance(descartada, dict) or type(descartada.get("review_id")) is not int
                 or not isinstance(descartada.get("state"), str) or not (actor is None or isinstance(actor, dict))):
             return [], False
+        con_evento.add(descartada["review_id"])
         if descartada["state"].lower() != "changes_requested":
             continue
         actor = actor or {}  # una cuenta borrada: no es de PERSONAS
@@ -1593,6 +1597,8 @@ def descartes_de_otras_cuentas(reviews: list, eventos: list) -> tuple[list[tuple
         review = por_id.get(descartada["review_id"])
         if review is None or es_de_la_persona(review):
             descartes.append((str(actor.get("login") or "desconocida"), descartada["review_id"]))
+    descartes += [(None, r["id"]) for r in decisivas_de_la_persona(reviews)
+                  if r["state"] == "DISMISSED" and type(r.get("id")) is int and r["id"] not in con_evento]
     return descartes, True
 
 
@@ -1618,7 +1624,7 @@ def check_cambios_pedidos(inf: Informe, reviews: list | None, eventos: list | No
                                      "forma esperada: no sé quién descartó qué review (ADR-0009 §5).")
         return
     if descartes and not aprobacion_de_la_persona(reviews, cabeza)[0]:
-        lista = ", ".join(f"`{cuenta}` la {n}" for cuenta, n in descartes)
+        lista = ", ".join(f"`{cuenta}` la {n}" if cuenta else f"la {n}, sin evento que diga quién" for cuenta, n in descartes)
         inf.error("cambios-pedidos", f"otra cuenta descartó una review de la persona que pedía cambios ({lista}). Solo "
                                      f"la persona quita su freno: el PR no se fusiona hasta que {personas} apruebe la "
                                      "cabeza (ADR-0009 §5).")

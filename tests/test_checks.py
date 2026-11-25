@@ -1941,6 +1941,26 @@ class TestCambiosPedidos(unittest.TestCase):
                 else:
                     self.assertFalla(inf, "otra cuenta descartó")
 
+    def test_descartada_sin_su_evento_cuenta_como_de_otra_cuenta(self):
+        """Sin su evento `review_dismissed` no se sabe quién la descartó ni qué pedía (la línea de tiempo puede
+        ir por detrás de las reviews): falla hasta que la persona apruebe la cabeza."""
+        descartada = review("DISMISSED", "a" * 40, n=3)
+        for eventos in ([], [{"event": "reviewed", "id": 3, "state": "dismissed"}],
+                        [descarte(4, estado="approved")], [{"event": "committed"}]):
+            with self.subTest(eventos=eventos):
+                inf = self.comprobar([descartada], eventos)
+                self.assertFalla(inf, "otra cuenta descartó una review de la persona que pedía cambios")
+                self.assertIn("(la 3, sin evento que diga quién)", inf.errores[0])
+        # Con su aprobación de la cabeza, después, pasa; sobre otro commit, no.
+        self.assertEqual(self.comprobar([descartada, review("APPROVED", CABEZA, n=5)]).errores, [])
+        self.assertFalla(self.comprobar([descartada, review("APPROVED", "a" * 40, n=5)]), "otra cuenta descartó")
+        # Con su evento, manda el evento: si la descartó ella, o era una aprobación, pasa.
+        for evento in (descarte(3, login="victor-lg", uid=ID_PERSONA), descarte(3, estado="approved")):
+            with self.subTest(evento=evento):
+                self.assertEqual(self.comprobar([descartada], [evento]).errores, [])
+        # La de otra cuenta en DISMISSED sin evento no es de la persona.
+        self.assertEqual(self.comprobar([review("DISMISSED", CABEZA, n=3, login="otra", uid=2)]).errores, [])
+
     def test_otros_descartes_no_cuentan(self):
         # Descartar una aprobación o un comentario no quita ningún freno; la de otra cuenta no es de la persona.
         for reviews, evento in (([review("DISMISSED", CABEZA, n=1)], descarte(1, estado="approved")),
@@ -2007,6 +2027,13 @@ class TestCambiosPedidosConMain(RepoConRonda, unittest.TestCase):
                 # Con su aprobación de la cabeza, pasa (en R2 la pide también `aprobacion`).
                 r = self.correr(nivel, reviews=descartada + [review("APPROVED", cabeza, n=2)], eventos=[descarte(1)])
                 self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_descartada_sin_su_evento_falla(self):
+        cabeza = self.git("rev-parse", "HEAD")
+        r = self.correr("R1", reviews=[review("DISMISSED", cabeza, n=1)], eventos=[])
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("**cambios-pedidos:** otra cuenta descartó", r.stdout)
+        self.assertIn("sin evento que diga quién", r.stdout)
 
     def test_sin_linea_de_tiempo_falla(self):
         r = self.correr("R1", reviews=[], eventos=None)
