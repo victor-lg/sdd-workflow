@@ -95,6 +95,8 @@ jobs:
       # La línea de tiempo del PR: checks.py busca en sus eventos `review_dismissed` quién descartó una review
       # de la persona que pedía cambios (VIC-57). La lista de reviews solo dice DISMISSED, sin quién ni qué era.
       # Descartar lanza sdd-relanzar.yml, que vuelve a lanzar esta ejecución y la vuelve a leer.
+      # Va después de las reviews, no antes: si el descarte llega entre las dos lecturas, las reviews aún dicen
+      # CHANGES_REQUESTED y checks.py falla. Al revés, verían DISMISSED sin el evento que dice quién fue.
       - name: Línea de tiempo del PR
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1142,6 +1142,9 @@ class TestAprobacionR2(unittest.TestCase):
     def test_sin_id_falla_cerrado(self):
         inf = self.comprobar([{"user": {"login": "victor-lg", "id": ID_PERSONA}, "state": "APPROVED", "commit_id": CABEZA}])
         self.assertIn("no tiene id", inf.errores[0])
+        # Un booleano no es un id (G4-1-A-01: el mismo criterio que `cambios-pedidos`).
+        inf = self.comprobar([{**review("APPROVED", CABEZA), "id": True}])
+        self.assertIn("no tiene id", inf.errores[0])
 
     def test_sin_reviews_o_sin_cabeza_falla_en_r2(self):
         for reviews, cabeza in ((None, CABEZA), ([review("APPROVED", CABEZA)], "")):
@@ -1972,6 +1975,7 @@ class TestCambiosPedidos(unittest.TestCase):
         r = review("CHANGES_REQUESTED", CABEZA)
         del r["id"]
         self.assertFalla(self.comprobar([r]), "no tiene id")
+        self.assertFalla(self.comprobar([{**review("CHANGES_REQUESTED", CABEZA), "id": True}]), "no tiene id")
 
     def test_los_dos_motivos_a_la_vez(self):
         inf = self.comprobar([review("DISMISSED", CABEZA, n=1), review("CHANGES_REQUESTED", CABEZA, n=2)], [descarte(1)])

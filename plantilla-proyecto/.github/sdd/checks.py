@@ -1507,15 +1507,22 @@ def decisivas_de_la_persona(reviews: list) -> list[dict]:
     return [r for r in reviews if es_de_la_persona(r) and r.get("state") in ESTADOS_DECISIVOS]
 
 
+def ultima_decisiva_de_la_persona(reviews: list) -> tuple[dict | None, bool]:
+    """(última, legible): la última review decisiva de PERSONAS, o None si no hay. Por id: es el orden en que
+    se enviaron. legible es False si alguna no tiene id numérico (un booleano no lo es): no se sabe cuál es."""
+    suyas = decisivas_de_la_persona(reviews)
+    if not all(type(r.get("id")) is int for r in suyas):
+        return None, False
+    return max(suyas, key=lambda r: r["id"], default=None), True
+
+
 def aprobacion_de_la_persona(reviews: list, cabeza: str) -> tuple[bool, str]:
     """(aprobado, motivo): la última review decisiva de PERSONAS es APPROVED y sobre `cabeza`."""
-    suyas = decisivas_de_la_persona(reviews)
-    if not suyas:
-        return False, "no hay ninguna review de la persona"
-    # Por id: es el orden en que se enviaron. Sin id numérico no se sabe cuál es la última.
-    if not all(isinstance(r.get("id"), int) for r in suyas):
+    ultima, legible = ultima_decisiva_de_la_persona(reviews)
+    if not legible:
         return False, "una review de la persona no tiene id"
-    ultima = max(suyas, key=lambda r: r["id"])
+    if ultima is None:
+        return False, "no hay ninguna review de la persona"
     if ultima["state"] != "APPROVED":
         return False, {"CHANGES_REQUESTED": "la última review de la persona pide cambios",
                        "DISMISSED": "la última review de la persona se retiró (dismiss)"}[ultima["state"]]
@@ -1596,11 +1603,10 @@ def check_cambios_pedidos(inf: Informe, reviews: list | None, eventos: list | No
                                      "o su cabeza, así que no sé si la persona pidió cambios ni si otra cuenta se los "
                                      "descartó. Sin eso el PR no se fusiona (ADR-0009 §5).")
         return
-    suyas = decisivas_de_la_persona(reviews)
-    if not all(type(r.get("id")) is int for r in suyas):
+    ultima, legible = ultima_decisiva_de_la_persona(reviews)
+    if not legible:
         inf.error("cambios-pedidos", "una review de la persona no tiene id: no sé cuál es la última (ADR-0009 §5).")
         return
-    ultima = max(suyas, key=lambda r: r["id"], default=None)
     if ultima is not None and ultima["state"] == "CHANGES_REQUESTED":
         inf.error("cambios-pedidos", f"la última review de la persona ({personas}) pide cambios (review {ultima['id']}, "
                                      f"en `{str(ultima.get('commit_id'))[:12]}`). El PR no se fusiona hasta que la persona "

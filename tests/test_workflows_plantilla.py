@@ -89,6 +89,8 @@ class WorkflowsDeLaPlantilla(unittest.TestCase):
         self.assertIn('gh api --paginate "repos/$REPO/issues/$PR_NUMBER/timeline?per_page=100" > '
                       '"$RUNNER_TEMP/sdd/linea-de-tiempo.json"', texto)
         self.assertIn("PR_TIMELINE: ${{ runner.temp }}/sdd/linea-de-tiempo.json", texto)
+        # Después de las reviews: un descarte entre las dos lecturas deja las reviews en CHANGES_REQUESTED y falla.
+        self.assertLess(texto.index("      - name: Reviews del PR\n"), texto.index("      - name: Línea de tiempo del PR\n"))
 
     def test_relanzar_solo_con_una_review(self):
         """VIC-56: aprobar, pedir cambios o retirar una aprobación relanza `checks-sdd` desde un workflow aparte,
