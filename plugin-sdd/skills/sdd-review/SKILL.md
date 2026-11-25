@@ -1,6 +1,6 @@
 ---
 name: sdd-review
-description: Organiza la revisión independiente G4 de un PR de spec o de código. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, y reconcilia sus hallazgos en el PR. Úsala cuando un PR de spec o de código esté listo para revisión.
+description: Organiza la revisión independiente G4 de un PR de spec o de código y su cierre. Lanza el número de revisores que exige el nivel de riesgo, cada uno con contexto limpio, reconcilia sus hallazgos en el PR y decide cómo se cierra (quitar el borrador, pedir el auto-merge o dejar que la persona apruebe y fusione). Úsala cuando un PR de spec o de código esté listo para revisión, y también para cerrarlo o desbloquearlo después de G4 (auto-merge, checks de la revisión en rojo, una review que pide cambios).
 ---
 
 <!-- Workflow SDD + IA v1.1 (G4, ADR-0001-M1, ADR-0006; métricas de G4, VIC-16; formato de hallazgos y respuestas en comentarios, VIC-38; commit revisado y cambios tras la última ronda en la CI, VIC-39; cada FR con sus AC en el encargo de spec, lecturas distintas de la spec y aclaraciones, camino corto para aclaraciones, VIC-40; foco de mantenibilidad con la rúbrica copiada de Pocock y thermos, M23, VIC-41; una línea de métricas por revisor, VIC-48; evaluaciones antes de quitar el borrador en los PR del plugin, VIC-51; checks `g4`, `aprobacion`, `cambios-pedidos` y `cabeza`, auto-merge y regla 3, ADR-0009, VIC-56, VIC-57 y VIC-60). -->

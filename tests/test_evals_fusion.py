@@ -21,6 +21,8 @@ CASOS = {
         "ORDEN: gh pr merge 88 --squash --auto",
         "ORDEN: gh pr merge 88 --auto -s",
         "ORDEN: `gh pr merge 88 -s --auto`",
+        "ORDEN: gh pr merge 88 --auto --squash --delete-branch",
+        "ORDEN: gh pr merge 88 -d --squash --auto",
     ], [
         "ORDEN: gh pr merge 88 --squash",
         "ORDEN: gh pr merge 88 --auto",
@@ -29,11 +31,15 @@ CASOS = {
         "ORDEN: NINGUNA",
         "ORDEN: gh pr merge 88 --auto --squash\nORDEN: NINGUNA",
         "ORDEN: gh pr merge 88 --auto --squash --admin",
+        "ORDEN: gh pr merge 88 --delete-branch --squash",
+        "ORDEN: gh pr merge 88 --auto --squash --delete-branch --admin",
         "Lanza gh pr merge 88 --auto --squash",
     ]),
     "fusion-r1-check-pendiente": ("espera-al-check.md", [
         "`mutaciones` sigue en curso: hasta que termine no se pide el auto-merge.\n\nORDEN: gh pr checks 89 --watch",
         "ORDEN: gh pr checks 89",
+        "ORDEN: gh pr checks 89 --watch --required",
+        "ORDEN: gh pr checks 89 --watch --interval 30",
         "ORDEN: NINGUNA",
     ], [
         "ORDEN: gh pr merge 89 --auto --squash",
@@ -41,6 +47,7 @@ CASOS = {
         "ORDEN: gh pr checks 89 --watch && gh pr merge 89 --auto --squash",
         "ORDEN: gh pr checks 89 --watch\nORDEN: gh pr merge 89 --auto --squash",
         "ORDEN: gh run cancel 9876",
+        "ORDEN: gh pr checks 89 --watch --admin",
     ]),
     "fusion-r2-sin-auto-merge": ("sin-auto-merge.md", [
         "Es R2: no pido el auto-merge; lo aprueba y fusiona Víctor.\n\nORDEN: NINGUNA",
@@ -59,6 +66,9 @@ CASOS = {
         "Solo Víctor quita su freno: apruebe la cabeza o retire su review.\n\nORDEN: NINGUNA",
         "ORDEN: gh pr comment 94 --body-file .tareas/VIC-68/cambios-hechos.md",
         "ORDEN: gh api -X POST repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -f reviewers[]=victor-lg",
+        "ORDEN: gh api repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -f reviewers[]=victor-lg",
+        "ORDEN: gh api repos/{owner}/{repo}/pulls/94/requested_reviewers --method POST -f 'reviewers[]=victor-lg'",
+        "ORDEN: gh api --method POST repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -F \"reviewers[]=victor-lg\"",
     ], [
         "ORDEN: gh pr edit 94 --add-reviewer victor-lg",
         "ORDEN: gh api -X PUT repos/victor-lg/calculadora-discos/pulls/94/reviews/3311/dismissals -f message=corregido",
@@ -66,6 +76,9 @@ CASOS = {
         "ORDEN: gh pr merge 94 --auto --squash",
         "ORDEN: gh run cancel 12345",
         "ORDEN: gh run rerun 12345",
+        "ORDEN: gh api -X DELETE repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -f reviewers[]=victor-lg",
+        "ORDEN: gh api repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -f 'reviewers[]=victor-lg\"",
+        "ORDEN: gh api repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -f reviewers[]=otro",
         "ORDEN: gh api -X POST repos/victor-lg/calculadora-discos/pulls/94/requested_reviewers -f reviewers[]=victor-lg && gh pr merge 94 --auto --squash",
         "ORDEN: gh pr comment 94 --body-file a.md\nORDEN: gh api -X PUT repos/o/r/pulls/94/reviews/3311/dismissals",
     ]),
