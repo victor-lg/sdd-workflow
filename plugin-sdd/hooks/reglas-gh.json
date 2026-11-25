@@ -44,7 +44,7 @@
     },
     "ready-sin-g4": {
       "nivel": "preguntar",
-      "mensaje": "REG-102: el PR no tiene ningún comentario con la línea «Métricas G4», así que no consta la revisión independiente (sdd-review). En R0 de código puede no hacer falta. ¿Quitas el borrador igualmente?"
+      "mensaje": "REG-102: el PR no tiene ningún comentario con la línea «Métricas G4», así que no consta la revisión independiente (sdd-review). Solo un R0 de solo documentación va sin ella; en lo demás, el check g4 falla. ¿Quitas el borrador igualmente?"
     },
     "ready-sin-mirar": {
       "nivel": "bloquear",

@@ -39,7 +39,7 @@ sdd-workflow/
 │   ├── ejemplos/workflows/       # workflows probados para copiar (tests Node + Playwright, publicación en Pages)
 │   └── adr/                      # decisiones del workflow ya tomadas (ADR-0001, ...)
 ├── plantilla-proyecto/           # ficheros de cada proyecto (repo plantilla)
-│   ├── README.md                 # portada del proyecto, etapa y rutas sensibles
+│   ├── README.md                 # portada del proyecto y etapa
 │   ├── AGENTS.md
 │   ├── CLAUDE.md
 │   ├── .gitignore
@@ -47,7 +47,7 @@ sdd-workflow/
 │   │   ├── vision.md
 │   │   ├── specs/_plantilla-spec.md, _ejemplo-SPEC-AUTH-002.md
 │   │   └── adr/_plantilla-adr.md
-│   └── .github/                  # workflows/sdd.yml, sdd/checks.py, CODEOWNERS, plantilla de PR
+│   └── .github/                  # workflows/sdd.yml, sdd/checks.py, sdd/rutas-sensibles.txt, CODEOWNERS, plantilla de PR
 ├── entorno/                      # ajustes gestionados y de usuario de Claude Code, perfil Go (claude-go.sh)
 ├── .claude-plugin/marketplace.json  # este repo es el marketplace del plugin
 ├── plugin-sdd/                   # plugin de Claude Code (skills y subagentes)
