@@ -61,7 +61,7 @@ Toma la primera opción que funcione del todo:
 - **Fallos:** distingue un fallo causado por tu cambio de uno previo o de infraestructura.
 - **Tests intermitentes:** se reportan como tales; no se repiten hasta que pasen.
 - **Tres intentos:** tras 3 intentos fallidos sobre el mismo problema, detente, resume lo probado y pregunta.
-- **Una sesión por PR (M20),** también cuando la entrega va en varios. Cada PR tiene su fichero de estado, `.tareas/<ID>-<rama>.md`, que solo escribe la sesión de ese PR: objetivo, PR en curso y los que faltan, progreso verificado, ficheros tocados, pruebas y resultados, bloqueos y siguiente paso. Es tu estado de trabajo entre sesiones, no la fuente de autoridad: el de la entrega vive en la issue. Actualízalo al terminar el PR y si la sesión se interrumpe. Al empezar el PR siguiente, lee el del anterior (cópialo si está en otra copia del repo) sin escribir en él; al reanudar, lee el tuyo. En los dos casos, contrástalo con Git y la CI antes de actuar.
+- **Una sesión por PR (M20),** también cuando la entrega va en varios. Si la entrega va en varios PR (al terminar cada uno) o la sesión se interrumpe, guarda el estado en el fichero de tu PR, `.tareas/<ID>-<rama>.md`, que solo escribe la sesión de ese PR: objetivo, PR en curso y los que faltan, progreso verificado, ficheros tocados, pruebas y resultados, bloqueos y siguiente paso. Es tu estado de trabajo entre sesiones, no la fuente de autoridad: el de la entrega vive en la issue. Una entrega de un solo PR que termina en su sesión no lo necesita. Al empezar el PR siguiente, lee el del anterior (cópialo si está en otra copia del repo) sin escribir en él; al reanudar, lee el tuyo. En los dos casos, contrástalo con Git y la CI antes de actuar.
 - **Subagentes, solo con un motivo explícito,** y dilo al lanzarlos: explorar (buscar en muchos ficheros sin traer su contenido), verificar de forma independiente (los revisores de `sdd-review`) o relevar una sesión larga. No para repartir la implementación de un PR. Un relevo retoma desde el fichero de estado de su PR y devuelve el control antes de `sdd-review`: los revisores los lanza la sesión que ejecuta `sdd-review`, nunca el relevo, y ninguno recibe tu razonamiento ni el del relevo (`sdd-review`, sección 2).
 
 ## Al terminar
@@ -76,7 +76,7 @@ Toma la primera opción que funcione del todo:
    - Evidencia de que funciona: comandos y su salida, capturas o pasos de prueba manual, y la salida en rojo de cada test nuevo. Demuestra, no afirmes. Las capturas de evidencia y los ficheros de trabajo van en `.tareas/<ID>/`, que Git ignora; nunca en `/tmp` ni en `$TMPDIR` (M12).
    - Tamaño en líneas de código. Si supera unas 400, explica por qué no se partió.
 4. Pasa a `sdd-review`. No marques el PR como listo para fusionar sin la revisión exigida.
-5. No borres tu fichero de estado al terminar: lo lee el PR siguiente. Al empezar un PR, borra los de los PR ya fusionados de la entrega, una vez leídos. Git ignora `.tareas/`, así que el del último no estorba.
+5. Si tienes fichero de estado, no lo borres al terminar: lo lee el PR siguiente. Al empezar un PR, borra los de los PR ya fusionados de la entrega, una vez leídos. Git ignora `.tareas/`, así que el del último no estorba.
 
 ## Lo que nunca haces
 
