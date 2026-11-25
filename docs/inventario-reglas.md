@@ -267,6 +267,7 @@ Corrección posterior (VIC-60, decisión de Víctor del 2026-11-25), con el mism
 | --- | --- |
 | Las citas a ADR del workflow: «ADR-0007» en «Commits» y «el ruleset del ADR-0009» en «Fusionar» | Dicen «del workflow», para no confundirlos con los ADR del proyecto (`docs/adr/`) |
 | La excepción para descartar reviews o cancelar la CI: «un plan de prueba que ella apruebe en GitHub, en PR desechables» | Solo con un plan de prueba en un PR que la persona fusiona, y solo en los PR desechables que el plan nombra |
-| Hooks del plugin: «Cambiar `lefthook.json`, `.gitleaks.toml`, `.gitleaksignore` o `.gitattributes` pide permiso» | Sale: es la pregunta de `guarda-saltos.py`, que ya la hace y explica en su mensaje; la línea sigue nombrando los hooks del plugin |
+| Hooks del plugin: «Cambiar `lefthook.json`, `.gitleaks.toml`, `.gitleaksignore` o `.gitattributes` pide permiso» | Pasa a los hooks de Git como «No cambies … sin permiso»: es una instrucción para cualquier agente, no solo la pregunta de `guarda-saltos.py`, que solo existe en Claude Code (G4-1-B-01) |
+| Hooks de Git: «Si gitleaks te para, saca el secreto de lo preparado y del fichero» | Sale: lo dice el `fail_text` de gitleaks en `lefthook.json`, que ve cualquier agente, y la entradilla («su mensaje dice qué hacer») |
 
-`AGENTS.md` pasa de ~1547 a ~1538 tokens.
+`AGENTS.md` pasa de ~1547 a ~1545 tokens.
