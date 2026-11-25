@@ -8,7 +8,7 @@ Instrucciones para cualquier agente que trabaje en este repositorio. Los procedi
 
 - Comportamiento esperado: `docs/specs/`. Solo es vigente lo que está en `main`. Los requisitos compartidos viven en specs `SPEC-XCUT-*`: cítalas por ID, nunca copies su texto.
 - Visión del producto: `docs/vision.md`.
-- Planificación de entregas: la issue de Linear de la tarea. Léela; solo puedes comentarla (el hook `guarda-linear.py` bloquea el resto). Usa su ID en la rama, en el pie de los commits y en el PR. El estado de la entrega vive en la issue.
+- Planificación de entregas: la issue de Linear de la tarea. Léela; solo puedes comentarla (el hook `guarda-linear.py` bloquea el resto). Usa su ID en la rama, en el pie de los commits y en el PR. El estado de la entrega vive en la issue; con prueba manual, la cierra la persona (`Refs`).
 - Decisiones de arquitectura: `docs/adr/`, con estado `Aceptado` y fusionadas en `main`. Un ADR `Aceptado` en una rama sin fusionar no tiene autoridad.
 - Implementación: el código y los tests existentes.
 - Las notas de `discovery/`, la memoria, los resúmenes y las conversaciones son contexto, nunca norma.
@@ -20,7 +20,7 @@ Instrucciones para cualquier agente que trabaje en este repositorio. Los procedi
 - Nunca elimines tests, relajes controles ni modifiques AC para que la CI pase.
 - No afirmes haber consultado fuentes o ejecutado pruebas que no consultaste o ejecutaste.
 - Al reanudar, contrasta cualquier resumen con el estado real de Git y de la CI antes de actuar.
-- Una sesión por PR, también en entregas partidas, y nunca en la copia de otra sesión: usa tu clon o `git worktree` (`sesion-unica.py` avisa). Subagentes, solo para explorar, verificar aparte o relevar una sesión larga.
+- Una sesión por PR, también en entregas partidas, cada una en su clon o `git worktree` (`sesion-unica.py` avisa). Subagentes, solo para explorar, verificar aparte o relevar una sesión larga.
 - **Commits** (ADR-0007; el formato lo comprueban el hook `commit-msg` de `lefthook.json` y la CI): el título, como el del PR, `<tipo>(<alcance>)!: <descripción>`, con el tipo `feat`, `fix`, `spec`, `adr`, `refactor`, `test`, `docs`, `ci` o `chore`; el alcance, la zona del código o del documento, nunca el ID; la descripción, en español, en imperativo y en minúscula, sin punto final y con 72 caracteres como máximo; `!` solo si rompe compatibilidad. El cuerpo, opcional, tras una línea en blanco; el pie, en este orden: `Refs: VIC-N` (siempre), `Spec: SPEC-XXX-NNN/AC-NN` y `BREAKING CHANGE: …` si aplica. Nada de `fixup!`, `squash!` ni el `Revert "…"` que propone `git revert`.
 
 ## Lo que ya comprueba una máquina
