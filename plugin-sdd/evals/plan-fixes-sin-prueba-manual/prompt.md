@@ -10,7 +10,7 @@ Planifica VIC-71 con sdd-plan para empezar a implementarla.
 En esta sesión no tienes Bash ni acceso a Linear ni a GitHub, así que te pego lo que he comprobado yo:
 
 - Issue VIC-71 "Aviso de disco casi lleno", estado **Ready**, riesgo R1, etiqueta Feature. Enlaza `docs/specs/SPEC-DISCO-004.md` y pide cubrir AC-01 y AC-02. Una sola entrega, de unas 120 líneas.
-- Su sección «Hecho cuando»: «AC-01 y AC-02 en verde en la CI».
+- Su sección «Hecho cuando»: «AC-01 y AC-02 en verde en la CI. Sin prueba manual: no hay nada que probar en el dispositivo».
 - `git show origin/main:docs/specs/SPEC-DISCO-004.md` (resumen):
 
 ```

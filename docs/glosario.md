@@ -91,7 +91,7 @@ Pruebas de que el sistema frena lo que debe:
 ## Linear
 
 - **Estados:** *Inbox* (recién creada), *Discovery*, *Ready* (lista para implementar, G2), *In Progress*, *In Review*, *Done*, *Canceled*.
-- **"Fixes VIC-N"** en el PR cierra la issue al fusionar. **"Refs VIC-N"** la enlaza sin cerrarla: se usa cuando hay prueba en el iPhone después de publicar, y la cierras tú.
+- **"Fixes VIC-N"** en el PR cierra la issue al fusionar. **"Refs VIC-N"** la enlaza sin cerrarla: es lo habitual cuando la entrega tiene una prueba manual (en el iPhone, tras publicar…) o no consta si la tiene, y la cierras tú después de probar (M4).
 
 ## Herramientas y piezas
 

@@ -29,6 +29,14 @@ CASOS = {
         "ENLACE: Refs VIC-71\nENLACE: Fixes VIC-71",
         "Pondría Refs VIC-71",
     ]),
+    "plan-refs-sin-hecho-cuando": ([
+        "No consta si hay prueba manual: ante la duda, Refs.\n\nENLACE: Refs VIC-71",
+        "ENLACE: Refs: VIC-71",
+    ], [
+        "ENLACE: Fixes VIC-71",
+        "ENLACE: Part of VIC-71",
+        "ENLACE: Refs VIC-71\nENLACE: Fixes VIC-71",
+    ]),
     "plan-fixes-sin-prueba-manual": ([
         "Un solo PR y sin prueba manual.\n\nENLACE: Fixes VIC-71",
         "ENLACE: Fixes: VIC-71",
