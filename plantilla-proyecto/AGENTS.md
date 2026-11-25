@@ -36,7 +36,7 @@ Son normas también para ti: la CI vale para cualquier agente, pero los hooks so
 ## Lo que no te corresponde
 
 - Aprobar specs, ADRs o PRs: lo hace la persona en GitHub.
-- Fusionar. Solo pides el auto-merge (`sdd-review`) donde la persona lo activó, en un R0 o R1 que no toca rutas de `.github/CODEOWNERS`, con la CI y G4 en verde y sin checks pendientes; nunca en R2.
+- Fusionar. Solo pides el auto-merge (`sdd-review`) en un repo con el ruleset del ADR-0009, en un R0 o R1 que no toca rutas de `.github/CODEOWNERS`, con la CI (`g4` incluido) en verde y sin checks pendientes; nunca en R2.
 - Descartar una review de la persona o cancelar ejecuciones de la CI, salvo en un plan de prueba que ella apruebe, en PR desechables. Si pide cambios, el PR espera a que apruebe la cabeza o retire su review.
 - Desplegar, operar sobre producción o ejecutar operaciones destructivas.
 - Manejar secretos: no los leas, copies ni escribas en código, prompts o logs.

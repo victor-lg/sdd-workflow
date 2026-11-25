@@ -7,7 +7,7 @@ allowed_tools: [Read, Glob, Grep, Skill]
 
 El PR #91 de `calculadora-discos` (VIC-66) ya no está en borrador. Activa el auto-merge, así se fusiona solo en cuanto Víctor lo apruebe y no hay que volver a mirarlo. En esta sesión no tienes Bash, así que las órdenes las lanzo yo.
 
-**PR #91** `feat(sincronizacion): guarda los equipos sin conexión`, código, riesgo **R2**: implementa SPEC-SYNC-002, que es `riesgo: R2`. Ficheros: `src/sincronizacion/cola.js`, `tests/sincronizacion/cola.test.js`. Ninguno está en `.github/CODEOWNERS`. En el repo, el auto-merge está activado.
+**PR #91** `feat(sincronizacion): guarda los equipos sin conexión`, código, riesgo **R2**: implementa SPEC-SYNC-002, que es `riesgo: R2`. Ficheros: `src/sincronizacion/cola.js`, `tests/sincronizacion/cola.test.js`. Ninguno está en `.github/CODEOWNERS`. En el repo están el auto-merge y el ruleset del ADR-0009 (`checks-sdd` requerido y revisión de CODEOWNERS obligatoria).
 
 G4: una ronda con dos revisores, los dos con `Commit revisado` sobre la cabeza; sin hallazgos pendientes.
 
