@@ -44,9 +44,9 @@ def sin_reviews(carpeta: pathlib.Path) -> dict[str, str]:
 
 
 def cuerpo_plantilla(primera: str) -> str:
-    """La plantilla de PR real con la línea de `Fixes VIC-<N>` sustituida."""
+    """La plantilla de PR real con la línea del enlace (`<Refs, Fixes o Part of> VIC-<N>`) sustituida."""
     texto = (PLANTILLA / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
-    return texto.replace("Fixes VIC-<N>", primera, 1)
+    return texto.replace("<Refs, Fixes o Part of> VIC-<N>", primera, 1)
 
 
 # --- M11 -------------------------------------------------------------------
@@ -138,7 +138,7 @@ class TestConvenciones(unittest.TestCase):
         self.assertEqual(inf.errores, [])
 
     def test_enlaces_invalidos(self):
-        for primera in ["Fixes VIC-<N>", "Closes VIC-12", "fixes VIC-12", "Fixes #12", "Fixes VIC12",
+        for primera in ["<Refs, Fixes o Part of> VIC-<N>", "Fixes VIC-<N>", "Closes VIC-12", "fixes VIC-12", "Fixes #12", "Fixes VIC12",
                         "Issue de Linear: VIC-12", "Este PR arregla VIC-12", "Fixes ABC-12"]:
             with self.subTest(primera=primera):
                 inf = self.comprobar(cuerpo=cuerpo_plantilla(primera))

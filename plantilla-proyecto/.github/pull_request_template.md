@@ -7,7 +7,12 @@ Se fusiona solo por squash: el título será el commit de `main`. Sin menciones 
 
 ## Por qué existe este cambio
 
-Fixes VIC-<N> <!-- Sustituye <N> por el número de la issue. "Part of VIC-<N>" si no es el último PR de la entrega; "Refs VIC-<N>" si la issue no debe cerrarse al fusionar. -->
+<Refs, Fixes o Part of> VIC-<N>
+<!-- La primera línea enlaza la issue (M4, ADR-0009 del workflow; `sdd-plan`). Elige uno:
+  Refs: la entrega tiene prueba manual, o la issue no dice que no la tenga. La cierra la persona tras probar.
+  Fixes: la issue dice que no hay prueba manual y es el último PR de la entrega. Se cierra al fusionar.
+  Part of: un PR anterior de una entrega partida.
+Sin uno de los tres, el check `convenciones` falla. -->
 
 ## Plan y progreso
 
@@ -74,7 +79,17 @@ Revisores exigidos: 2 en spec y ADR (R1 y R2) y en el código R2; 1 en el códig
 
 ## Aprobación humana (G6)
 
-<!-- La marca la persona que aprueba. Afirma que ha comprobado la evidencia y acepta el riesgo restante, no que ha leído cada línea (línea base §8). -->
+<!-- Quién aprueba (ADR-0009 del workflow, §3.1 a §3.5):
+  - La persona, siempre, los R2 y los PR que tocan rutas de `.github/CODEOWNERS`. Los aprueba en GitHub sobre el último
+    commit y los fusiona ella. El CODEOWNERS de la plantilla empieza por `*`: mientras no se acote a las rutas sensibles
+    del ADR-0009 (specs, ADR, dependencias, `.github/`, la configuración del agente y los ficheros de control), todo PR
+    las toca.
+  - Con auto-merge, sin la persona: los R0 y R1 que no tocan esas rutas, en un repo con el ruleset del ADR-0009, con la CI
+    (`g4` incluido) en verde. Lo pide el agente (`sdd-review`); la aprobación es la de las reglas de GitHub y nadie marca
+    estas casillas. Los repasa después la segunda mirada semanal.
+  En un repo sin ese ruleset, la persona aprueba y fusiona todos.
+  Las casillas las marca la persona que aprueba. Afirman que ha comprobado la evidencia y acepta el riesgo restante,
+  no que ha leído cada línea (línea base §8). -->
 
 - [ ] Los AC son los de la issue y he leído todo cambio en tests existentes.
 - [ ] CI y revisión IA en verde, sin hallazgos que deban corregirse.

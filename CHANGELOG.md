@@ -4,6 +4,12 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
 
 ## v1.1 — en curso
 
+- **La plantilla de PR, según el ADR-0009: sin enlace escrito y con quién aprueba en G6 (VIC-63).** Sale de VIC-60 (el pendiente de su PR 1). El plugin no cambia.
+  - **Enlace:** la plantilla ya no trae `Fixes VIC-<N>` escrito, sino el marcador `<Refs, Fixes o Part of> VIC-<N>` y un comentario con cuándo va cada uno (M4): «Refs» con prueba manual o si la issue no dice que no la haya; «Fixes» solo si dice que no y es el último PR; «Part of» en los anteriores. Sin sustituirlo, falla `convenciones`. **`docs/convenciones.md` §5,** al día.
+  - **G6:** el comentario de la sección distingue lo que aprueba y fusiona la persona (R2 y rutas de `.github/CODEOWNERS`) de lo que entra con auto-merge (R0 y R1 que no tocan esas rutas, en un repo con el ruleset del ADR-0009 y la CI en verde, `g4` incluido), donde nadie marca las casillas. En un repo sin ese ruleset, la persona aprueba y fusiona todos. Las casillas no cambian.
+  - **`tests/test_checks.py`:** `cuerpo_plantilla` sustituye el marcador nuevo, y `test_enlaces_invalidos` prueba la plantilla sin rellenar (el marcador tal cual), que antes cubría `Fixes VIC-<N>` (G4-1-B-03). Siguen siendo 232 pruebas (decisiones de Víctor del 2026-11-26, que amplían los ficheros permitidos de la issue).
+  - **Calculadora:** la copia de `.github/pull_request_template.md` la sube la persona tras fusionar; el fichero y su SHA-256 están en el PR.
+
 - **`AGENTS.md` de la plantilla y `sdd-review`: los ADR del workflow y la excepción del plan de prueba (VIC-60, corrección). Plugin `sdd` 1.21.0.** Decisiones de Víctor del 2026-11-25 (la segunda y la tercera, en el #80, tras la G4).
   - Las citas a ADR del workflow dicen «del workflow» (ADR-0007 en «Commits», ADR-0009 en «Fusionar»), para no confundirlos con los ADR del proyecto.
   - Descartar una review de la persona o cancelar la CI vale solo con un plan de prueba en un PR que la persona ha fusionado, y solo en los PR desechables que el plan nombra (antes: «un plan de prueba que ella apruebe en GitHub, en PR desechables»).
@@ -27,7 +33,7 @@ Formato: una entrada por versión, la más reciente arriba. Las versiones 0.x so
   - **`sdd-plan`:** las rutas sensibles están en `.github/sdd/rutas-sensibles.txt`, no en el README; el R0 sin G4, solo de documentación. **`sdd-spec`:** el commit que pasa la spec a `aprobada` llega tras la última ronda, así que pide a la persona que apruebe la cabeza. **`sdd-implement`:** el auto-merge, solo como dice `sdd-review`. **`guarda-gh.py`:** la pregunta al quitar el borrador sin «Métricas G4» ya no dice que un R0 de código pueda no necesitarla.
   - **`AGENTS.md` de la plantilla:** "Lo que no te corresponde" recoge el auto-merge, no descartar reviews de la persona ni cancelar la CI; `checks-sdd` nombra `g4`, `aprobacion`, `cambios-pedidos` y `cabeza`. Pasa de ~1494 a ~1536 tokens (tope ~1548); lo que se acorta, en `docs/inventario-reglas.md`.
   - **Evaluaciones nuevas:** `fusion-auto-merge-r1`, `fusion-r1-check-pendiente`, `fusion-r2-sin-auto-merge` y `fusion-no-descarta-review`, con sus evaluadores probados en `tests/test_evals_fusion.py` (también en JavaScript, si hay Node). Los evaluadores toleran variantes de la orden que no cambian la regla que se mide: `--delete-branch` en el auto-merge, `--required` o `--interval` al esperar los checks, y la petición de review por la API sin `-X POST`.
-  - **Pendiente, fuera de los ficheros permitidos de VIC-60:** la plantilla de PR (`plantilla-proyecto/.github/pull_request_template.md`) aún describe la aprobación humana (G6) como el merge de cada PR.
+  - **Pendiente, fuera de los ficheros permitidos de VIC-60:** la plantilla de PR (`plantilla-proyecto/.github/pull_request_template.md`) describía la aprobación humana (G6) como el merge de cada PR. Resuelto en VIC-63.
 
 - **La plantilla de issue lleva el contrato de la entrega (VIC-60, M28).** ADR-0009, «lo ya aceptado en el plan». `docs/plantilla-issue-linear.md` añade *Alcance*, *Fuera de alcance*, *Hecho cuando* (con la prueba manual y el «Refs» de M4), *Ficheros permitidos* y *Si se bloquea*, con el texto por defecto «para y explica qué falta; no amplíes los ficheros permitidos». G2 pide rellenos los tres primeros. La plantilla de Linear se actualiza a mano, pegando el bloque nuevo.
 
