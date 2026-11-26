@@ -79,9 +79,11 @@ Revisores exigidos: 2 en spec y ADR (R1 y R2) y en el código R2; 1 en el códig
 
 ## Aprobación humana (G6)
 
-<!-- Quién aprueba (ADR-0009 del workflow, §3.1 a §3.3):
-  - La persona, siempre, los R2 y los PR que tocan rutas de `.github/CODEOWNERS` (specs, ADR, dependencias, `.github/`,
-    la configuración del agente y los ficheros de control). Los aprueba en GitHub sobre el último commit y los fusiona ella.
+<!-- Quién aprueba (ADR-0009 del workflow, §3.1 a §3.5):
+  - La persona, siempre, los R2 y los PR que tocan rutas de `.github/CODEOWNERS`. Los aprueba en GitHub sobre el último
+    commit y los fusiona ella. El CODEOWNERS de la plantilla empieza por `*`: mientras no se acote a las rutas sensibles
+    del ADR-0009 (specs, ADR, dependencias, `.github/`, la configuración del agente y los ficheros de control), todo PR
+    las toca.
   - Con auto-merge, sin la persona: los R0 y R1 que no tocan esas rutas, en un repo con el ruleset del ADR-0009, con la CI
     (`g4` incluido) en verde. Lo pide el agente (`sdd-review`); la aprobación es la de las reglas de GitHub y nadie marca
     estas casillas. Los repasa después la segunda mirada semanal.
