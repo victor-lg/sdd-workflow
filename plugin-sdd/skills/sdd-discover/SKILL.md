@@ -60,4 +60,4 @@ Propón pasar a especificar (`sdd-spec`) cuando una capacidad concreta tenga:
 - casos límite principales identificados;
 - ninguna pregunta bloqueante abierta.
 
-El resto del producto puede seguir en descubrimiento (D03). Puedes pasar la issue a *Discovery* o dejarla en *Inbox*, y comentarla; empezarla es de `sdd-plan`, con la lista aprobada de la spec.
+El resto del producto puede seguir en descubrimiento (D03). Si la creas tú y ya está en descubrimiento, créala en *Discovery*; una que ya existe la mueve la persona, y tú la comentas. Empezarla es de `sdd-plan`, con la lista aprobada de la spec.

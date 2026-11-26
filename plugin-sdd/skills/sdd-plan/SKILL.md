@@ -49,6 +49,6 @@ Ante la duda, elige el nivel más alto. Nunca bajes un nivel para ahorrar reviso
 
 ## Lo que no haces
 
-- No modificas la spec. La issue de Linear la lees, la comentas y la empiezas si está en la lista. Nunca la cierras, cancelas ni archivas (M4), y el título, la descripción y las etiquetas de una issue de la lista no los cambias: los aprobó la persona con la spec (lo bloquea el hook). En proyectos `confidencial`, lo que escribas en Linear son solo títulos y enlaces (ADR-0003).
+- No modificas la spec. La issue de Linear la lees, la comentas y la empiezas si está en la lista. Nunca la cierras, cancelas, archivas, devuelves a *Inbox* o *Discovery* ni reabres (M4), y el título, la descripción y las etiquetas de una issue de la lista no los cambias: los aprobó la persona con la spec (lo bloquea el hook). En proyectos `confidencial`, lo que escribas en Linear son solo títulos y enlaces (ADR-0003).
 - No empiezas a implementar en esta skill: eso es `sdd-implement`.
 - No fusionas ni pides que se salten las reglas de rama. El auto-merge, solo en las condiciones de `sdd-review` (sección 4).
