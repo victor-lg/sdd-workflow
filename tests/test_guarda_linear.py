@@ -141,20 +141,24 @@ class Issues(unittest.TestCase):
                 with self.subTest(ident=ident, estado=estado):
                     self.assertEqual(decide("save_issue", {"id": ident, "state": estado}, sin_lista), "cerrar")
 
-    def test_devolver_a_inbox_o_discovery(self):
+    def test_devolver_a_inbox_o_discovery_o_reabrir_no(self):
+        """De una issue que existe solo se cambia el estado para empezarla: la guarda no sabe si
+        estaba cerrada, así que devolverla a Inbox o Discovery podría ser reabrirla."""
         for ident in ("VIC-41", "VIC-43"):
-            with self.subTest(ident=ident):
-                self.assertIsNone(decide("save_issue", {"id": ident, "state": "Inbox"}, sin_lista))
+            for estado in ("Inbox", "discovery", "backlog", "0edaf941-de26-4485-a721-0f069a59a9ea"):
+                with self.subTest(ident=ident, estado=estado):
+                    self.assertEqual(decide("save_issue", {"id": ident, "state": estado}, sin_lista), "mover")
+        self.assertEqual(decide("save_issue", {"id": "VIC-43", "title": "t", "state": "Inbox"}, sin_lista), "mover")
 
     def test_editar_una_fuera_de_la_lista(self):
         for campos in ({"title": "t"}, {"description": "d"}, {"labels": ["R2"]},
-                       {"title": "t", "description": "d", "labels": ["R1"], "state": "Discovery"}):
+                       {"title": "t", "description": "d", "labels": ["R1"]}):
             with self.subTest(campos=campos):
                 self.assertIsNone(decide("save_issue", {"id": "VIC-43", **campos}))
 
     def test_editar_una_de_la_lista_no(self):
         for campos in ({"title": "t"}, {"description": "d"}, {"labels": ["R2"]},
-                       {"title": "t", "state": "In Progress"}, {"description": "d", "state": "Inbox"}):
+                       {"title": "t", "state": "In Progress"}):
             with self.subTest(campos=campos):
                 self.assertEqual(decide("save_issue", {"id": "VIC-41", **campos}), "lista-aprobada")
 
@@ -180,6 +184,10 @@ class Issues(unittest.TestCase):
     def test_sin_cambios_no_mira_la_lista(self):
         self.assertIsNone(decide("save_issue", {"id": "VIC-41"}, sin_lista))
 
+    def test_repos_con_specs_en_codeowners(self):
+        """Solo repos donde docs/specs/ lo aprueba la persona (CODEOWNERS); sdd-workflow, no."""
+        self.assertEqual(set(CONF["repos"]), {"victor-lg/calculadora-discos"})
+
     def test_los_estados_no_se_solapan(self):
         clases = [{v.lower() for v in valores} for valores in CONF["estados"].values()]
         self.assertEqual(sum(map(len, clases)), len(set().union(*clases)))
@@ -189,10 +197,14 @@ class Issues(unittest.TestCase):
 class Entregas(unittest.TestCase):
     def test_solo_el_id_que_abre_cada_linea(self):
         texto = ("# SPEC\n\nVIC-1 en la intro\n\n## 13. Entregas\n\n- VIC-41: lógica (AC-01, AC-02; sustituye a VIC-30)\n"
-                 "* **VIC-42**: interfaz\n1. vic-046 cosa\n  - VIC-47\nTexto que nombra VIC-48\n### Detalle\n- VIC-49\n"
+                 "* **VIC-42**: interfaz\n1. vic-046 cosa\n  - VIC-47 anidada\n    - VIC-51\n Texto que nombra VIC-48\n"
+                 " - VIC-52\n<!-- - VIC-53 -->\n<!--\n- VIC-54\n-->\n### Detalle\n- VIC-49\n"
                  "## 14. Otra\n- VIC-43\n# Fin\n- VIC-45\n")
         self.assertEqual(guarda.ids_de_entregas(texto),
-                         [("VIC", 41), ("VIC", 42), ("VIC", 46), ("VIC", 47), ("VIC", 49)])
+                         [("VIC", 41), ("VIC", 42), ("VIC", 46), ("VIC", 52), ("VIC", 49)])
+
+    def test_comentario_sin_cerrar_tapa_el_resto(self):
+        self.assertEqual(guarda.ids_de_entregas("## Entregas\n- VIC-41\n<!-- - VIC-42\n- VIC-43\n"), [("VIC", 41)])
 
     def test_solo_el_titulo_exacto(self):
         for titulo in ("## Entregas", "## 13. Entregas", "### 2.1 entregas", "## Entregas ##"):
@@ -268,6 +280,37 @@ class ListaEnMain(unittest.TestCase):
         git(self.repo, "branch", "origin/main", "HEAD")
         git(self.repo, "tag", "main", "HEAD")
         self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
+
+    def test_git_replace_no_cuela(self):
+        """Un reemplazo del commit de main por el de la rama no cambia la lista."""
+        main = git(self.repo, "rev-parse", "HEAD~1").strip()
+        git(self.repo, "replace", main, "HEAD")
+        self.assertEqual(git(self.repo, "show", f"{main}:docs/specs/SPEC-DISCO-004.md"), "## Entregas\n- VIC-43\n")
+        self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
+
+    def test_objeto_suelto_falso_no_cuela(self):
+        """git no comprueba el hash al leer un objeto suelto: lo comprueba la guarda."""
+        import zlib
+        blob = git(self.repo, "rev-parse", "HEAD~1:docs/specs/SPEC-DISCO-004.md").strip()
+        fichero = self.repo / ".git" / "objects" / blob[:2] / blob[2:]
+        falso = b"## Entregas\n- VIC-43\n"
+        fichero.chmod(0o644)
+        fichero.write_bytes(zlib.compress(b"blob %d\0" % len(falso) + falso))
+        self.assertEqual(git(self.repo, "cat-file", "blob", blob), falso.decode())
+        with self.assertRaisesRegex(LookupError, "no es el de GitHub"):
+            guarda.aprobadas_en_main(str(self.repo), self.conf)
+
+    def test_sin_specs_en_main(self):
+        vacio = pathlib.Path(self.dir.name) / "vacio.git"
+        git(self.dir.name, "init", "-q", "--bare", "-b", "main", str(vacio))
+        otro = pathlib.Path(self.dir.name) / "otro"
+        git(self.dir.name, "init", "-q", "-b", "main", str(otro))
+        (otro / "README.md").write_text("x", encoding="utf-8")
+        git(otro, "add", ".")
+        git(otro, "commit", "-q", "-m", "x")
+        git(otro, "push", "-q", str(vacio), "main")
+        git(otro, "remote", "add", "origin", "https://github.com/prueba/repo.git")
+        self.assertEqual(guarda.aprobadas_en_main(str(otro), {**CONF, "repos": {"prueba/repo": vacio.as_uri()}}), {})
 
     def test_main_nuevo_sin_fetch_falla(self):
         otro = pathlib.Path(self.dir.name) / "otro"

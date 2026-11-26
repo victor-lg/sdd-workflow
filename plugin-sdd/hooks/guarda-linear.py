@@ -7,7 +7,9 @@ main, a la que se llega por un merge que ella aprueba (CODEOWNERS de docs/specs/
 salen dos reglas:
 
 - empezar una issue (moverla a Ready, In Progress o In Review) solo si su ID abre una línea
-  de lista de esa sección en alguna spec de main;
+  de lista de primer nivel de esa sección en alguna spec de main; cualquier otro cambio de
+  estado de una issue que ya existe (devolverla a Inbox o Discovery, reabrirla) es de la
+  persona;
 - editar el título, la descripción o las etiquetas de una issue solo si su ID no está en
   ninguna: lo aprobado no lo cambia el agente.
 
@@ -15,9 +17,11 @@ Qué es «main» no lo decide el repo local, que el agente puede preparar (una r
 origin/main movida, una rama o una etiqueta con ese nombre, otro repo con `cd`): el remoto
 origin tiene que ser uno de los repos de `repos` en reglas-linear.json, y el commit de main
 se pide con `git ls-remote` a la URL que fija ese fichero, no a la del repo. Las specs se
-leen de ese commit, que tiene que estar ya en el repo local (si no, git fetch origin). Es la
-única llamada con red; a git se le pasan las mismas opciones que en guarda-git.py para que
-no ejecute nada de la configuración del repo.
+leen de ese commit, que tiene que estar ya en el repo local (si no, git fetch origin), y la
+guarda comprueba el hash de cada objeto que lee (commit, árboles y specs): un `git replace`
+o un objeto suelto falso con ese hash no cuelan. Es la única llamada con red; a git se le
+pasan las opciones de guarda-git.py, para que no ejecute nada de la configuración del repo,
+y `--no-replace-objects`.
 
 Es una lista de permitidas: una herramienta, un campo o un estado que no conoce se bloquea,
 también si el servidor añade uno nuevo. La issue se nombra por su identificador (VIC-12), no
@@ -31,6 +35,7 @@ Las reglas, los estados, los repos y los mensajes están en reglas-linear.json. 
 mirar, falla cerrado.
 """
 import json
+import hashlib
 import os
 import re
 import subprocess
@@ -39,7 +44,8 @@ import time
 
 RUTA_REGLAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reglas-linear.json")
 IDENTIFICADOR = re.compile(r"([A-Za-z][A-Za-z0-9]*)-(\d+)")
-GIT_SEGURO = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "--no-optional-locks")
+GIT_SEGURO = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "--no-optional-locks",
+              "--no-replace-objects")
 ORIGEN = re.compile(r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)([\w.-]+/[\w.-]+?)(?:\.git)?/?")
 PLAZO = 15  # segundos para todas las llamadas a git; el hook tiene 20 en hooks.json
 
@@ -53,9 +59,10 @@ def clave(ident):
 def ids_de_entregas(texto):
     """Las claves de los IDs que abren una línea de lista (`- VIC-12: …`) en las secciones
     tituladas exactamente «Entregas» (con o sin número delante), hasta el siguiente título del
-    mismo nivel o mayor. Lo que hay dentro de bloques de código no cuenta."""
+    mismo nivel o mayor. Solo las viñetas de primer nivel: una anidada es un detalle de la de
+    arriba. Lo que hay dentro de bloques de código o de comentarios HTML no cuenta."""
     dentro, nivel, cerca, ids = False, 0, None, []
-    for linea in texto.splitlines():
+    for linea in re.sub(r"<!--.*?(?:-->|\Z)", "", texto, flags=re.S).splitlines():
         bloque = re.match(r"\s{0,3}(`{3,}|~{3,})", linea)
         if bloque and (cerca is None or bloque.group(1)[0] == cerca[0] and len(bloque.group(1)) >= len(cerca)):
             cerca = None if cerca else bloque.group(1)
@@ -70,7 +77,7 @@ def ids_de_entregas(texto):
             if re.fullmatch(r"(?:\d+(?:\.\d+)*\.?\s+)?Entregas", titulo.group(2), re.IGNORECASE):
                 dentro, nivel = True, n
             continue
-        item = re.match(r"\s*(?:[-*+]|\d+[.)])\s+(?:\*\*|`)?([A-Za-z][A-Za-z0-9]*-\d+)(?![\w-])", linea)
+        item = re.match(r" ?(?:[-*+]|\d+[.)])\s+(?:\*\*|`)?([A-Za-z][A-Za-z0-9]*-\d+)(?![\w-])", linea)
         if dentro and item:
             ids.append(clave(item.group(1)))
     return ids
@@ -80,16 +87,54 @@ class Git:
     def __init__(self):
         self.limite = time.monotonic() + PLAZO
 
-    def __call__(self, *args, cwd=None, repo=None):
+    def __call__(self, *args, cwd=None, repo=None, binario=False):
         restante = self.limite - time.monotonic()
         if restante <= 0:
             raise TimeoutError("git")
         orden = ["git", *GIT_SEGURO, *(["-C", repo] if repo else []), *args]
-        r = subprocess.run(orden, capture_output=True, text=True, timeout=restante, cwd=cwd,
-                           stdin=subprocess.DEVNULL)
+        r = subprocess.run(orden, capture_output=True, timeout=restante, cwd=cwd, stdin=subprocess.DEVNULL)
         if r.returncode != 0:
-            raise RuntimeError(f"git {args[0]}: {r.stderr.strip()[:200]}")
-        return r.stdout
+            raise RuntimeError(f"git {args[0]}: {r.stderr.decode(errors='replace').strip()[:200]}")
+        return r.stdout if binario else r.stdout.decode()
+
+
+def objeto(git, raiz, tipo, sha):
+    """El contenido del objeto, con su hash comprobado: git no lo comprueba al leer."""
+    datos = git("cat-file", tipo, sha, repo=raiz, binario=True)
+    h = hashlib.new("sha1" if len(sha) == 40 else "sha256")
+    h.update(f"{tipo} {len(datos)}\0".encode() + datos)
+    if h.hexdigest() != sha:
+        raise LookupError(f"el objeto {sha[:8]} del clon no es el de GitHub")
+    return datos
+
+
+def entradas(datos, largo):
+    """(modo, nombre, sha) de un árbol de git."""
+    i = 0
+    while i < len(datos):
+        fin = datos.index(b"\0", i)
+        modo, nombre = datos[i:fin].split(b" ", 1)
+        yield modo.decode(), nombre.decode(errors="replace"), datos[fin + 1:fin + 1 + largo].hex()
+        i = fin + 1 + largo
+
+
+def specs(git, raiz, arbol, ruta=""):
+    """(ruta, texto) de las specs .md bajo un árbol, sin las que empiezan por "_"."""
+    for modo, nombre, sha in entradas(objeto(git, raiz, "tree", arbol), len(arbol) // 2):
+        if modo == "40000":
+            yield from specs(git, raiz, sha, f"{ruta}{nombre}/")
+        elif modo in ("100644", "100755") and nombre.endswith(".md") and not nombre.startswith("_"):
+            yield f"{ruta}{nombre}", objeto(git, raiz, "blob", sha).decode("utf-8", errors="replace")
+
+
+def subarbol(git, raiz, arbol, *nombres):
+    """El sha del árbol docs/specs (o el que se pida), o None si no está."""
+    for buscado in nombres:
+        arbol = next((sha for modo, nombre, sha in entradas(objeto(git, raiz, "tree", arbol), len(arbol) // 2)
+                      if modo == "40000" and nombre == buscado), None)
+        if arbol is None:
+            return None
+    return arbol
 
 
 def aprobadas_en_main(cwd, conf):
@@ -107,15 +152,16 @@ def aprobadas_en_main(cwd, conf):
         raise LookupError("main no está en el remoto")
     main = remoto[0]
     try:
-        git("cat-file", "-e", f"{main}^{{commit}}", repo=raiz)
+        commit = objeto(git, raiz, "commit", main)
     except RuntimeError:
         raise LookupError(f"el main de GitHub ({main[:8]}) no está en el clon: haz git fetch origin") from None
+    arbol = re.match(rb"tree ([0-9a-f]{40,64})\n", commit)
+    if not arbol:
+        raise LookupError("commit sin árbol")
     ids = {}
-    for ruta in git("ls-tree", "-r", "-z", "--full-tree", "--name-only", main, "--", "docs/specs/",
-                    repo=raiz).split("\0"):
-        if not ruta.endswith(".md") or os.path.basename(ruta).startswith("_"):
-            continue
-        for k in ids_de_entregas(git("show", f"{main}:{ruta}", repo=raiz)):
+    carpeta = subarbol(git, raiz, arbol.group(1).decode(), "docs", "specs")
+    for ruta, texto in specs(git, raiz, carpeta, "docs/specs/") if carpeta else ():
+        for k in ids_de_entregas(texto):
             ids.setdefault(k, ruta)
     return ids
 
@@ -158,6 +204,8 @@ def decidir(nombre, entrada, conf, aprobadas):
             return "cerrar", {}
     if issue is None:
         return ("fuera-de-lista", {"issue": "nueva"}) if clase == "empezar" else None
+    if clase == "libre":
+        return "mover", {}
     if not isinstance(issue, str) or clave(issue) is None:
         return "desconocido", {"detalle": f"la issue «{issue}» (usa su identificador, como VIC-12, no el UUID)"}
     if clase != "empezar" and not (campos & set(conf["campos_editar"])):

@@ -1,8 +1,7 @@
 {
   "servidor": "linear",
   "repos": {
-    "victor-lg/calculadora-discos": "https://github.com/victor-lg/calculadora-discos.git",
-    "victor-lg/sdd-workflow": "https://github.com/victor-lg/sdd-workflow.git"
+    "victor-lg/calculadora-discos": "https://github.com/victor-lg/calculadora-discos.git"
   },
   "lecturas": "^(get|list|search|extract)_(?!(.*_)?(create|save|update|delete|set|archive|move|assign|add|remove)(_|$))",
   "issues": "(save|create|update)_issue",
@@ -31,6 +30,10 @@
     "fuera-de-lista": {
       "nivel": "bloquear",
       "mensaje": "ADR-0009 §3.6: la issue {issue} no abre ninguna línea de la sección «Entregas» de una spec del main de GitHub, así que la persona no ha aprobado empezarla ({herramienta}). Una issue nueva se crea en Inbox o Discovery. En su lugar: no la empieces; díselo a la persona y, si debe entrar, propón añadirla a la lista en un PR de la spec. Si la lista se acaba de fusionar, haz git fetch origin desde la raíz del clon y vuelve a intentarlo. No la esquives."
+    },
+    "mover": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0009 §3.6: de una issue que ya existe, el agente solo cambia el estado para empezarla; devolverla a Inbox o Discovery, o reabrirla, lo hace la persona ({herramienta}). En su lugar: deja un comentario en la issue con lo que propones y díselo a la persona. Si crees que aquí no aplica, díselo a la persona; no lo esquives."
     },
     "lista-aprobada": {
       "nivel": "bloquear",
