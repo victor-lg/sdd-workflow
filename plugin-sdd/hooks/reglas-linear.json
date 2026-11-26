@@ -33,7 +33,7 @@
     },
     "mover": {
       "nivel": "bloquear",
-      "mensaje": "ADR-0009 §3.6: de una issue que ya existe, el agente solo cambia el estado para empezarla; devolverla a Inbox o Discovery, o reabrirla, lo hace la persona ({herramienta}). En su lugar: deja un comentario en la issue con lo que propones y díselo a la persona. Si crees que aquí no aplica, díselo a la persona; no lo esquives."
+      "mensaje": "ADR-0009 §3.6: de una issue que ya existe, el agente solo cambia el estado para empezarla; devolverla a Inbox o Discovery lo hace la persona ({herramienta}). En su lugar: deja un comentario en la issue con lo que propones y díselo a la persona. Si crees que aquí no aplica, díselo a la persona; no lo esquives."
     },
     "lista-aprobada": {
       "nivel": "bloquear",

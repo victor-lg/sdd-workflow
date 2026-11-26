@@ -282,7 +282,7 @@ ADR-0009 §3.6 y M4. Cambia la decisión 1 (2026-11-08): el agente ya no solo co
 | Empezar (*Ready*, *In Progress*, *In Review*) | La persona movía a *Ready* | El agente, solo si el ID abre una línea de lista de primer nivel de la sección «Entregas» de una spec del `main` de GitHub de un repo de `repos` (`sdd-plan`). Hoy solo la calculadora: en `sdd-workflow`, `docs/specs/` no está en CODEOWNERS. Con una spec sin esa sección, sigue *Ready*, que mueve la persona |
 | Título, descripción y etiquetas | La persona | El agente, solo si la issue no está en ninguna lista de `main`; las de la lista, no (decisión de Víctor del 2026-11-26) |
 | Cerrar, cancelar, marcar como duplicada, borrar, archivar | La persona (o «Fixes») | Igual: bloqueado siempre (M4) |
-| Devolver a *Inbox* o *Discovery*, o reabrir, una issue que ya existe | La persona | Igual: la guarda no conoce el estado actual, así que todo cambio de estado que no sea empezar se bloquea (G4-2-B-02) |
+| Devolver a *Inbox* o *Discovery* una issue que ya existe | La persona | Igual: todo cambio de estado que no sea empezar se bloquea (G4-2-B-02). Reabrir una issue de la lista (pasarla de *Done* a *In Progress*) no lo frena la guarda, que no conoce el estado actual: lo dice `sdd-plan` (G4-3-B-01) |
 | Otras herramientas, campos o estados | Bloqueados | Bloqueados, también los que no conoce; la issue va por su identificador, no por su UUID |
 
 `AGENTS.md:11` lo resume en una línea. Sale «El estado de la entrega vive en la issue»: lo dicen `sdd-plan` (sección 3) y `sdd-implement`. `AGENTS.md` pasa de ~1546 a ~1548 tokens (tope ~1548).

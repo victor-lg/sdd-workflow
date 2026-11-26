@@ -128,6 +128,18 @@ class Issues(unittest.TestCase):
                 with self.subTest(estado=estado, ident=ident):
                     self.assertIsNone(decide("save_issue", {"id": ident, "state": estado}))
 
+    def test_reglas_de_issues_en_todos_los_servidores(self):
+        for servidor in SERVIDORES:
+            with self.subTest(servidor=servidor):
+                self.assertIsNone(decide("save_issue", {"title": "t"}, sin_lista, servidor))
+                self.assertIsNone(decide("save_issue", {"id": "VIC-41", "state": "In Progress"}, servidor=servidor))
+                self.assertEqual(decide("save_issue", {"id": "VIC-43", "state": "In Progress"}, servidor=servidor),
+                                 "fuera-de-lista")
+                self.assertEqual(decide("update_issue", {"id": "VIC-41", "title": "t"}, servidor=servidor),
+                                 "lista-aprobada")
+                self.assertIsNone(decide("create_issue", {"id": "VIC-43", "title": "t"}, servidor=servidor))
+                self.assertEqual(decide("save_issue", {"id": "VIC-43", "state": "Inbox"}, sin_lista, servidor), "mover")
+
     def test_empezar_una_fuera_de_la_lista(self):
         for estado in ("Ready", "In Progress", "In Review", "3cdf9b6e-6713-45b8-b5a6-2681499dd37e"):
             with self.subTest(estado=estado):
@@ -141,9 +153,8 @@ class Issues(unittest.TestCase):
                 with self.subTest(ident=ident, estado=estado):
                     self.assertEqual(decide("save_issue", {"id": ident, "state": estado}, sin_lista), "cerrar")
 
-    def test_devolver_a_inbox_o_discovery_o_reabrir_no(self):
-        """De una issue que existe solo se cambia el estado para empezarla: la guarda no sabe si
-        estaba cerrada, así que devolverla a Inbox o Discovery podría ser reabrirla."""
+    def test_devolver_a_inbox_o_discovery_no(self):
+        """De una issue que existe solo se cambia el estado para empezarla."""
         for ident in ("VIC-41", "VIC-43"):
             for estado in ("Inbox", "discovery", "backlog", "0edaf941-de26-4485-a721-0f069a59a9ea"):
                 with self.subTest(ident=ident, estado=estado):
@@ -202,6 +213,16 @@ class Entregas(unittest.TestCase):
                  "## 14. Otra\n- VIC-43\n# Fin\n- VIC-45\n")
         self.assertEqual(guarda.ids_de_entregas(texto),
                          [("VIC", 41), ("VIC", 42), ("VIC", 46), ("VIC", 52), ("VIC", 49)])
+
+    def test_valla_con_info_string_no_cierra(self):
+        texto = "## Entregas\n- VIC-41\n```\n```js\n- VIC-99\n```\n- VIC-42\n~~~\n~~~ x\n- VIC-98\n~~~~\n- VIC-43\n"
+        self.assertEqual(guarda.ids_de_entregas(texto), [("VIC", 41), ("VIC", 42), ("VIC", 43)])
+
+    def test_setext_o_linea_horizontal_acaban_la_seccion(self):
+        for corte in ("Fuera de alcance\n---", "Fuera de alcance\n===", "***", "- - -", "___"):
+            with self.subTest(corte=corte):
+                texto = f"## Entregas\n- VIC-41\n\n{corte}\n- VIC-99\n"
+                self.assertEqual(guarda.ids_de_entregas(texto), [("VIC", 41)])
 
     def test_comentario_sin_cerrar_tapa_el_resto(self):
         self.assertEqual(guarda.ids_de_entregas("## Entregas\n- VIC-41\n<!-- - VIC-42\n- VIC-43\n"), [("VIC", 41)])

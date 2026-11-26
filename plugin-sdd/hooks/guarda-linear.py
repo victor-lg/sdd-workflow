@@ -8,8 +8,9 @@ salen dos reglas:
 
 - empezar una issue (moverla a Ready, In Progress o In Review) solo si su ID abre una línea
   de lista de primer nivel de esa sección en alguna spec de main; cualquier otro cambio de
-  estado de una issue que ya existe (devolverla a Inbox o Discovery, reabrirla) es de la
-  persona;
+  estado de una issue que ya existe (devolverla a Inbox o Discovery) es de la persona. La
+  guarda no conoce el estado actual: una issue de la lista se puede volver a empezar aunque
+  esté cerrada, y eso lo frena `sdd-plan`, que la lee antes;
 - editar el título, la descripción o las etiquetas de una issue solo si su ID no está en
   ninguna: lo aprobado no lo cambia el agente.
 
@@ -63,11 +64,18 @@ def ids_de_entregas(texto):
     arriba. Lo que hay dentro de bloques de código o de comentarios HTML no cuenta."""
     dentro, nivel, cerca, ids = False, 0, None, []
     for linea in re.sub(r"<!--.*?(?:-->|\Z)", "", texto, flags=re.S).splitlines():
-        bloque = re.match(r"\s{0,3}(`{3,}|~{3,})", linea)
-        if bloque and (cerca is None or bloque.group(1)[0] == cerca[0] and len(bloque.group(1)) >= len(cerca)):
-            cerca = None if cerca else bloque.group(1)
+        bloque = re.match(r"\s{0,3}(`{3,}|~{3,})(.*)", linea)
+        if cerca is None and bloque:
+            cerca = bloque.group(1)
             continue
         if cerca:
+            # Cierra solo una valla del mismo carácter, igual o más larga y sin info string (CommonMark).
+            if bloque and bloque.group(1)[0] == cerca[0] and len(bloque.group(1)) >= len(cerca) \
+                    and not bloque.group(2).strip():
+                cerca = None
+            continue
+        if re.fullmatch(r"\s{0,3}(?:=+|-{2,}|(?:[-*_]\s*){3,})\s*", linea):
+            dentro = False  # subrayado setext (otro título) o línea horizontal: la sección acaba
             continue
         titulo = re.match(r"(#{1,6})\s+(.*?)\s*#*\s*$", linea)
         if titulo:
