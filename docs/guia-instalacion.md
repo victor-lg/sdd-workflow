@@ -423,7 +423,7 @@ cd ~/proyectos/sdd-workflow && claude mcp add --transport http --scope local lin
 cd ~/proyectos/calculadora-discos && claude mcp add --transport http --scope local linear https://mcp.linear.app/mcp
 ```
 
-`--scope local` lo guarda en `~/.claude.json`, ligado a la carpeta: un proyecto nuevo lo necesita otra vez. En cada copia, dentro de una sesión, `/mcp` → `linear` → autenticar, concediendo escritura. No actives el conector de Linear de claude.ai: llegaría a todas las sesiones.
+`--scope local` lo guarda en `~/.claude.json`, ligado a la carpeta: un proyecto nuevo lo necesita otra vez, y su repo tiene que estar en `repos` de `plugin-sdd/hooks/reglas-linear.json` (un PR del workflow); si no, el hook no le deja empezar ni editar issues. Un `git worktree` en otra carpeta tampoco lo tiene: desde ahí, las issues las empieza la sesión de la copia principal o la integración de GitHub al abrir el PR. En cada copia, dentro de una sesión, `/mcp` → `linear` → autenticar, concediendo escritura. No actives el conector de Linear de claude.ai: llegaría a todas las sesiones.
 
 **Comprobación:**
 

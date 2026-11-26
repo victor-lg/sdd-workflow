@@ -44,7 +44,7 @@ Ante la duda, elige el nivel más alto. Nunca bajes un nivel para ahorrar reviso
    - un solo nivel de riesgo marcado;
    - los AC de la entrega en formato `SPEC-XXX-NNN/AC-NN` (la CI los contrasta con la spec de `main` y con los tests);
    - en "Plan y progreso", una lista de pasos verificables, proporcional al cambio. Cada paso dice qué AC cubre o qué comprueba.
-4. **Empezar la issue:** si está en la lista aprobada, pásala a *In Progress* por el MCP de Linear (`save_issue` con su identificador, `{"id": "VIC-N", "state": "In Progress"}`); el hook `guarda-linear.py` vuelve a comprobar la lista en `origin/main`. Si entró por *Ready* (spec sin «Entregas») o es un R0, no la muevas: el hook lo bloquea y la integración de GitHub de Linear la mueve al abrir el PR.
+4. **Empezar la issue:** si está en la lista aprobada, pásala a *In Progress* por el MCP de Linear (`save_issue` con su identificador, `{"id": "VIC-N", "state": "In Progress"}`); el hook `guarda-linear.py` vuelve a comprobar la lista en el `main` de GitHub (si te para por no tener ese `main` en el clon, `git fetch origin`). Si entró por *Ready* (spec sin «Entregas») o es un R0, no la muevas: el hook lo bloquea y la integración de GitHub de Linear la mueve al abrir el PR.
 5. **Cambios R0:** el plan puede ser una línea. También se abren en borrador; con la CI en verde, `gh pr ready N` lo quita. Solo van sin `sdd-review` si son solo documentación (el criterio está en `sdd-review`, sección 1); si no, cuentan como R1 y el check `g4` falla sin revisor. Sin `sdd-review`, el hook pregunta a la persona antes de quitar el borrador, porque no encuentra la línea «Métricas G4»: es lo esperado.
 
 ## Lo que no haces
