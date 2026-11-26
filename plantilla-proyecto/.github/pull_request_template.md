@@ -9,9 +9,9 @@ Se fusiona solo por squash: el título será el commit de `main`. Sin menciones 
 
 <Refs, Fixes o Part of> VIC-<N>
 <!-- La primera línea enlaza la issue (M4, ADR-0009 del workflow; `sdd-plan`). Elige uno:
-  Refs VIC-<N>: la entrega tiene prueba manual, o la issue no dice que no la tenga. La cierra la persona tras probar.
-  Fixes VIC-<N>: la issue dice que no hay prueba manual y es el último PR de la entrega. Se cierra al fusionar.
-  Part of VIC-<N>: un PR anterior de una entrega partida.
+  Refs: la entrega tiene prueba manual, o la issue no dice que no la tenga. La cierra la persona tras probar.
+  Fixes: la issue dice que no hay prueba manual y es el último PR de la entrega. Se cierra al fusionar.
+  Part of: un PR anterior de una entrega partida.
 Sin uno de los tres, el check `convenciones` falla. -->
 
 ## Plan y progreso
