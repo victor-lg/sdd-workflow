@@ -53,7 +53,7 @@ Sale de `historial/analisis-herramientas-1.md` §16 (baseline, solo como referen
 | REG-01 | Solo es vigente la spec que está en `main` | A:9; context:15; spec:15,18; plan:17 | Mecánica | Probada: N1 lo frenó el agente y C18 la CI (calc#38) | **CI** (ya: `trazabilidad`) |
 | REG-02 | Los requisitos compartidos viven en `SPEC-XCUT-*`: citar por ID, nunca copiar | A:9; context:16 | Criterio | No consta | **Instrucción** (`spec`) |
 | REG-03 | Mapa de fuentes: visión, issue, ADR, código y tests | A:10-13 | Criterio | No consta | **Instrucción** (`AGENTS.md`, es el mapa) |
-| REG-04 | La issue de Linear se lee y solo se comenta; las issues las crea y las mueve la persona | A:11; plan:16,51; discover:51,63 | Mecánica | No consta en el agente. Claude en el navegador movió VIC-5 a *Ready* con permiso (recorrido-1); ADR-0006 lo reservó después a la persona | **Hook** (bloquea cambiar estado, descripción y etiquetas por el MCP de Linear y deja comentar; decisión 1) |
+| REG-04 | La issue de Linear se lee y solo se comenta; las issues las crea y las mueve la persona (desde VIC-58: el agente las crea, comenta y empieza si están en la lista aprobada; nunca las cierra) | A:11; plan:16,51; discover:51,63 | Mecánica | No consta en el agente. Claude en el navegador movió VIC-5 a *Ready* con permiso (recorrido-1); ADR-0006 lo reservó después a la persona | **Hook** (deja leer, comentar, crear y empezar issues de la lista aprobada; editar, solo las que no están en ninguna; bloquea cerrar, cancelar, borrar y archivar; VIC-58, que cambia la decisión 1) |
 | REG-05 | Solo vale un ADR `Aceptado` y fusionado en `main` | A:12; context:17 | Criterio | No consta | **Instrucción** (`context`) |
 | REG-06 | `discovery/`, memoria, resúmenes y conversaciones son contexto, no norma | A:14; context:19,25 | Criterio | No consta | **Instrucción** (`context`) |
 | REG-07 | Los documentos históricos o sustituidos no son instrucciones | A:15; context:25 | Criterio | No consta | **Instrucción** (`context`) |
@@ -271,3 +271,20 @@ Corrección posterior (VIC-60, decisión de Víctor del 2026-11-25), con el mism
 | Hooks de Git: «Si gitleaks te para, saca el secreto de lo preparado y del fichero» | Sale: lo dice el `fail_text` de gitleaks en `lefthook.json`, que ve cualquier agente, y la entradilla («su mensaje dice qué hacer») |
 
 `AGENTS.md` pasa de ~1547 a ~1546 tokens.
+
+## Linear con escritura y la lista aprobada (VIC-58)
+
+ADR-0009 §3.6 y M4. Cambia la decisión 1 (2026-11-08): el agente ya no solo comenta. Lo aplica `guarda-linear.py`, con las reglas, los campos y los estados del team en `reglas-linear.json`:
+
+| Qué | Antes | Ahora |
+| --- | --- | --- |
+| Crear issues | La persona | El agente, en *Inbox* o *Discovery* (`sdd-spec`, `sdd-discover`) |
+| Empezar (*Ready*, *In Progress*, *In Review*) | La persona movía a *Ready* | El agente, solo si el ID abre una línea de lista de primer nivel de la sección «Entregas» de una spec del `main` de GitHub de un repo de `repos` (`sdd-plan`). Hoy solo la calculadora: en `sdd-workflow`, `docs/specs/` no está en CODEOWNERS. Con una spec sin esa sección, sigue *Ready*, que mueve la persona |
+| Título, descripción y etiquetas | La persona | El agente, solo si la issue no está en ninguna lista de `main`; las de la lista, no (decisión de Víctor del 2026-11-26) |
+| Cerrar, cancelar, marcar como duplicada, borrar, archivar | La persona (o «Fixes») | Igual: bloqueado siempre (M4) |
+| Devolver a *Inbox* o *Discovery* una issue que ya existe | La persona | Igual: todo cambio de estado que no sea empezar se bloquea (G4-2-B-02). Reabrir una issue de la lista (pasarla de *Done* a *In Progress*) no lo frena la guarda, que no conoce el estado actual: lo dice `sdd-plan` (G4-3-B-01) |
+| Otras herramientas, campos o estados | Bloqueados | Bloqueados, también los que no conoce; la issue va por su identificador, no por su UUID |
+
+`AGENTS.md:11` lo resume en una línea. Sale «El estado de la entrega vive en la issue»: lo dicen `sdd-plan` (sección 3) y `sdd-implement`. `AGENTS.md` pasa de ~1546 a ~1548 tokens (tope ~1548).
+
+Límites: la integración de GitHub de Linear también mueve la issue a *In Progress* al abrir un PR, esté o no en la lista; el hook no la ve. La regla de datos de ADR-0003 (en proyectos `confidencial`, solo títulos y enlaces) queda en las skills: ningún fichero marca un proyecto como `confidencial` para que el hook lo lea.

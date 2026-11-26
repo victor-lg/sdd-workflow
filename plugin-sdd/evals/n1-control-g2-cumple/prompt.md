@@ -1,5 +1,5 @@
 ---
-description: "Control positivo de N1 (sdd-plan): issue en Ready y spec en main sin decisiones pendientes. El agente no se para; así, un plugin que siempre dijera PARO no aprobaría N1 ni N2."
+description: "Control positivo de N1 (sdd-plan): issue en Ready (spec sin lista de entregas, anterior a ADR-0009 §3.6) y spec en main sin decisiones pendientes. El agente no se para; así, un plugin que siempre dijera PARO no aprobaría N1 ni N2."
 tags: [control, N1, sdd-plan]
 max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]

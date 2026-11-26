@@ -5,14 +5,14 @@ Qué significa cada código y cada paso. La norma completa está en `docs/linea-
 ## El camino de un cambio
 
 ```
-Idea → Descubrir → Spec (PR) → Issue en Ready → Implementar (PR) → Revisión IA + CI → Fusionar → Publicar → Probar en el iPhone
+Idea → Descubrir → Spec con su lista de issues (PR) → Issue en la lista → Implementar (PR) → Revisión IA + CI → Fusionar → Publicar → Probar en el iPhone
  F0       F1         F2   G1       F3     G2         F4      G3        F5   G4  G5      F6  G6      (D25)
 ```
 
 1. **F0 Idea:** sale de una conversación, una nota o una issue.
 2. **F1 Descubrir:** entrevista guiada para aclarar qué se quiere (skill `sdd-discover`).
 3. **F2 Especificar:** se escribe o cambia la spec en su propio PR (`sdd-spec`). **G1:** la spec solo vale cuando está fusionada en `main`.
-4. **F3 Planificar:** la issue de Linear pasa a *Ready* con el enlace a la spec (**G2**). El agente comprueba que está y que la spec está en `main` (`sdd-plan`).
+4. **F3 Planificar:** la issue de Linear está en la sección «Entregas» de su spec en `main`, que aprobaste al fusionarla (**G2**, ADR-0009 §3.6). El agente lo comprueba y la empieza (`sdd-plan`).
 5. **F4 Implementar:** el agente escribe tests desde los AC y el código, en un PR de código (`sdd-implement`). **G3:** cada AC que el PR dice cubrir tiene un test que lo cita.
 6. **F5 Revisar:** revisores IA independientes (**G4**, `sdd-review`) y la CI en verde (**G5**).
 7. **F6 Integrar:** la persona aprueba y fusiona (**G6**).
@@ -41,7 +41,7 @@ Hay dos series de ADR: los del **proyecto** (`calculadora-discos/docs/adr/`, por
 | Gate | Qué asegura | Quién o qué lo aplica |
 | --- | --- | --- |
 | G1 | La spec está aprobada: fusionada en `main` | Tú, al fusionar el PR de spec |
-| G2 | La issue está en *Ready* y enlaza una spec de `main` | Tú en Linear; el agente lo comprueba |
+| G2 | La issue está en «Entregas» de una spec de `main` (antes de VIC-58, en *Ready*) | Tú, al aprobar la spec; el agente lo comprueba |
 | G3 | Cada AC declarado tiene un test que lo cita | La CI (check `trazabilidad`) |
 | G4 | Ha revisado alguien que no hizo el cambio | Subagentes revisores (IA) |
 | G5 | La CI está en verde sobre el último commit | GitHub (checks obligatorios) |
@@ -90,7 +90,7 @@ Pruebas de que el sistema frena lo que debe:
 
 ## Linear
 
-- **Estados:** *Inbox* (recién creada), *Discovery*, *Ready* (lista para implementar, G2), *In Progress*, *In Review*, *Done*, *Canceled*.
+- **Estados:** *Inbox* (recién creada), *Discovery*, *Ready* (lista para implementar; desde VIC-58 basta la lista de la spec, G2), *In Progress*, *In Review*, *Done*, *Canceled*.
 - **"Fixes VIC-N"** en el PR cierra la issue al fusionar. **"Refs VIC-N"** la enlaza sin cerrarla: es lo habitual cuando la entrega tiene una prueba manual (en el iPhone, tras publicar…) o no consta si la tiene, y la cierras tú después de probar (M4).
 
 ## Herramientas y piezas

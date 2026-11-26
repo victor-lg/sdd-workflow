@@ -2,7 +2,13 @@
 
 Las issues viven en Linear, no en GitHub (ADR-0003), así que esta plantilla no va en el repo del proyecto. Se configura una vez en Linear, en los ajustes del team → *Templates* → nueva plantilla de issue, y se pega el bloque de abajo como descripción.
 
-La issue la escribes tú. El agente la lee y, como mucho, la comenta (no cambia su estado, su descripción ni sus etiquetas; lo bloquea el hook `guarda-linear.py`): `sdd-plan` comprueba que está en *Ready*, que enlaza una spec que está en `main` y qué AC entran en la entrega.
+Desde VIC-58 (ADR-0009 §3.6), las issues de una spec las crea el agente con esta plantilla al preparar el PR de la spec, y las pone en la sección «Entregas» de la spec. Tú das un único visto bueno: apruebas y fusionas ese PR, con el diseño y la lista. Ya no mueves cada issue a *Ready*. El hook `guarda-linear.py` deja al agente crear, comentar y empezar issues, y le bloquea:
+
+- empezar una issue que no está en «Entregas» de una spec de `main`;
+- cambiar el título, la descripción o las etiquetas de una que sí está (las aprobaste así);
+- cerrar, cancelar, borrar o archivar cualquiera (M4).
+
+`sdd-plan` comprueba que la issue está en la lista, que la spec está en `main` y qué AC entran en la entrega. Una issue que escribes tú sigue valiendo: el agente la pone en la lista del PR de la spec.
 
 Desde la v1.1 (M28, ADR-0009), la issue es además el contrato de la entrega: qué entra y qué no, cuándo está hecha, qué ficheros puede tocar el agente y qué hace si se bloquea. El agente trabaja dentro de ese contrato; si necesita salir de él, para y lo explica en la issue o en el PR.
 
@@ -54,7 +60,9 @@ R0 / R1 / R2 — <motivo en una línea>. El agente puede proponer subirlo; nunca
 
 ---
 
-## Cuándo puede pasar a *Ready* (G2)
+## Cuándo puede empezarse (G2)
+
+Está en la sección «Entregas» de su spec en `main`. Para una spec anterior a VIC-58, sin esa sección, vale lo de antes: la mueves tú a *Ready*. En los dos casos:
 
 - Para R1 y R2, la sección **Spec** enlaza una spec ya fusionada en `main`.
 - La sección **AC de esta entrega** no está vacía, salvo en cambios R0.

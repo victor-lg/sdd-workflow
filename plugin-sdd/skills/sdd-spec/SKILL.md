@@ -3,7 +3,7 @@ name: sdd-spec
 description: Convierte una idea o necesidad en una especificación SDD verificable (FR/NFR/AC) con la plantilla del proyecto, audita su calidad y la entrega en un PR para aprobación humana. Úsala para crear o modificar cualquier spec en docs/specs/.
 ---
 
-<!-- Workflow SDD + IA v1.0, construido a partir del "PROMPT SPEC" de las notas originales (aclaraciones por el camino corto, VIC-40). -->
+<!-- Workflow SDD + IA v1.0, construido a partir del "PROMPT SPEC" de las notas originales (aclaraciones por el camino corto, VIC-40; lista de entregas, ADR-0009 §3.6, VIC-58). -->
 
 # sdd-spec
 
@@ -84,7 +84,15 @@ Clasifica la spec en uno de tres estados y justifícalo:
 
 Cuando la revisión (G4) termina sin nada que deba corregirse, el último commit del PR cambia `estado: en-revision` por `estado: aprobada`. Así la spec llega a `main` con su estado final. Ese valor no autoriza nada por sí mismo: solo cuenta si la persona fusiona el PR (G1). Como ese commit llega después de la última ronda y no es documentación, el check `cambios` (o `aprobacion`, si la spec es R2) falla hasta que la persona apruebe la cabeza: pídeselo en el PR.
 
-En el PR incluye un resumen breve, legible en el móvil: qué cambia, los AC clave, las decisiones que tomó la persona y los hallazgos de la auditoría que quedan abiertos.
+**La lista de entregas (ADR-0009 §3.6).** Una spec lista para revisión lleva al final una sección `## Entregas` (numerada como las demás) con una línea por issue de Linear: `- VIC-N: <qué entrega> (AC-01, AC-02)`. Es el visto bueno único de la persona: al aprobar y fusionar el PR de la spec (`docs/specs/` está en CODEOWNERS), aprueba el diseño y esa lista. No lo es ningún estado, etiqueta ni comentario de Linear, que tú puedes cambiar.
+
+- Las issues las creas tú antes de abrir el PR, por el MCP de Linear (`save_issue` sin `id`), en *Inbox* (sin `state`) o *Discovery*: nunca empezadas. Cada una con el contrato de la plantilla de issue del workflow (alcance, fuera de alcance, «Hecho cuando», ficheros permitidos, qué hacer si se bloquea), el nivel de riesgo como etiqueta y la ruta de la spec. Su ID es el que va en la lista.
+- En proyectos `confidencial`, en Linear solo van títulos y enlaces (ADR-0003): el detalle queda en la spec.
+- Mientras la spec no esté en `main`, puedes corregir el título, la descripción y las etiquetas de esas issues. Después ya no: el hook `guarda-linear.py` lo bloquea, porque la persona las aprobó así. Lo que cambie, en un comentario o en otro PR de spec.
+- Añadir o quitar una issue de la lista es un cambio de la spec: va en un PR de spec, nunca en Linear. Una aclaración (camino corto) no toca la lista.
+- Las issues las empieza `sdd-plan`, solo si están en la lista de `main`. No las cierras, cancelas ni archivas nunca (M4).
+
+En el PR incluye un resumen breve, legible en el móvil: qué cambia, los AC clave, la lista de entregas, las decisiones que tomó la persona y los hallazgos de la auditoría que quedan abiertos.
 
 ## Límites
 

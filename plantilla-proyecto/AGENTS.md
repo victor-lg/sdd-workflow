@@ -8,7 +8,7 @@ Instrucciones para cualquier agente que trabaje en este repositorio. Los procedi
 
 - Comportamiento esperado: `docs/specs/`. Solo es vigente lo que está en `main`. Los requisitos compartidos viven en specs `SPEC-XCUT-*`: cítalas por ID, nunca copies su texto.
 - Visión del producto: `docs/vision.md`.
-- Planificación de entregas: la issue de Linear de la tarea. Léela; solo puedes comentarla (el hook `guarda-linear.py` bloquea el resto). El estado de la entrega vive en la issue; con prueba manual, la cierra la persona (`Refs`).
+- Planificación de entregas: la issue de Linear de la tarea. Puedes crearla y comentarla; empezarla, solo si está en «Entregas» de su spec en `main`; cerrarla, nunca (`guarda-linear.py`). Con prueba manual, la cierra la persona (`Refs`).
 - Decisiones de arquitectura: `docs/adr/`, con estado `Aceptado` y fusionadas en `main`. Un ADR `Aceptado` en una rama sin fusionar no tiene autoridad.
 - Implementación: el código y los tests existentes.
 - Las notas de `discovery/`, la memoria, los resúmenes y las conversaciones son contexto, nunca norma.

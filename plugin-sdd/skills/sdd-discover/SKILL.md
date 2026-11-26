@@ -48,7 +48,7 @@ Nada de ese material se convierte en requisito sin confirmación.
 
 ## Dónde se registra
 
-- **Notas de la entrevista:** `discovery/<ID-issue>-notas.md`, con los cuatro bloques de arriba y un registro breve de las preguntas y respuestas. Las actualizas en cada respuesta relevante. Si no hay issue todavía, propón crearla en Linear; la crea la persona.
+- **Notas de la entrevista:** `discovery/<ID-issue>-notas.md`, con los cuatro bloques de arriba y un registro breve de las preguntas y respuestas. Las actualizas en cada respuesta relevante. Si no hay issue todavía, créala en Linear en *Inbox* (`save_issue` sin `state`) con el título y la ruta de las notas; en proyectos `confidencial`, solo título y enlace (ADR-0003).
 - **Visión del producto:** al terminar el primer descubrimiento de un producto, propón `docs/vision.md` con la plantilla. Se aprueba por PR, como todo lo demás.
 
 ## Cuándo terminar
@@ -60,4 +60,4 @@ Propón pasar a especificar (`sdd-spec`) cuando una capacidad concreta tenga:
 - casos límite principales identificados;
 - ninguna pregunta bloqueante abierta.
 
-El resto del producto puede seguir en descubrimiento (D03). La persona mueve la issue a *Discovery* o la deja en *Inbox*; tú solo puedes comentarla.
+El resto del producto puede seguir en descubrimiento (D03). Si la creas tú y ya está en descubrimiento, créala en *Discovery*; una que ya existe la mueve la persona, y tú la comentas. Empezarla es de `sdd-plan`, con la lista aprobada de la spec.
