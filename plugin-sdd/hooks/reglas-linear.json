@@ -1,10 +1,40 @@
 {
   "servidor": "linear",
-  "permitidas": "^(get|list|search|extract)_(?!(.*_)?(create|save|update|delete|set|archive|move|assign|add|remove)(_|$))|^(create|save)_comment$",
+  "lecturas": "^(get|list|search|extract)_(?!(.*_)?(create|save|update|delete|set|archive|move|assign|add|remove)(_|$))",
+  "issues": "(save|create|update)_issue",
+  "cerrar": "^(delete|archive|unarchive|close|cancel)_|_(delete|archive|close|cancel)$",
+  "campos_crear": ["title", "description", "team", "state", "labels", "priority", "estimate", "project", "projectMilestone", "parentId", "links"],
+  "campos_editar": ["title", "description", "labels"],
+  "estados": {
+    "libre": ["Inbox", "Discovery", "backlog",
+              "0edaf941-de26-4485-a721-0f069a59a9ea", "0a8264bc-51c3-40e7-a4cb-45fe76b7d20a"],
+    "empezar": ["Ready", "In Progress", "In Review", "unstarted", "started",
+                "76159993-9330-4c59-a17e-f651e7cfd8b1", "a2352fd0-dd43-4854-ad12-a9d5a77bced8",
+                "3cdf9b6e-6713-45b8-b5a6-2681499dd37e"],
+    "cerrar": ["Done", "Canceled", "Duplicate", "completed", "canceled", "duplicate",
+               "1eb64988-d3f3-4399-a9fb-9710f67406c6", "44df9d96-3149-4297-a14a-f9f30a92e487",
+               "a0d212bc-5cc7-41f9-b02c-4a0640ffb928"]
+  },
   "reglas": {
-    "solo-comentar": {
+    "herramienta": {
       "nivel": "bloquear",
-      "mensaje": "REG-04 (decisión 1): en Linear el agente lee y comenta; las issues las crea, las mueve, las etiqueta y las edita la persona ({herramienta}). En su lugar: deja un comentario en la issue con lo que propones cambiar y díselo a la persona. Si crees que aquí no aplica, díselo a la persona; no lo esquives."
+      "mensaje": "REG-04 (ADR-0009 §3.6): en Linear el agente lee, comenta, crea y empieza issues; el resto lo hace la persona ({herramienta}). Editar un comentario existente tampoco: puede ser suyo. En su lugar: deja un comentario nuevo en la issue con lo que propones y díselo a la persona. Si crees que aquí no aplica, díselo a la persona; no lo esquives."
+    },
+    "cerrar": {
+      "nivel": "bloquear",
+      "mensaje": "M4 (ADR-0009): el agente no cierra, cancela, marca como duplicada, borra ni archiva nada en Linear ({herramienta}). La issue la cierra la persona tras probar, o la integración con «Fixes» al fusionar. En su lugar: deja un comentario en la issue con lo que propones y díselo a la persona. Si crees que aquí no aplica, díselo a la persona; no lo esquives."
+    },
+    "fuera-de-lista": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0009 §3.6: la issue {issue} no está en la sección «Entregas» de ninguna spec de origin/main, así que la persona no ha aprobado empezarla ({herramienta}). Una issue nueva se crea en Inbox o Discovery. En su lugar: no la empieces; díselo a la persona y, si debe entrar, propón añadirla a la lista en un PR de la spec. Si la lista se acaba de fusionar, haz git fetch origin y vuelve a intentarlo. No la esquives."
+    },
+    "lista-aprobada": {
+      "nivel": "bloquear",
+      "mensaje": "ADR-0009 §3.6: la issue {issue} está en la lista aprobada de {spec}; su título, su descripción y sus etiquetas los aprobó la persona con la spec ({herramienta}). En su lugar: comenta en la issue lo que propones cambiar y díselo a la persona; si cambia el alcance, va en un PR de la spec. No la esquives."
+    },
+    "desconocido": {
+      "nivel": "bloquear",
+      "mensaje": "REG-04 (ADR-0009 §3.6): la guarda de Linear no reconoce {detalle} en {herramienta}, así que no puede comprobar la llamada. En su lugar: usa solo los campos y estados que admite reglas-linear.json, con la issue por su identificador (VIC-12); si hace falta otro, díselo a la persona. No lo esquives."
     }
   }
 }
