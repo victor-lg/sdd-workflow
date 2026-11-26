@@ -138,7 +138,7 @@ class TestConvenciones(unittest.TestCase):
         self.assertEqual(inf.errores, [])
 
     def test_enlaces_invalidos(self):
-        for primera in ["Fixes VIC-<N>", "Closes VIC-12", "fixes VIC-12", "Fixes #12", "Fixes VIC12",
+        for primera in ["<Refs, Fixes o Part of> VIC-<N>", "Fixes VIC-<N>", "Closes VIC-12", "fixes VIC-12", "Fixes #12", "Fixes VIC12",
                         "Issue de Linear: VIC-12", "Este PR arregla VIC-12", "Fixes ABC-12"]:
             with self.subTest(primera=primera):
                 inf = self.comprobar(cuerpo=cuerpo_plantilla(primera))
