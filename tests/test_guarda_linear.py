@@ -302,6 +302,10 @@ class ListaEnMain(unittest.TestCase):
         git(self.repo, "tag", "main", "HEAD")
         self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
 
+    def test_otra_rama_que_acaba_en_refs_heads_main(self):
+        git(self.repo, "push", "-q", str(self.remoto), "HEAD:refs/heads/x/refs/heads/main")
+        self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
+
     def test_git_replace_no_cuela(self):
         """Un reemplazo del commit de main por el de la rama no cambia la lista."""
         main = git(self.repo, "rev-parse", "HEAD~1").strip()

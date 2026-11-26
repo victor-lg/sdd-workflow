@@ -155,10 +155,12 @@ def aprobadas_en_main(cwd, conf):
     if not url:
         raise LookupError("el remoto origin del clon no es uno de los repos de reglas-linear.json")
     # Desde la raíz del sistema y sin -C: la URL no pasa por insteadOf ni por la configuración de ningún repo.
-    remoto = git("ls-remote", "--", url, "refs/heads/main", cwd=os.path.abspath(os.sep)).split()
-    if len(remoto) != 2 or not re.fullmatch(r"[0-9a-f]{40,64}", remoto[0]):
+    # El patrón de ls-remote casa también con el final de otras ramas (x/refs/heads/main): solo vale la exacta.
+    remoto = [linea.split("\t") for linea in git("ls-remote", "--", url, "refs/heads/main",
+                                                    cwd=os.path.abspath(os.sep)).splitlines()]
+    main = next((sha for sha, ref in remoto if ref == "refs/heads/main"), "")
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", main):
         raise LookupError("main no está en el remoto")
-    main = remoto[0]
     try:
         commit = objeto(git, raiz, "commit", main)
     except RuntimeError:
