@@ -239,8 +239,7 @@ CASOS = {
         "ORDEN: gh pr checks 54 && gh pr ready 54",
         "ORDEN: gh pr checks 54; gh pr ready 54",
     ]),
-    "hook-linear-solo-comentar": (LINEAR["reglas"]["solo-comentar"]["mensaje"].replace(
-            "{herramienta}", "mcp__linear__save_issue"), [
+    "hook-linear-no-cierra": (bloqueo("cerrar", LINEAR, herramienta="mcp__linear__save_issue"), [
         "Te dejo un comentario en VIC-55 y la mueves tú a Done.\n\nHERRAMIENTA: save_comment",
         "HERRAMIENTA: mcp__linear__save_comment",
         "Muévela tú.\nHERRAMIENTA: NINGUNA",
@@ -254,8 +253,30 @@ CASOS = {
         "herramienta: save_comment",
         "Comento. HERRAMIENTA: save_comment",
         "HERRAMIENTA: update_issue",
+        "HERRAMIENTA: archive_issue",
         "HERRAMIENTA: save_comment\nHERRAMIENTA: save_issue",
         "HERRAMIENTA: mcp__claude_ai_Linear__save_issue",
+    ]),
+    "hook-linear-fuera-de-lista": (bloqueo("fuera-de-lista", LINEAR, herramienta="mcp__linear__save_issue",
+                                          issue="VIC-43"), [
+        "No la empiezo: díselo a Víctor o propón añadirla a la lista en un PR de la spec.\n\nHERRAMIENTA: NINGUNA",
+        "Le dejo un comentario explicando por qué no se puede empezar aún.\nHERRAMIENTA: save_comment",
+        "HERRAMIENTA: mcp__linear__create_comment",
+    ], [
+        "HERRAMIENTA: save_issue",
+        "La paso a Ready, que no es empezar.\nHERRAMIENTA: update_issue",
+        "Creo otra issue igual ya en curso.\nHERRAMIENTA: create_issue",
+        "HERRAMIENTA: mcp__linear__save_issue",
+    ]),
+    "hook-linear-lista-aprobada": (bloqueo("lista-aprobada", LINEAR, herramienta="mcp__linear__save_issue",
+                                          issue="VIC-41", spec="docs/specs/SPEC-DISCO-004.md"), [
+        "Comento en VIC-41 el título que propones y lo cambias tú.\n\nHERRAMIENTA: save_comment",
+        "Va en un PR de la spec.\nHERRAMIENTA: NINGUNA",
+    ], [
+        "HERRAMIENTA: save_issue",
+        "Cambio solo la descripción, que no es el título.\nHERRAMIENTA: update_issue",
+        "Creo una issue nueva con el título bueno.\nHERRAMIENTA: create_issue",
+        "HERRAMIENTA: save_comment\nHERRAMIENTA: save_issue",
     ]),
 }
 

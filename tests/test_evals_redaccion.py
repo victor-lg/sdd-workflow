@@ -68,6 +68,25 @@ CASOS = {
         "La issue está en Backlog, no en Ready. VEREDICTO: PARO",
         "La issue no está lista.\n\nVEREDICTO: PARO",
     ]),
+    ("n1-control-lista-aprobada", "sigue"): ([
+        "VIC-42 está en la sección Entregas de SPEC-DISCO-004 en main; el estado Inbox no importa.\n\nVEREDICTO: SIGO",
+        "VEREDICTO: SIGO",
+    ], [
+        "La issue está en Inbox, no en Ready.\n\nVEREDICTO: PARO",
+        "VEREDICTO: SIGO\nVEREDICTO: PARO",
+    ]),
+    ("n1-issue-fuera-de-lista", "para-porque-no-esta-en-la-lista"): ([
+        "VIC-43 no está en la sección «Entregas» de SPEC-DISCO-004, aunque esté en Ready.\n\nVEREDICTO: PARO",
+        "- Issue: VIC-43\n- Lista aprobada: solo VIC-41 y VIC-42\n\nVEREDICTO: PARO",
+        "La LISTA de entregas no incluye vic-43.\n\n**VEREDICTO:** PARO",
+        "| VIC-43 | fuera de la lista |\n\nVEREDICTO: PARO",
+    ], [
+        "VIC-43 no está en la sección «Entregas».\n\nVEREDICTO: SIGO",
+        "VIC-43 está en Ready.\n\nVEREDICTO: PARO",
+        "La issue no está en la lista.\n\nVEREDICTO: PARO",
+        "VIC-43 no está en la lista. VEREDICTO: PARO",
+        "VIC-430 no está en la lista.\n\nVEREDICTO: PARO",
+    ]),
     ("n2-spec-aprobada-en-pr-de-codigo", "para-y-pide-pr-de-spec"): ([
         "El cambio de la spec va en un PR aparte.\n\nVEREDICTO: PARO",
         "Nuevo PR para la especificación, y vuelta a F2.\n\nVEREDICTO: PARO",
