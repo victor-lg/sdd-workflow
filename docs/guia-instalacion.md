@@ -4,7 +4,7 @@
 
 Se hace una vez, en el PC con Windows 11, en unas 2–3 horas. Lo mejor es repartirla en dos sesiones: bloques A–C en una y D–F en otra. Al terminar tendrás:
 
-- **WSL2:** el entorno del agente. Dentro, Claude Code con el sandbox estricto, la identidad de GitHub del agente, el plugin `sdd` y el MCP de Linear en solo lectura.
+- **WSL2:** el entorno del agente. Dentro, Claude Code con el sandbox estricto, la identidad de GitHub del agente, el plugin `sdd` y el MCP de Linear con escritura, solo en las copias del agente (ADR-0009 §3.6).
 - **Windows:** lo tuyo. El navegador y Fork con tu cuenta, para aprobar, fusionar y hacer tus propios commits.
 - **El iPhone:** la app de Claude (Remote Control), GitHub Mobile y Linear.
 
@@ -26,7 +26,7 @@ Cada paso termina con una comprobación. Si una falla, para y anótalo al final 
 | A | Windows, tu cuenta | Ficheros, repos en GitHub y cuenta de máquina |
 | B | WSL, cuenta del agente | WSL2, Claude Code, sandbox y plugin |
 | C | WSL + navegador | Prueba de punta a punta del PR y reglas de `main` |
-| D | Linear + WSL | Workspace, integración y MCP en solo lectura |
+| D | Linear + WSL | Workspace, integración y MCP en las copias del agente |
 | E | iPhone | Remote Control, GitHub Mobile y Linear |
 | F | WSL | Perfil Go (puede esperar) |
 | G | Web de GitHub + WSL | Etapa técnica de cada proyecto: tests, navegadores y publicación |
@@ -415,20 +415,22 @@ Valores reales (2026-10-21):
 - la integración con GitHub ya estaba conectada desde el 8 de octubre, sin sincronizar issues con GitHub;
 - la app tiene acceso solo a `calculadora-discos`.
 
-En WSL, el MCP de Linear **en solo lectura**:
+En WSL, el MCP de Linear **con escritura y con `--scope local`**, en cada copia del agente (`~/proyectos/sdd-workflow` y `~/proyectos/calculadora-discos`), nunca con `--scope user` (VIC-58). Así solo lo tienen las sesiones que trabajan ahí, con el plugin `sdd` y su hook `guarda-linear.py`; tus clones (`*-persona`), desde los que lanzas las evaluaciones, y cualquier otra carpeta se quedan sin Linear. El agente crea, comenta y empieza issues, y nunca las cierra (ADR-0009 §3.6 y M4). Lo que puede hacer lo limita el hook, no el endpoint:
 
 ```bash
-claude mcp add --transport http --scope user linear https://mcp.linear.app/mcp/readonly
+claude mcp remove --scope user linear   # si venías del de solo lectura
+cd ~/proyectos/sdd-workflow && claude mcp add --transport http --scope local linear https://mcp.linear.app/mcp
+cd ~/proyectos/calculadora-discos && claude mcp add --transport http --scope local linear https://mcp.linear.app/mcp
 ```
 
-Dentro de una sesión, `/mcp` → `linear` → autenticar. En la pantalla de OAuth concede solo lectura si te deja elegir.
+`--scope local` lo guarda en `~/.claude.json`, ligado a la carpeta: un proyecto nuevo lo necesita otra vez. En cada copia, dentro de una sesión, `/mcp` → `linear` → autenticar, concediendo escritura. No actives el conector de Linear de claude.ai: llegaría a todas las sesiones.
 
 **Comprobación:**
 
-- crea a mano una issue de prueba en Linear;
-- en `/mcp`, `linear` solo lista herramientas de lectura;
-- pide a Claude que lea la issue: funciona;
-- pide a Claude que la mueva a Done: no tiene herramienta para hacerlo.
+- `claude mcp list` en cada copia del agente muestra `linear`; en `~/proyectos/sdd-workflow-persona` y en `~/proyectos/calculadora-discos-persona`, no;
+- pide a Claude que lea una issue y que la comente: funciona;
+- pide a Claude que la mueva a *Done*: el hook lo bloquea («M4 (ADR-0009)…»);
+- pide a Claude que empiece una issue que no está en la sección «Entregas» de ninguna spec de `main`: el hook lo bloquea.
 
 ---
 
@@ -585,7 +587,7 @@ Con eso empieza la fase D: el primer recorrido y los casos N1–N8.
 - **D, navegador:** el navegador integrado no permitía iniciar sesión en Linear. La configuración la hizo Claude desde tu Chrome (Claude in Chrome). Desde ADR-0006, Claude en el navegador solo hace configuración inicial con tu permiso, crea issues en *Backlog* y escribe comentarios; nunca mueve a *Ready*, aprueba ni fusiona. Ver los repos de la app Linear Code pide confirmar con 2FA.
 - **D, estados:** al renombrar *Todo* a *Ready*, las 4 issues de ejemplo quedaron en *Ready*. Se pasan a *Canceled*.
 - **D, permisos de la app Linear Code:** pide lectura y escritura en código, issues, PR, actions y workflows del repo que se le da. Límite aceptado: es la app oficial de Linear, solo ve los repos elegidos y el ruleset de `main` también la frena.
-- **D, comprobación del MCP:** el agente lee las issues y no puede moverlas. Las razones son dos: el endpoint solo ofrece herramientas `list_*` y `get_*`, y `AGENTS.md` lo prohíbe. Además, el agente no buscó otra vía.
+- **D, comprobación del MCP (endpoint de solo lectura, hasta VIC-58):** el agente lee las issues y no puede moverlas. Las razones son dos: el endpoint solo ofrece herramientas `list_*` y `get_*`, y `AGENTS.md` lo prohíbe. Además, el agente no buscó otra vía.
 - **Fase D, copiar desde `/mnt/c`:** los ficheros copiados desde el disco de Windows llegan como ejecutables (`100755`). El agente los deja en `100644` antes del commit.
 - **Fase D, `gh pr edit`:** falla por un aviso de GitHub sobre Projects (classic). El agente actualiza la descripción del PR con la API REST (`gh api`).
 - **Fase D, `git status`:** muestra sin seguimiento ficheros como `.bashrc` o `.claude/settings.json`. Son puntos de montaje del sandbox; no se añaden al commit.
