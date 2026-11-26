@@ -19,7 +19,7 @@ guarda = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(guarda)
 CONF = json.loads((HOOKS / "reglas-linear.json").read_text(encoding="utf-8"))
 SERVIDORES = ("mcp__linear__", "mcp__claude_ai_Linear__", "mcp__plugin_linear_linear__", "mcp__LINEAR__")
-LISTA = {"VIC-41": "docs/specs/SPEC-DISCO-004.md"}
+LISTA = {("VIC", 41): "docs/specs/SPEC-DISCO-004.md"}
 
 
 def aprobadas():
@@ -124,7 +124,7 @@ class Issues(unittest.TestCase):
 
     def test_empezar_una_de_la_lista(self):
         for estado in ("Ready", "In Progress", "in review", "started", "unstarted"):
-            for ident in ("VIC-41", "vic-41", " VIC-41 "):
+            for ident in ("VIC-41", "vic-41", " VIC-41 ", "VIC-041"):
                 with self.subTest(estado=estado, ident=ident):
                     self.assertIsNone(decide("save_issue", {"id": ident, "state": estado}))
 
@@ -164,23 +164,17 @@ class Issues(unittest.TestCase):
 
     def test_por_uuid_no(self):
         """Por UUID la guarda no puede buscarla en la lista: se pide el identificador."""
-        for ident in ("661e6c38-b16d-48a8-ae02-bb1407791586", "VIC 41", "41", "", 41, None):
-            if ident is None:
-                continue
+        for ident in ("661e6c38-b16d-48a8-ae02-bb1407791586", "VIC 41", "41", "", 41, ["VIC-41"]):
             with self.subTest(ident=ident):
                 self.assertEqual(decide("save_issue", {"id": ident, "title": "t"}, sin_lista), "desconocido")
 
     def test_campos_y_estados_que_no_conoce(self):
-        casos = [({"id": "VIC-43", "assignee": "me"}, "editar"),
-                 ({"id": "VIC-43", "priority": 1}, "editar"),
-                 ({"id": "VIC-43", "team": "Otro"}, "editar"),
-                 ({"id": "VIC-43", "duplicateOf": "VIC-1"}, "editar"),
-                 ({"title": "t", "assignee": "me"}, "crear"),
-                 ({"title": "t", "duplicateOf": "VIC-1"}, "crear"),
-                 ({"id": "VIC-41", "state": "Archivada"}, "estado"),
-                 ({"title": "t", "state": "Triage"}, "estado")]
-        for entrada, motivo in casos:
-            with self.subTest(entrada=entrada, motivo=motivo):
+        casos = [{"id": "VIC-43", "assignee": "me"}, {"id": "VIC-43", "priority": 1}, {"id": "VIC-43", "team": "Otro"},
+                 {"id": "VIC-43", "duplicateOf": "VIC-1"}, {"title": "t", "assignee": "me"},
+                 {"title": "t", "duplicateOf": "VIC-1"}, {"id": "VIC-41", "state": "Archivada"},
+                 {"title": "t", "state": "Triage"}]
+        for entrada in casos:
+            with self.subTest(entrada=entrada):
                 self.assertEqual(decide("save_issue", entrada, sin_lista), "desconocido")
 
     def test_sin_cambios_no_mira_la_lista(self):
@@ -193,70 +187,159 @@ class Issues(unittest.TestCase):
 
 
 class Entregas(unittest.TestCase):
-    def test_secciones(self):
-        texto = ("# SPEC\n\nVIC-1 en la intro\n\n## 13. Entregas\n\n- VIC-41: lógica\n### Detalle\n- VIC-42\n"
-                 "## 14. Otra\n- VIC-43\n## Entregas pendientes\n- VIC-44\n# Fin\n- VIC-45\n")
-        seccion = guarda.secciones_entregas(texto)
-        for ident in ("VIC-41", "VIC-42", "VIC-44"):
-            self.assertIn(ident, seccion)
-        for ident in ("VIC-1", "VIC-43", "VIC-45"):
-            self.assertNotIn(ident, seccion)
+    def test_solo_el_id_que_abre_cada_linea(self):
+        texto = ("# SPEC\n\nVIC-1 en la intro\n\n## 13. Entregas\n\n- VIC-41: lógica (AC-01, AC-02; sustituye a VIC-30)\n"
+                 "* **VIC-42**: interfaz\n1. vic-046 cosa\n  - VIC-47\nTexto que nombra VIC-48\n### Detalle\n- VIC-49\n"
+                 "## 14. Otra\n- VIC-43\n# Fin\n- VIC-45\n")
+        self.assertEqual(guarda.ids_de_entregas(texto),
+                         [("VIC", 41), ("VIC", 42), ("VIC", 46), ("VIC", 47), ("VIC", 49)])
 
-    def test_sin_seccion(self):
-        self.assertEqual(guarda.secciones_entregas("## 5. Criterios\n- VIC-41\n## Entregables\n- VIC-2\n"), "")
+    def test_solo_el_titulo_exacto(self):
+        for titulo in ("## Entregas", "## 13. Entregas", "### 2.1 entregas", "## Entregas ##"):
+            with self.subTest(titulo=titulo):
+                self.assertEqual(guarda.ids_de_entregas(f"{titulo}\n- VIC-41\n"), [("VIC", 41)])
+        for titulo in ("## Entregas pendientes", "## Entregas fuera de alcance", "## Entregables", "## Otras entregas",
+                       "Entregas", "##Entregas"):
+            with self.subTest(titulo=titulo):
+                self.assertEqual(guarda.ids_de_entregas(f"{titulo}\n- VIC-41\n"), [])
+
+    def test_sin_bloques_de_codigo(self):
+        texto = ("```markdown\n## Entregas\n- VIC-90\n```\n## Entregas\n- VIC-41\n~~~~\n- VIC-91\n```\n- VIC-92\n~~~~\n"
+                 "- VIC-42\n")
+        self.assertEqual(guarda.ids_de_entregas(texto), [("VIC", 41), ("VIC", 42)])
+
+    def test_clave(self):
+        self.assertEqual(guarda.clave(" vic-041 "), ("VIC", 41))
+        for malo in ("VIC 41", "41", "", "661e6c38-b16d-48a8-ae02-bb1407791586", "VIC-4a"):
+            with self.subTest(malo=malo):
+                self.assertIsNone(guarda.clave(malo))
 
 
 def git(cwd, *args):
-    subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null",
-                    "-c", "commit.gpgsign=false", *args], check=True, capture_output=True, text=True)
+    return subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t",
+                           "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", *args],
+                          check=True, capture_output=True, text=True).stdout
 
 
 class ListaEnMain(unittest.TestCase):
-    """Con un repo de verdad: solo cuenta origin/main, no la rama ni el árbol de trabajo."""
+    """Con repos de verdad: un bare hace de GitHub y su URL va en la configuración, como la de
+    reglas-linear.json. Solo cuenta su main: ni la referencia local, ni la rama, ni el árbol."""
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
-        self.repo = pathlib.Path(self.dir.name)
-        git(self.repo, "init", "-q", "-b", "main")
+        base = pathlib.Path(self.dir.name)
+        self.remoto, self.repo = base / "remoto.git", base / "clon"
+        git(base, "init", "-q", "--bare", "-b", "main", str(self.remoto))
+        git(base, "init", "-q", "-b", "main", str(self.repo))
         specs = self.repo / "docs" / "specs"
         specs.mkdir(parents=True)
-        (specs / "SPEC-DISCO-004.md").write_text("# SPEC\nVIC-1\n## 13. Entregas\n- VIC-41 lógica\n- vic-42\n",
-                                                 encoding="utf-8")
+        (specs / "SPEC-DISCO-004.md").write_text(
+            "# SPEC\nVIC-1\n## 13. Entregas\n- VIC-41: lógica (AC-01)\n- vic-042\n", encoding="utf-8")
         (specs / "_ejemplo-SPEC-AUTH-002.md").write_text("## Entregas\n- VIC-90\n", encoding="utf-8")
         (specs / "notas.txt").write_text("## Entregas\n- VIC-91\n", encoding="utf-8")
+        (specs / "SPEC-ñ-005.md").write_text("## Entregas\n- VIC-50\n", encoding="utf-8")
+        (self.repo / "web").mkdir()
+        (self.repo / "web" / "x").write_text("x", encoding="utf-8")
         git(self.repo, "add", ".")
         git(self.repo, "commit", "-q", "-m", "x")
+        git(self.repo, "remote", "add", "origin", "https://github.com/Prueba/Repo.git")
+        git(self.repo, "push", "-q", str(self.remoto), "main")
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         (specs / "SPEC-DISCO-004.md").write_text("## Entregas\n- VIC-43\n", encoding="utf-8")
         git(self.repo, "commit", "-q", "-am", "en la rama")
+        self.conf = {**CONF, "repos": {"prueba/repo": self.remoto.as_uri()}}
+        self.esperado = {("VIC", 41): "docs/specs/SPEC-DISCO-004.md", ("VIC", 42): "docs/specs/SPEC-DISCO-004.md",
+                         ("VIC", 50): "docs/specs/SPEC-ñ-005.md"}
 
     def tearDown(self):
         self.dir.cleanup()
 
-    def test_lee_origin_main(self):
-        self.assertEqual(guarda.aprobadas_en_main(str(self.repo)),
-                         {"VIC-41": "docs/specs/SPEC-DISCO-004.md", "VIC-42": "docs/specs/SPEC-DISCO-004.md"})
+    def test_lee_el_main_del_remoto(self):
+        self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
 
-    def test_sin_origin_main_falla(self):
-        git(self.repo, "update-ref", "-d", "refs/remotes/origin/main")
-        with self.assertRaises(RuntimeError):
-            guarda.aprobadas_en_main(str(self.repo))
+    def test_desde_una_subcarpeta(self):
+        for sub in ("web", "docs", "docs/specs"):
+            with self.subTest(sub=sub):
+                self.assertEqual(guarda.aprobadas_en_main(str(self.repo / sub), self.conf), self.esperado)
+
+    def test_no_se_fia_de_las_referencias_locales(self):
+        """Mover origin/main, o una rama o etiqueta llamada origin/main, no cambia la lista."""
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        git(self.repo, "branch", "origin/main", "HEAD")
+        git(self.repo, "tag", "main", "HEAD")
+        self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
+
+    def test_main_nuevo_sin_fetch_falla(self):
+        otro = pathlib.Path(self.dir.name) / "otro"
+        git(self.dir.name, "clone", "-q", str(self.remoto), str(otro))
+        (otro / "y").write_text("y", encoding="utf-8")
+        git(otro, "add", "y")
+        git(otro, "commit", "-q", "-m", "y")
+        git(otro, "push", "-q", "origin", "main")
+        with self.assertRaisesRegex(LookupError, "git fetch origin"):
+            guarda.aprobadas_en_main(str(self.repo), self.conf)
+        git(self.repo, "fetch", "-q", str(self.remoto), "main")
+        self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
+
+    def test_origen_que_no_esta_en_la_configuracion(self):
+        for url in ("https://github.com/prueba/otro.git", "https://gitlab.com/prueba/repo.git",
+                    self.remoto.as_uri(), "https://github.com/prueba/repo.git.evil.com/x"):
+            with self.subTest(url=url):
+                git(self.repo, "remote", "set-url", "origin", url)
+                with self.assertRaises(LookupError):
+                    guarda.aprobadas_en_main(str(self.repo), self.conf)
+
+    def test_formas_del_origen(self):
+        for url in ("https://github.com/prueba/repo", "git@github.com:Prueba/Repo.git",
+                    "ssh://git@github.com/prueba/repo.git", "https://github.com/prueba/repo.git/"):
+            with self.subTest(url=url):
+                git(self.repo, "remote", "set-url", "origin", url)
+                self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
+
+    def test_insteadof_del_repo_no_cuenta(self):
+        """El ls-remote va fuera del repo: un insteadOf en su configuración no desvía la URL."""
+        falso = pathlib.Path(self.dir.name) / "falso.git"
+        git(self.dir.name, "init", "-q", "--bare", "-b", "main", str(falso))
+        git(self.repo, "push", "-q", str(falso), "HEAD:main")
+        git(self.repo, "config", f"url.{falso.as_uri()}.insteadOf", self.remoto.as_uri())
+        self.assertEqual(guarda.aprobadas_en_main(str(self.repo), self.conf), self.esperado)
+
+    def test_fuera_de_un_repo_falla(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(RuntimeError):
+                guarda.aprobadas_en_main(d, self.conf)
 
     def test_principal_con_el_cwd(self):
-        def llama(entrada):
-            r = subprocess.run([sys.executable, str(RUTA)], capture_output=True, text=True, input=json.dumps(
-                {"tool_name": "mcp__linear__save_issue", "tool_input": entrada, "cwd": str(self.repo)}))
+        copia = pathlib.Path(self.dir.name) / "hook"
+        copia.mkdir()
+        (copia / "guarda-linear.py").write_text(RUTA.read_text(encoding="utf-8"), encoding="utf-8")
+        (copia / "reglas-linear.json").write_text(json.dumps(self.conf), encoding="utf-8")
+
+        def llama(entrada, cwd=self.repo):
+            r = subprocess.run([sys.executable, str(copia / "guarda-linear.py")], capture_output=True, text=True,
+                               input=json.dumps({"tool_name": "mcp__linear__save_issue", "tool_input": entrada,
+                                                 "cwd": str(cwd)}))
             return json.loads(r.stdout)["hookSpecificOutput"] if r.stdout else None
 
         self.assertIsNone(llama({"id": "VIC-41", "state": "In Progress"}))
+        self.assertIsNone(llama({"id": "VIC-41", "state": "In Progress"}, self.repo / "web"))
         self.assertIsNone(llama({"id": "VIC-43", "title": "t"}))
         fuera = llama({"id": "VIC-43", "state": "In Progress"})
         self.assertEqual(fuera["permissionDecision"], "deny")
         self.assertIn("VIC-43", fuera["permissionDecisionReason"])
         self.assertIn("En su lugar:", fuera["permissionDecisionReason"])
-        aprobada = llama({"id": "VIC-42", "description": "d"})
-        self.assertIn("docs/specs/SPEC-DISCO-004.md", aprobada["permissionDecisionReason"])
-        self.assertNotIn("{", aprobada["permissionDecisionReason"])
+        for ident, cwd in (("VIC-42", self.repo), ("VIC-042", self.repo / "web")):
+            with self.subTest(ident=ident):
+                aprobada = llama({"id": ident, "description": "d"}, cwd)
+                self.assertEqual(aprobada["permissionDecision"], "deny")
+                self.assertIn("docs/specs/SPEC-DISCO-004.md", aprobada["permissionDecisionReason"])
+                self.assertNotIn("{", aprobada["permissionDecisionReason"])
+        git(self.repo, "remote", "set-url", "origin", "https://github.com/prueba/otro.git")
+        for entrada in ({"id": "VIC-41", "state": "In Progress"}, {"id": "VIC-43", "title": "t"}):
+            with self.subTest(entrada=entrada):
+                salida = llama(entrada)
+                self.assertEqual(salida["permissionDecision"], "deny")
+                self.assertIn("reglas-linear.json", salida["permissionDecisionReason"])
 
 
 class Principal(unittest.TestCase):
