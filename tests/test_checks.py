@@ -44,9 +44,9 @@ def sin_reviews(carpeta: pathlib.Path) -> dict[str, str]:
 
 
 def cuerpo_plantilla(primera: str) -> str:
-    """La plantilla de PR real con la línea de `Fixes VIC-<N>` sustituida."""
+    """La plantilla de PR real con la línea del enlace (`<Refs, Fixes o Part of> VIC-<N>`) sustituida."""
     texto = (PLANTILLA / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
-    return texto.replace("Fixes VIC-<N>", primera, 1)
+    return texto.replace("<Refs, Fixes o Part of> VIC-<N>", primera, 1)
 
 
 # --- M11 -------------------------------------------------------------------
