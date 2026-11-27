@@ -119,18 +119,19 @@ def consultar(repo, pr):
                             if r["context"] not in hay:
                                 checks.append((r["context"], "falta", None))
                                 hay.add(r["context"])
-    except (KeyError, IndexError, TypeError) as e:
+    except (KeyError, IndexError, TypeError, AttributeError) as e:
         raise ErrorConsulta(f"la respuesta de la API no tiene la forma esperada ({e!r})", False)
     return sha, nombre, checks
 
 
 def resumen(checks):
-    return ", ".join(f"{n} ({c or s})" for n, s, c in sorted(checks))
+    # Los nombres vienen de la API: sin saltos de línea, para que ninguno pueda fingir la línea final.
+    return ", ".join(f"{' '.join(str(n).split())} ({c or s})" for n, s, c in sorted(checks))
 
 
 def esperar(repo, pr, intervalo, maximo, reloj=time.monotonic, dormir=time.sleep):
     inicio = reloj()
-    sha_previo, terminados_previos, fallos, visto = None, None, 0, None
+    sha_previo, terminados_previos, fallos, visto, prorroga = None, None, 0, None, False
     while True:
         try:
             sha, nombre, checks = consultar(repo, pr)
@@ -171,9 +172,14 @@ def esperar(repo, pr, intervalo, maximo, reloj=time.monotonic, dormir=time.sleep
             terminados_previos = nombres
         else:
             terminados_previos = None
-        # Con todo terminado, la consulta de confirmación se hace aunque se haya pasado el tope.
-        if not confirmando and reloj() - inicio >= maximo:
-            falta = resumen(pendientes) if checks else "ningún check ha empezado"
+        # Con todo terminado, la consulta de confirmación se hace aunque se haya pasado el tope, una sola vez.
+        if reloj() - inicio >= maximo:
+            if confirmando and not prorroga:
+                prorroga = True
+                dormir(intervalo)
+                continue
+            falta = (resumen(pendientes) if pendientes else "nada, pero los checks cambian entre consultas") if checks \
+                else "ningún check ha empezado"
             print(f"CI tiempo agotado tras {int(reloj() - inicio)} s en {sha[:12]}: sin terminar o sin aparecer {falta}.", flush=True)
             return 3
         dormir(intervalo)

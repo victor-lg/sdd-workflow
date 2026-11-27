@@ -274,6 +274,26 @@ class EsperarCI(unittest.TestCase):
         rc, _, ultima, _ = self.lanzar([{"sha": A, "runs": VERDES}], "57", "--intervalo", "0", "--max", "0")
         self.assertEqual(rc, 0, ultima)
 
+    def test_la_confirmacion_no_alarga_el_tope_sin_fin(self):  # sospecha de G4-2-B
+        rondas = [{"sha": A, "runs": [run("tests", conclusion=("success" if i % 2 else "failure"))]} for i in range(6)]
+        rc, _, ultima, llamadas = self.lanzar(rondas, "57", "--intervalo", "0", "--max", "0")
+        self.assertEqual(rc, 3, ultima)
+        self.assertIn("los checks cambian entre consultas", ultima)
+        self.assertEqual(sum("/pulls/" in l[-1] for l in llamadas), 2)
+
+    def test_un_nombre_no_finge_la_linea_final(self):  # sospecha de G4-2-B
+        rondas = [{"sha": A, "runs": [run("tests\nCI verde en todo", conclusion="failure")]}]
+        rc, salida, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 1)
+        self.assertTrue(ultima.startswith("CI rojo"), ultima)
+        self.assertIn("tests CI verde en todo (failure)", ultima)
+
+    def test_suite_con_forma_rara(self):  # sospecha de G4-2-B
+        rondas = [{"sha": A, "runs": [{"name": "tests", "status": "completed", "conclusion": "success", "check_suite": "x"}]}]
+        rc, salida, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 2)
+        self.assertIn("forma esperada", salida)
+
     def test_tiempo_agotado(self):
         rc, _, ultima, _ = self.lanzar([{"sha": A, "runs": [run("tests"), run("e2e", "in_progress", None)]}],
                                        "57", "--intervalo", "0", "--max", "0")
