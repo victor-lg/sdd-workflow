@@ -27,7 +27,8 @@ if "/pulls/" in ruta:
     n += 1
     open(cuenta, "w").write(str(n))
 ronda = esc[min(n, len(esc)) - 1]
-clave = "pulls" if "/pulls/" in ruta else "runs" if "/check-runs" in ruta else "status"
+clave = ("pulls" if "/pulls/" in ruta else "runs" if "/check-runs" in ruta else "workflows" if "/actions/runs" in ruta
+         else "reglas" if "/rules/branches/" in ruta else "status")
 error = ronda.get("error_" + clave)
 if error:
     sys.stderr.write(error + "\n")
@@ -36,7 +37,12 @@ if "crudo_" + clave in ronda:
     sys.stdout.write(ronda["crudo_" + clave])
     sys.exit(0)
 if clave == "pulls":
-    print(json.dumps({"head": {"sha": ronda["sha"]}}))
+    print(json.dumps({"head": {"sha": ronda["sha"]}, "draft": ronda.get("draft", False),
+                      "base": {"ref": "main", "repo": {"full_name": "victor-lg/calculadora-discos"}}}))
+elif clave == "workflows":
+    print(json.dumps({"total_count": 0, "workflow_runs": ronda.get("workflows", [])}))
+elif clave == "reglas":
+    print(json.dumps(ronda.get("reglas", [])))
 elif clave == "runs":
     paginas = ronda.get("paginas", [ronda.get("runs", [])])
     sys.stdout.write("".join(json.dumps({"total_count": 0, "check_runs": p}) for p in paginas))
@@ -48,8 +54,28 @@ A = "a" * 40
 B = "b" * 40
 
 
-def run(nombre, estado="completed", conclusion="success"):
-    return {"name": nombre, "status": estado, "conclusion": conclusion}
+def run(nombre, estado="completed", conclusion="success", suite=None):
+    c = {"name": nombre, "status": estado, "conclusion": conclusion}
+    if suite is not None:
+        c["check_suite"] = {"id": suite}
+    return c
+
+
+def workflow(id_, workflow_id, suite, creado, estado="completed", conclusion="success", nombre="tests", evento="pull_request"):
+    return {"id": id_, "workflow_id": workflow_id, "name": nombre, "event": evento, "check_suite_id": suite,
+            "created_at": creado, "status": estado, "conclusion": conclusion}
+
+
+def requeridos(*nombres):
+    return [{"type": "pull_request", "parameters": {}},
+            {"type": "required_status_checks",
+             "parameters": {"required_status_checks": [{"context": n, "integration_id": 15368} for n in nombres]}}]
+
+
+# calculadora-discos#114: el run de borrador del workflow `tests` (suite 1) y el de ready_for_review (suite 2).
+BORRADOR = workflow(10, 7, 1, "2026-11-27T00:50:51Z")
+COMPLETO = workflow(20, 7, 2, "2026-11-27T01:02:37Z")
+RUNS_BORRADOR = [run("checks-sdd", suite=1), run("tests (borrador)", suite=1), run("e2e", conclusion="skipped", suite=1)]
 
 
 VERDES = [run("checks-sdd"), run("tests"), run("e2e", conclusion="skipped")]
@@ -90,7 +116,9 @@ class EsperarCI(unittest.TestCase):
         _, _, _, llamadas = self.lanzar([{"sha": A, "runs": VERDES}], "57", "--intervalo", "0")
         rutas = {l[-1] for l in llamadas}
         self.assertEqual(rutas, {"repos/{owner}/{repo}/pulls/57", f"repos/{{owner}}/{{repo}}/commits/{A}/check-runs?per_page=100",
-                                 f"repos/{{owner}}/{{repo}}/commits/{A}/status?per_page=100"})
+                                 f"repos/{{owner}}/{{repo}}/commits/{A}/status?per_page=100",
+                                 f"repos/{{owner}}/{{repo}}/actions/runs?head_sha={A}&per_page=100",
+                                 "repos/{owner}/{repo}/rules/branches/main?per_page=100"})
         for l in llamadas:
             self.assertEqual(l[0], "api")
             self.assertNotIn("--jq", l)
@@ -174,6 +202,78 @@ class EsperarCI(unittest.TestCase):
         self.assertIn("1 de 2 checks terminados", salida)
         self.assertIn("ci/externa (error)", ultima)
 
+    def test_dice_de_que_repo_es(self):
+        _, salida, _, _ = self.lanzar([{"sha": A, "runs": VERDES}], "57", "--intervalo", "0")
+        self.assertIn("PR #57 de victor-lg/calculadora-discos, cabeza aaaaaaaaaaaa", salida)
+
+    def test_el_run_sustituido_no_cuenta(self):
+        # El caso real de #114: checks-sdd en rojo en el run de borrador, en verde en el último.
+        rondas = [{"sha": A, "workflows": [BORRADOR, COMPLETO],
+                   "runs": [run("checks-sdd", conclusion="failure", suite=1), run("tests (borrador)", suite=1),
+                            run("checks-sdd", suite=2), run("tests", suite=2)]}]
+        rc, _, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 0, ultima)
+        self.assertIn("2 checks", ultima)
+        self.assertNotIn("borrador", ultima)
+
+    def test_el_run_cancelado_por_uno_nuevo_no_cuenta(self):
+        rondas = [{"sha": A, "workflows": [workflow(10, 7, 1, "2026-11-27T00:50:51Z", conclusion="cancelled"), COMPLETO],
+                   "runs": [run("tests (borrador)", conclusion="cancelled", suite=1), run("tests", suite=2)]}]
+        rc, _, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 0, ultima)
+
+    def test_otro_workflow_u_otro_evento_si_cuenta(self):
+        rondas = [{"sha": A, "workflows": [COMPLETO, workflow(30, 8, 3, "2026-11-27T00:00:00Z", nombre="calidad"),
+                                           workflow(40, 7, 4, "2026-11-27T00:00:00Z", evento="push")],
+                   "runs": [run("tests", suite=2), run("mutaciones", conclusion="failure", suite=3),
+                            run("tests-push", conclusion="failure", suite=4)]}]
+        rc, _, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 1)
+        self.assertIn("mutaciones (failure)", ultima)
+        self.assertIn("tests-push (failure)", ultima)
+
+    def test_tras_ready_espera_al_check_requerido(self):
+        # Justo después de gh pr ready: los checks del borrador ya están en verde, pero `tests` (requerido)
+        # solo existe en el run completo, que aún no ha empezado.
+        rondas = [{"sha": A, "workflows": [BORRADOR], "runs": RUNS_BORRADOR, "reglas": requeridos("checks-sdd", "tests")},
+                  {"sha": A, "workflows": [BORRADOR], "runs": RUNS_BORRADOR, "reglas": requeridos("checks-sdd", "tests")},
+                  {"sha": A, "workflows": [BORRADOR, COMPLETO], "reglas": requeridos("checks-sdd", "tests"),
+                   "runs": RUNS_BORRADOR + [run("checks-sdd", suite=2), run("tests", conclusion="failure", suite=2)]}]
+        rc, salida, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 1, salida)
+        self.assertIn("3 de 4 checks terminados", salida)
+        self.assertIn("tests (failure)", ultima)
+
+    def test_requerido_que_no_aparece(self):
+        rondas = [{"sha": A, "workflows": [BORRADOR], "runs": RUNS_BORRADOR, "reglas": requeridos("tests")}]
+        rc, _, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0", "--max", "0")
+        self.assertEqual(rc, 3)
+        self.assertIn("sin terminar o sin aparecer tests (falta)", ultima)
+
+    def test_requerido_como_estado_de_la_api_antigua(self):
+        rondas = [{"sha": A, "runs": [run("tests")], "reglas": requeridos("ci/externa"),
+                   "status": [{"context": "ci/externa", "state": "success"}]}]
+        rc, _, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 0, ultima)
+
+    def test_en_borrador_no_pide_los_requeridos(self):
+        rondas = [{"sha": A, "draft": True, "workflows": [BORRADOR], "runs": RUNS_BORRADOR, "reglas": requeridos("tests")}]
+        rc, _, ultima, llamadas = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 0, ultima)
+        self.assertFalse(any("/rules/" in l[-1] for l in llamadas))
+
+    def test_workflow_que_falla_sin_jobs(self):
+        rondas = [{"sha": A, "workflows": [COMPLETO, workflow(30, 8, 3, "2026-11-27T01:02:37Z", conclusion="startup_failure",
+                                                              nombre="calidad")],
+                   "runs": [run("tests", suite=2)]}]
+        rc, _, ultima, _ = self.lanzar(rondas, "57", "--intervalo", "0")
+        self.assertEqual(rc, 1)
+        self.assertIn("workflow calidad (startup_failure)", ultima)
+
+    def test_tope_durante_la_confirmacion(self):  # G4-1-A-02
+        rc, _, ultima, _ = self.lanzar([{"sha": A, "runs": VERDES}], "57", "--intervalo", "0", "--max", "0")
+        self.assertEqual(rc, 0, ultima)
+
     def test_tiempo_agotado(self):
         rc, _, ultima, _ = self.lanzar([{"sha": A, "runs": [run("tests"), run("e2e", "in_progress", None)]}],
                                        "57", "--intervalo", "0", "--max", "0")
@@ -232,10 +332,12 @@ class EsperarCI(unittest.TestCase):
         self.assertIn("no encuentro gh", salida)
 
     def test_argumentos_no_validos(self):
-        for args in (["abc"], ["57", "--intervalo", "-1"], ["57", "--max", "x"], []):
+        for args in (["abc"], ["57", "--intervalo", "-1"], ["57", "--max", "x"], [], ["57", "--max", "nan"],
+                     ["57", "--intervalo", "inf"], ["57", "--otra"]):
             with self.subTest(args):
                 r = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, timeout=30)
                 self.assertEqual(r.returncode, 2)
+                self.assertEqual(r.stderr, "")
                 self.assertTrue(r.stdout.strip().splitlines()[-1].startswith("CI error"), r.stdout)
 
 
