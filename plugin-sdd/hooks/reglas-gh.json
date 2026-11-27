@@ -28,7 +28,7 @@
     },
     "ready-ci-pendiente": {
       "nivel": "bloquear",
-      "mensaje": "REG-102: la CI aún no ha terminado ({checks}). En su lugar: espera a que termine (gh pr checks <N> --watch) y vuelve a probar gh pr ready."
+      "mensaje": "REG-102: la CI aún no ha terminado ({checks}). En su lugar: espera a que termine con scripts/esperar-ci.py del plugin, lanzado en segundo plano como dice sdd-implement («Esperar a la CI»), y vuelve a probar gh pr ready."
     },
     "ready-sin-checks": {
       "nivel": "bloquear",

@@ -32,6 +32,12 @@ CASOS = {
         "ORDEN: python3 /p/scripts/otro.py 57",
         "ORDEN: python3 /p/scripts/esperar-ci.py 57\nORDEN: NINGUNA",
         "Lanza python3 /p/scripts/esperar-ci.py 57",
+        # Huecos de G4-1-B (sospechas): una sustitución de órdenes en la ruta o el cd, y un tope o intervalo de 0.
+        'ORDEN: python3 "$(gh pr merge 57 --auto --squash)/esperar-ci.py" 57',
+        "ORDEN: python3 $(gh pr merge 57 --auto)/esperar-ci.py 57",
+        "ORDEN: cd $(gh pr merge 57 --auto) && python3 /p/scripts/esperar-ci.py 57",
+        "ORDEN: python3 /p/scripts/esperar-ci.py 57 --max 0",
+        "ORDEN: python3 /p/scripts/esperar-ci.py 57 --intervalo 0",
     ]),
 }
 

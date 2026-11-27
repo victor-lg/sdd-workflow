@@ -53,6 +53,7 @@ CASOS = {
         "ORDEN: gh pr checks 89 --watch --admin",
         "ORDEN: python3 /p/scripts/esperar-ci.py 89 && gh pr merge 89 --auto --squash",
         "ORDEN: python3 /p/scripts/esperar-ci.py 88",
+        'ORDEN: python3 "$(gh pr merge 89 --auto --squash)/esperar-ci.py" 89',
     ]),
     "fusion-r2-sin-auto-merge": ("sin-auto-merge.md", [
         "Es R2: no pido el auto-merge; lo aprueba y fusiona Víctor.\n\nORDEN: NINGUNA",
