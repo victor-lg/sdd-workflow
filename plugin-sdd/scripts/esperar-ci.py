@@ -31,6 +31,7 @@ El agente lo lanza con Bash en segundo plano, para que el sistema lo despierte a
 import argparse
 import json
 import math
+import re
 import subprocess
 import sys
 import time
@@ -38,6 +39,8 @@ import time
 VERDE = {"success", "neutral", "skipped"}
 TRANSITORIO = ("HTTP 5", "HTTP 429", "timeout", "timed out", "connection", "EOF", "TLS", "temporarily")
 REINTENTOS = 3
+# Como `_nombre_check` de hooks/guarda-gh.py: los nombres llegan al modelo, cortos y sin caracteres raros.
+NOMBRE_SEGURO = re.compile(r"[^\w .:/()-]")
 
 
 class ErrorConsulta(Exception):
@@ -83,7 +86,7 @@ def consultar(repo, pr):
     [(nombre, estado, conclusión)]; un check requerido que aún no existe va con el estado «falta»."""
     try:
         pull = gh_api(f"repos/{repo}/pulls/{pr}")[0]
-        sha, nombre = pull["head"]["sha"], pull["base"]["repo"]["full_name"]
+        sha, nombre = pull["head"]["sha"], limpio(pull["base"]["repo"]["full_name"])
         # El último run de cada workflow y evento; las suites de los anteriores no cuentan.
         ultimos, suites = {}, {}
         for doc in gh_api(f"repos/{repo}/actions/runs?head_sha={sha}&per_page=100"):
@@ -124,9 +127,14 @@ def consultar(repo, pr):
     return sha, nombre, checks
 
 
+def limpio(texto):
+    # Los nombres vienen de la API y los escribe quien toca un workflow: ni saltos de línea (para que
+    # ninguno finja la línea final) ni texto largo que el agente lea como instrucciones.
+    return NOMBRE_SEGURO.sub("", " ".join(str(texto).split()))[:60] or "?"
+
+
 def resumen(checks):
-    # Los nombres vienen de la API: sin saltos de línea, para que ninguno pueda fingir la línea final.
-    return ", ".join(f"{' '.join(str(n).split())} ({c or s})" for n, s, c in sorted(checks))
+    return ", ".join(f"{limpio(n)} ({limpio(c or s)})" for n, s, c in sorted(checks))
 
 
 def esperar(repo, pr, intervalo, maximo, reloj=time.monotonic, dormir=time.sleep):
@@ -165,9 +173,9 @@ def esperar(repo, pr, intervalo, maximo, reloj=time.monotonic, dormir=time.sleep
             if nombres == terminados_previos:
                 malos = [c for c in checks if c[2] not in VERDE]
                 if malos:
-                    print(f"CI rojo en {sha[:12]}: {resumen(malos)}. Resto: {len(checks) - len(malos)} en verde.", flush=True)
+                    print(f"CI rojo en {nombre}@{sha[:12]}: {resumen(malos)}. Resto: {len(checks) - len(malos)} en verde.", flush=True)
                     return 1
-                print(f"CI verde en {sha[:12]}: {len(checks)} checks ({resumen(checks)}).", flush=True)
+                print(f"CI verde en {nombre}@{sha[:12]}: {len(checks)} checks ({resumen(checks)}).", flush=True)
                 return 0
             terminados_previos = nombres
         else:
@@ -180,7 +188,7 @@ def esperar(repo, pr, intervalo, maximo, reloj=time.monotonic, dormir=time.sleep
                 continue
             falta = (resumen(pendientes) if pendientes else "nada, pero los checks cambian entre consultas") if checks \
                 else "ningún check ha empezado"
-            print(f"CI tiempo agotado tras {int(reloj() - inicio)} s en {sha[:12]}: sin terminar o sin aparecer {falta}.", flush=True)
+            print(f"CI tiempo agotado tras {int(reloj() - inicio)} s en {nombre}@{sha[:12]}: sin terminar o sin aparecer {falta}.", flush=True)
             return 3
         dormir(intervalo)
 
