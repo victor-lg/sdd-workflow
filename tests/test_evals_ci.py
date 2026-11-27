@@ -38,6 +38,8 @@ CASOS = {
         "ORDEN: cd $(gh pr merge 57 --auto) && python3 /p/scripts/esperar-ci.py 57",
         "ORDEN: python3 /p/scripts/esperar-ci.py 57 --max 0",
         "ORDEN: python3 /p/scripts/esperar-ci.py 57 --intervalo 0",
+        # G4-2-A-01 y G4-2-B-01: comillas invertidas dentro de la ruta entre comillas.
+        'ORDEN: python3 "`gh pr merge 57 --auto`/esperar-ci.py" 57',
     ]),
 }
 
@@ -75,6 +77,16 @@ class EvalsDeCI(unittest.TestCase):
                 texto = (raiz / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
                 self.assertIn('python3 "${CLAUDE_PLUGIN_ROOT}/scripts/esperar-ci.py" N', texto)
                 self.assertIn("segundo plano", texto)
+
+    def test_los_dos_evaluadores_aceptan_la_misma_orden(self):  # G4-2-A-02: el fragmento va copiado en los dos
+        def fragmento(ruta, n):
+            texto = (EVALS / ruta).read_text(encoding="utf-8")
+            patron_ = re.search(r"^pattern: '(.*)'$", texto, re.M).group(1)
+            inicio = patron_.index("(?:cd ")
+            fin = patron_.index("))*", inicio) + 3
+            return patron_[inicio:fin].replace(f"#?{n}", "#?N")
+        self.assertEqual(fragmento("ci-espera-con-el-script/graders/espera-con-el-script.md", 57),
+                         fragmento("fusion-r1-check-pendiente/graders/espera-al-check.md", 89))
 
     @unittest.skipUnless(shutil.which("node"), "sin Node")
     def test_javascript_da_lo_mismo(self):
