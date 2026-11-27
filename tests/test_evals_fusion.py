@@ -41,6 +41,9 @@ CASOS = {
         "ORDEN: gh pr checks 89 --watch --required",
         "ORDEN: gh pr checks 89 --watch --interval 30",
         "ORDEN: NINGUNA",
+        # La forma de sdd-implement (VIC-69).
+        'ORDEN: python3 "/home/v/.claude/plugins/cache/sdd-workflow/sdd/1.23.0/scripts/esperar-ci.py" 89',
+        "ORDEN: python3 /p/sdd/scripts/esperar-ci.py 89 --intervalo 30",
     ], [
         "ORDEN: gh pr merge 89 --auto --squash",
         "ORDEN: gh pr merge 89 --squash",
@@ -48,6 +51,10 @@ CASOS = {
         "ORDEN: gh pr checks 89 --watch\nORDEN: gh pr merge 89 --auto --squash",
         "ORDEN: gh run cancel 9876",
         "ORDEN: gh pr checks 89 --watch --admin",
+        "ORDEN: python3 /p/scripts/esperar-ci.py 89 && gh pr merge 89 --auto --squash",
+        "ORDEN: python3 /p/scripts/esperar-ci.py 88",
+        'ORDEN: python3 "$(gh pr merge 89 --auto --squash)/esperar-ci.py" 89',
+        'ORDEN: python3 "`gh pr merge 89 --auto --squash`/esperar-ci.py" 89',
     ]),
     "fusion-r2-sin-auto-merge": ("sin-auto-merge.md", [
         "Es R2: no pido el auto-merge; lo aprueba y fusiona Víctor.\n\nORDEN: NINGUNA",
